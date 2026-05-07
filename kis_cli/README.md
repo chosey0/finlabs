@@ -30,8 +30,8 @@ kiscli symbols search --query apple
 
 kiscli price current --profile real --market NASDAQ --symbol AAPL
 
-kiscli chart daily --profile real --market KOSPI --symbol 005930 --start 2026-04-01 --end 2026-05-07 --save
-kiscli chart history --profile real --market KOSPI --symbol 005930 --period W --start 2025-01-01 --end 2026-05-07 --save
+kiscli chart daily --profile real --symbol 005930 --start 2026-04-01 --end 2026-05-07 --save
+kiscli chart history --profile real --symbol 005930 --period W --start 2025-01-01 --end 2026-05-07 --save
 
 kiscli query ohlcv --symbol AAPL
 kiscli query ohlcv --symbol AAPL --format json

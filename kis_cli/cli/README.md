@@ -95,18 +95,20 @@ kiscli price current --profile csq1404 --market NASDAQ --symbol AAPL
 KIS REST OHLCV 이력을 수집합니다. `--save`를 주면 `ohlcv_bars`에 `INSERT OR IGNORE`로 저장합니다.
 
 ```bash
-kiscli chart history --profile csq1404 --market KOSPI --symbol 005930 --period D --start 2026-04-01 --end 2026-05-07 --save
-kiscli chart history --profile csq1404 --market KOSPI --symbol 005930 --period W --start 2025-01-01 --end 2026-05-07 --save
+kiscli chart history --profile csq1404 --symbol 005930 --period D --start 2026-04-01 --end 2026-05-07 --save
+kiscli chart history --profile csq1404 --symbol 005930 --period W --start 2025-01-01 --end 2026-05-07 --save
 ```
 
 편의 명령도 제공합니다.
 
 ```bash
-kiscli chart daily --profile csq1404 --market NASDAQ --symbol AAPL --start 2026-04-01 --end 2026-05-07 --save
-kiscli chart weekly --profile csq1404 --market KOSPI --symbol 005930 --start 2025-01-01 --end 2026-05-07
-kiscli chart monthly --profile csq1404 --market KOSPI --symbol 005930 --start 2025-01-01 --end 2026-05-07
-kiscli chart yearly --profile csq1404 --market KOSPI --symbol 005930 --start 2020-01-01 --end 2026-05-07
+kiscli chart daily --profile csq1404 --symbol AAPL --start 2026-04-01 --end 2026-05-07 --save
+kiscli chart weekly --profile csq1404 --symbol 005930 --start 2025-01-01 --end 2026-05-07
+kiscli chart monthly --profile csq1404 --symbol 005930 --start 2025-01-01 --end 2026-05-07
+kiscli chart yearly --profile csq1404 --symbol 005930 --start 2020-01-01 --end 2026-05-07
 ```
+
+`chart` 명령은 `symbols` 테이블에서 `--symbol`의 market을 해석합니다. 먼저 `kiscli symbols download`로 대상 시장의 심볼을 저장해두세요. `--end`를 생략하면 오늘 날짜까지 조회합니다.
 
 국내 OHLCV는 응답 제한에 맞춰 가장 오래된 수집일 이전 구간을 이어 조회합니다. 해외 개별주식의 일/주/월 OHLCV는 `[해외주식] 해외주식 기간별시세` API(`/dailyprice`)를 사용합니다. 1회 최대 100건을 기준으로, 응답에 다음 `KEYB`가 있으면 같은 `BYMD`에서 다음 묶음을 이어 조회하고, `KEYB`가 없더라도 100건이 꽉 찬 응답이면 가장 오래된 응답일 이전으로 `BYMD`를 이동해 이어 조회합니다. 해외 개별주식 연봉(`Y`)은 지원하지 않습니다.
 

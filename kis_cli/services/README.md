@@ -82,10 +82,12 @@ Y -> 1y
 CLI 예:
 
 ```bash
-kiscli chart daily --profile csq1404 --market KOSPI --symbol 005930 --start 2026-04-01 --end 2026-05-07 --save
-kiscli chart weekly --profile csq1404 --market KOSPI --symbol 005930 --start 2025-01-01 --end 2026-05-07 --save
-kiscli chart history --profile csq1404 --market NASDAQ --symbol AAPL --period D --start 2026-04-01 --end 2026-05-07 --save
+kiscli chart daily --profile csq1404 --symbol 005930 --start 2026-04-01 --end 2026-05-07 --save
+kiscli chart weekly --profile csq1404 --symbol 005930 --start 2025-01-01 --end 2026-05-07 --save
+kiscli chart history --profile csq1404 --symbol AAPL --period D --start 2026-04-01 --end 2026-05-07 --save
 ```
+
+`chart` 서비스는 `symbols` 테이블에서 `symbol`의 market을 해석합니다. `end`가 비어 있으면 오늘 날짜를 종료일로 사용합니다.
 
 ## 심볼 서비스
 

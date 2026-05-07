@@ -81,7 +81,7 @@ uv run kiscli symbols download --market NASDAQ
 7. OHLCV를 수집하고 저장합니다.
 
 ```bash
-uv run kiscli chart daily --profile csq1404 --market KOSPI --symbol 005930 --start 2026-04-01 --end 2026-05-07 --save
+uv run kiscli chart daily --profile csq1404 --symbol 005930 --start 2026-04-01 --end 2026-05-07 --save
 ```
 
 8. 저장된 일봉 데이터를 조회합니다.
@@ -232,29 +232,29 @@ uv run kiscli price current --profile csq1404 --market NASDAQ --symbol AAPL
 일봉 수집:
 
 ```bash
-uv run kiscli chart daily --profile csq1404 --market KOSPI --symbol 005930 --start 2026-04-01 --end 2026-05-07
+uv run kiscli chart daily --profile csq1404 --symbol 005930 --start 2026-04-01 --end 2026-05-07
 ```
 
 저장까지 수행:
 
 ```bash
-uv run kiscli chart daily --profile csq1404 --market KOSPI --symbol 005930 --start 2026-04-01 --end 2026-05-07 --save
-uv run kiscli chart daily --profile csq1404 --market NASDAQ --symbol AAPL --start 2026-04-01 --end 2026-05-07 --save
+uv run kiscli chart daily --profile csq1404 --symbol 005930 --start 2026-04-01 --end 2026-05-07 --save
+uv run kiscli chart daily --profile csq1404 --symbol AAPL --start 2026-04-01 --end 2026-05-07 --save
 ```
 
 기간 단위 명령:
 
 ```bash
-uv run kiscli chart weekly --profile csq1404 --market KOSPI --symbol 005930 --start 2025-01-01 --end 2026-05-07 --save
-uv run kiscli chart monthly --profile csq1404 --market KOSPI --symbol 005930 --start 2025-01-01 --end 2026-05-07 --save
-uv run kiscli chart yearly --profile csq1404 --market KOSPI --symbol 005930 --start 2020-01-01 --end 2026-05-07 --save
+uv run kiscli chart weekly --profile csq1404 --symbol 005930 --start 2025-01-01 --end 2026-05-07 --save
+uv run kiscli chart monthly --profile csq1404 --symbol 005930 --start 2025-01-01 --end 2026-05-07 --save
+uv run kiscli chart yearly --profile csq1404 --symbol 005930 --start 2020-01-01 --end 2026-05-07 --save
 ```
 
 범용 history 명령:
 
 ```bash
-uv run kiscli chart history --profile csq1404 --market KOSPI --symbol 005930 --period D --start 2026-04-01 --end 2026-05-07 --save
-uv run kiscli chart history --profile csq1404 --market KOSPI --symbol 005930 --period W --start 2025-01-01 --end 2026-05-07 --save
+uv run kiscli chart history --profile csq1404 --symbol 005930 --period D --start 2026-04-01 --end 2026-05-07 --save
+uv run kiscli chart history --profile csq1404 --symbol 005930 --period W --start 2025-01-01 --end 2026-05-07 --save
 ```
 
 period 매핑:
@@ -265,6 +265,8 @@ W -> 1w
 M -> 1mo
 Y -> 1y
 ```
+
+`chart` 명령은 `symbols` 테이블에서 `--symbol`의 market을 해석합니다. 먼저 `kiscli symbols download`로 대상 시장의 심볼을 저장해두세요. `--end`를 생략하면 오늘 날짜까지 조회합니다.
 
 국내 OHLCV는 응답 제한에 맞춰 가장 오래된 수집일 기준으로 다음 구간을 이어 조회합니다. 해외 개별주식의 일/주/월 OHLCV는 `[해외주식] 해외주식 기간별시세` API(`/dailyprice`)를 사용합니다. 1회 최대 100건을 기준으로, 응답에 다음 `KEYB`가 있으면 같은 `BYMD`에서 다음 묶음을 이어 조회하고, `KEYB`가 없더라도 100건이 꽉 찬 응답이면 가장 오래된 응답일 이전으로 `BYMD`를 이동해 이어 조회합니다. 해외 개별주식 연봉(`Y`)은 지원하지 않습니다.
 
