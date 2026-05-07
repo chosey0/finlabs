@@ -1,0 +1,271 @@
+from __future__ import annotations
+
+from typer.testing import CliRunner
+
+from kis_cli.cli.app import app
+from kis_cli.storage import connect, init_database, inspect_database_counts, inspect_database_schema
+from kis_cli.storage.repositories import (
+    insert_ohlcv_bar,
+    insert_realtime_tick,
+    insert_symbol,
+    list_ohlcv_bars,
+    search_symbols,
+)
+from kis_cli.storage.schema import TABLE_NAMES
+
+runner = CliRunner()
+
+
+def test_init_database_creates_required_tables(tmp_path) -> None:
+    db_path = tmp_path / "kis-cli.db"
+
+    result = init_database(db_path)
+
+    assert result.path == db_path
+    assert result.tables == TABLE_NAMES
+    with connect(db_path) as connection:
+        table_names = {
+            row["name"]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            )
+        }
+    assert set(TABLE_NAMES).issubset(table_names)
+
+
+def test_db_init_command_creates_schema(tmp_path) -> None:
+    db_path = tmp_path / "custom.db"
+
+    result = runner.invoke(app, ["db", "init", "--path", str(db_path)])
+
+    assert result.exit_code == 0
+    assert "Database initialized" in result.output
+    assert db_path.exists()
+    with connect(db_path) as connection:
+        count = connection.execute("SELECT COUNT(*) FROM symbols").fetchone()[0]
+    assert count == 0
+
+
+def test_inspect_database_schema_returns_tables_columns_and_indexes(tmp_path) -> None:
+    db_path = tmp_path / "custom.db"
+    init_database(db_path)
+
+    result = inspect_database_schema(db_path)
+
+    symbols = next(table for table in result.tables if table.name == "symbols")
+    assert {column.name for column in symbols.columns}.issuperset({"market", "symbol"})
+    assert any(index.unique and index.columns == ("market", "symbol") for index in symbols.indexes)
+
+
+def test_db_schema_command_prints_database_structure(tmp_path) -> None:
+    db_path = tmp_path / "custom.db"
+    init_database(db_path)
+
+    result = runner.invoke(app, ["db", "schema", "--path", str(db_path)])
+
+    assert result.exit_code == 0
+    assert "Database schema" in result.output
+    assert "Table: symbols" in result.output
+    assert "market" in result.output
+    assert "symbol" in result.output
+
+
+def test_inspect_database_counts_returns_table_row_counts(tmp_path) -> None:
+    db_path = tmp_path / "custom.db"
+    init_database(db_path)
+
+    with connect(db_path) as connection:
+        insert_symbol(connection, market="NASDAQ", symbol="AAPL", name="Apple Inc.")
+        insert_symbol(connection, market="NASDAQ", symbol="MSFT", name="Microsoft")
+        insert_ohlcv_bar(
+            connection,
+            market="NASDAQ",
+            symbol="AAPL",
+            interval="1d",
+            timestamp="2026-05-07",
+            open=100.0,
+            high=110.0,
+            low=99.0,
+            close=105.0,
+            volume=1000,
+        )
+
+    result = inspect_database_counts(db_path)
+
+    counts = {table.name: table.rows for table in result.tables}
+    assert counts["symbols"] == 2
+    assert counts["ohlcv_bars"] == 1
+    assert result.total_rows == 3
+
+
+def test_db_counts_command_prints_table_row_counts(tmp_path) -> None:
+    db_path = tmp_path / "custom.db"
+    init_database(db_path)
+    with connect(db_path) as connection:
+        insert_symbol(connection, market="NASDAQ", symbol="AAPL", name="Apple Inc.")
+
+    result = runner.invoke(app, ["db", "counts", "--path", str(db_path)])
+
+    assert result.exit_code == 0
+    assert "Database counts" in result.output
+    assert "symbols" in result.output
+    assert "1" in result.output
+    assert "Total" in result.output
+
+
+def test_symbol_unique_constraint_prevents_duplicate_inserts(tmp_path) -> None:
+    db_path = tmp_path / "kis-cli.db"
+    init_database(db_path)
+
+    with connect(db_path) as connection:
+        first_inserted = insert_symbol(
+            connection,
+            market="NASDAQ",
+            symbol="AAPL",
+            name="Apple Inc.",
+        )
+        duplicate_inserted = insert_symbol(
+            connection,
+            market="NASDAQ",
+            symbol="AAPL",
+            name="Duplicate Apple",
+        )
+        count = connection.execute("SELECT COUNT(*) FROM symbols").fetchone()[0]
+
+    assert first_inserted is True
+    assert duplicate_inserted is False
+    assert count == 1
+
+
+def test_symbol_search_orders_by_query_similarity(tmp_path) -> None:
+    db_path = tmp_path / "kis-cli.db"
+    init_database(db_path)
+
+    with connect(db_path) as connection:
+        connection.executemany(
+            """
+            INSERT INTO symbols (
+                market, symbol, korean_name, english_name, raw_source, raw, downloaded_at
+            )
+            VALUES (?, ?, ?, ?, '', '{}', CURRENT_TIMESTAMP)
+            """,
+            [
+                ("NASDAQ", "PINE", "파인애플", "Pineapple Holdings",),
+                ("NASDAQ", "AAPL", "애플", "Apple",),
+                ("NASDAQ", "APPLEW", "애플 워런트", "Apple Warrant",),
+                ("NASDAQ", "MSFT", "마이크로소프트", "Microsoft",),
+                ("NASDAQ", "APPLE", "애플", "Apple Inc.",),
+            ],
+        )
+
+        rows = search_symbols(connection, query="apple")
+
+    assert [row["symbol"] for row in rows] == ["APPLE", "AAPL", "APPLEW", "PINE"]
+
+
+def test_ohlcv_unique_constraint_prevents_duplicate_inserts(tmp_path) -> None:
+    db_path = tmp_path / "kis-cli.db"
+    init_database(db_path)
+
+    with connect(db_path) as connection:
+        first_inserted = insert_ohlcv_bar(
+            connection,
+            market="NASDAQ",
+            symbol="AAPL",
+            interval="1d",
+            timestamp="2026-05-07",
+            open=100.0,
+            high=110.0,
+            low=99.0,
+            close=105.0,
+            volume=1000,
+        )
+        duplicate_inserted = insert_ohlcv_bar(
+            connection,
+            market="NASDAQ",
+            symbol="AAPL",
+            interval="1d",
+            timestamp="2026-05-07",
+            open=200.0,
+            high=210.0,
+            low=199.0,
+            close=205.0,
+            volume=2000,
+        )
+        count = connection.execute("SELECT COUNT(*) FROM ohlcv_bars").fetchone()[0]
+
+    assert first_inserted is True
+    assert duplicate_inserted is False
+    assert count == 1
+
+
+def test_realtime_tick_unique_constraint_prevents_duplicate_inserts(tmp_path) -> None:
+    db_path = tmp_path / "kis-cli.db"
+    init_database(db_path)
+
+    with connect(db_path) as connection:
+        first_inserted = insert_realtime_tick(
+            connection,
+            market="NASDAQ",
+            symbol="AAPL",
+            exchange_ts="2026-05-07T09:00:00Z",
+            received_at="2026-05-07T09:00:01Z",
+            received_seq=1,
+            seq=42,
+            price=105.0,
+            volume=10,
+        )
+        duplicate_inserted = insert_realtime_tick(
+            connection,
+            market="NASDAQ",
+            symbol="AAPL",
+            exchange_ts="2026-05-07T09:00:00Z",
+            received_at="2026-05-07T09:00:02Z",
+            received_seq=2,
+            seq=42,
+            price=106.0,
+            volume=20,
+        )
+        count = connection.execute("SELECT COUNT(*) FROM realtime_ticks").fetchone()[0]
+
+    assert first_inserted is True
+    assert duplicate_inserted is False
+    assert count == 1
+
+
+def test_ohlcv_query_uses_deterministic_timestamp_order(tmp_path) -> None:
+    db_path = tmp_path / "kis-cli.db"
+    init_database(db_path)
+
+    with connect(db_path) as connection:
+        for timestamp, close in (
+            ("2026-05-09", 109.0),
+            ("2026-05-07", 107.0),
+            ("2026-05-08", 108.0),
+        ):
+            insert_ohlcv_bar(
+                connection,
+                market="NASDAQ",
+                symbol="AAPL",
+                interval="1d",
+                timestamp=timestamp,
+                open=100.0,
+                high=110.0,
+                low=99.0,
+                close=close,
+                volume=1000,
+            )
+
+        rows = list_ohlcv_bars(
+            connection,
+            market="NASDAQ",
+            symbol="AAPL",
+            interval="1d",
+        )
+
+    assert [row["timestamp"] for row in rows] == [
+        "2026-05-07",
+        "2026-05-08",
+        "2026-05-09",
+    ]
+    assert [row["close"] for row in rows] == [107.0, 108.0, 109.0]

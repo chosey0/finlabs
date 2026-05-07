@@ -1,0 +1,155 @@
+from __future__ import annotations
+
+import zipfile
+from io import BytesIO
+
+from typer.testing import CliRunner
+
+from kis_cli.cli.app import app
+from kis_cli.core.symbol_master import (
+    KOSPI_PART2_COLUMNS,
+    KOSPI_WIDTHS,
+    SymbolRecord,
+    parse_symbol_master,
+)
+from kis_cli.storage import connect
+
+runner = CliRunner()
+
+
+def test_parse_kospi_master_normalizes_fixed_width_record() -> None:
+    part2_values = {column: "" for column in KOSPI_PART2_COLUMNS}
+    part2_values.update(
+        {
+            "group_code": "ST",
+            "base_price": "000010000",
+            "regular_lot_size": "00010",
+            "listed_date": "20200102",
+        }
+    )
+    part2 = _fixed_width_row(KOSPI_WIDTHS, KOSPI_PART2_COLUMNS, part2_values)
+    content = "005930   KR7005930003삼성전자".ljust(30) + part2 + "\n"
+    archive = _zip_bytes("kospi_code.mst", content)
+
+    records = parse_symbol_master("KOSPI", archive)
+
+    assert len(records) == 1
+    record = records[0]
+    assert record.market == "KOSPI"
+    assert record.symbol == "005930"
+    assert record.standard_code == "KR7005930003"
+    assert record.korean_name == "삼성전자"
+    assert record.currency == "KRW"
+    assert record.country_code == "KR"
+    assert record.base_price == 10000
+    assert record.lot_size == 10
+    assert record.listed_date == "20200102"
+    assert record.raw["group_code"] == "ST"
+
+
+def test_parse_overseas_master_normalizes_tab_separated_record() -> None:
+    content = "\t".join(
+        [
+            "US",
+            "NAS",
+            "NASD",
+            "NASDAQ",
+            "AAPL",
+            "AAPL",
+            "애플",
+            "Apple Inc.",
+            "2",
+            "USD",
+            "2",
+            "1",
+            "000001234",
+            "1",
+            "1",
+            "0930",
+            "1600",
+            "N",
+            "",
+            "IT",
+            "0",
+            "T",
+            "004",
+            "detail",
+        ]
+    )
+    archive = _zip_bytes("nasmst.cod", content + "\n")
+
+    records = parse_symbol_master("NASDAQ", archive)
+
+    assert len(records) == 1
+    record = records[0]
+    assert record.market == "NASDAQ"
+    assert record.symbol == "AAPL"
+    assert record.realtime_symbol == "AAPL"
+    assert record.korean_name == "애플"
+    assert record.english_name == "Apple Inc."
+    assert record.currency == "USD"
+    assert record.exchange_name == "NASDAQ"
+    assert record.country_code == "US"
+    assert record.base_price == 1234
+    assert record.lot_size == 1
+
+
+def test_symbols_download_command_upserts_downloaded_records(tmp_path, monkeypatch) -> None:
+    db_path = tmp_path / "symbols.db"
+
+    def fake_download_symbol_master(market: str) -> list[SymbolRecord]:
+        return [
+            SymbolRecord(
+                market=market,
+                symbol="AAPL",
+                korean_name="애플",
+                english_name="Apple Inc.",
+                currency="USD",
+                raw_source="nasmst.cod",
+                raw={"symbol": "AAPL"},
+                downloaded_at="2026-05-07T00:00:00+00:00",
+            )
+        ]
+
+    monkeypatch.setattr(
+        "kis_cli.services.symbols.download_symbol_master",
+        fake_download_symbol_master,
+    )
+
+    result = runner.invoke(
+        app,
+        ["symbols", "download", "--market", "NASDAQ", "--db-path", str(db_path)],
+    )
+
+    assert result.exit_code == 0
+    assert "Symbols downloaded" in result.output
+    assert "NASDAQ" in result.output
+    with connect(db_path) as connection:
+        row = connection.execute(
+            "SELECT market, symbol, korean_name, english_name FROM symbols"
+        ).fetchone()
+
+    assert dict(row) == {
+        "market": "NASDAQ",
+        "symbol": "AAPL",
+        "korean_name": "애플",
+        "english_name": "Apple Inc.",
+    }
+
+
+def _fixed_width_row(
+    widths: list[int],
+    columns: list[str],
+    values: dict[str, str],
+) -> str:
+    parts = []
+    for width, column in zip(widths, columns, strict=True):
+        parts.append(values[column].ljust(width)[:width])
+    return "".join(parts)
+
+
+def _zip_bytes(name: str, content: str) -> bytes:
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, mode="w") as archive:
+        archive.writestr(name, content.encode("cp949"))
+    return buffer.getvalue()
