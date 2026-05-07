@@ -113,6 +113,19 @@ def search_symbols(
     ).fetchall()
 
 
+def find_symbol_markets(connection: sqlite3.Connection, *, symbol: str) -> Sequence[str]:
+    rows = connection.execute(
+        """
+        SELECT DISTINCT market
+        FROM symbols
+        WHERE symbol = ? COLLATE NOCASE
+        ORDER BY market
+        """,
+        (symbol,),
+    ).fetchall()
+    return [row["market"] for row in rows]
+
+
 def insert_ohlcv_bar(
     connection: sqlite3.Connection,
     *,

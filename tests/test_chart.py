@@ -16,8 +16,9 @@ from kis_cli.core.chart import (
     parse_domestic_ohlcv_bar,
     parse_overseas_ohlcv_bar,
 )
+from kis_cli.services.chart import collect_ohlcv_history
 from kis_cli.storage import connect, init_database
-from kis_cli.storage.repositories import insert_ohlcv_bars
+from kis_cli.storage.repositories import insert_ohlcv_bars, insert_symbol
 
 runner = CliRunner()
 
@@ -267,11 +268,59 @@ def test_insert_ohlcv_bars_ignores_duplicates(tmp_path: Path) -> None:
     assert duplicate == 0
 
 
+def test_collect_ohlcv_history_resolves_market_from_symbol_table(monkeypatch, tmp_path: Path) -> None:
+    db_path = tmp_path / "chart.db"
+    init_database(db_path)
+    with connect(db_path) as connection:
+        insert_symbol(connection, market="NASDAQ", symbol="NVDA", name="NVIDIA")
+
+    def fake_resolve_profile(**kwargs):
+        return object()
+
+    def fake_get_rest_token(**kwargs):
+        return object(), "reused"
+
+    def fake_fetch_ohlcv_history(client, **kwargs):
+        assert kwargs["market"] == "NASDAQ"
+        assert kwargs["symbol"] == "NVDA"
+        assert kwargs["end"] == date.today().isoformat()
+        return [
+            OhlcvBar(
+                market="NASDAQ",
+                symbol="NVDA",
+                interval="1d",
+                timestamp=date.today().isoformat(),
+                open=Decimal("100"),
+                high=Decimal("110"),
+                low=Decimal("90"),
+                close=Decimal("105"),
+                volume=1000,
+            )
+        ]
+
+    monkeypatch.setattr("kis_cli.services.chart.resolve_profile", fake_resolve_profile)
+    monkeypatch.setattr("kis_cli.services.chart.get_rest_token", fake_get_rest_token)
+    monkeypatch.setattr("kis_cli.services.chart.fetch_ohlcv_history", fake_fetch_ohlcv_history)
+
+    result = collect_ohlcv_history(
+        symbol="nvda",
+        start="2026-01-01",
+        end=None,
+        period="D",
+        db_path=db_path,
+    )
+
+    assert result.market == "NASDAQ"
+    assert result.symbol == "NVDA"
+    assert result.fetched == 1
+
+
 def test_chart_daily_command_prints_summary(monkeypatch, tmp_path: Path) -> None:
     def fake_collect_ohlcv_history(**kwargs):
         assert kwargs["symbol"] == "005930"
-        assert kwargs["market"] == "KOSPI"
+        assert "market" not in kwargs
         assert kwargs["period"] == "D"
+        assert kwargs["end"] is None
         return __import__("kis_cli.services.chart").services.chart.ChartHistoryResult(
             db_path=tmp_path / "chart.db",
             market="KOSPI",
@@ -303,12 +352,8 @@ def test_chart_daily_command_prints_summary(monkeypatch, tmp_path: Path) -> None
             "daily",
             "--symbol",
             "005930",
-            "--market",
-            "KOSPI",
             "--start",
             "2026-05-01",
-            "--end",
-            "2026-05-07",
             "--save",
         ],
     )

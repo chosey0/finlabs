@@ -470,18 +470,14 @@ def chart_history(
         str,
         typer.Option("--symbol", help="Stock symbol to collect, for example 005930 or AAPL."),
     ],
-    market: Annotated[
-        str,
-        typer.Option("--market", help="Market, for example KOSPI, KOSDAQ, NASDAQ, NYSE, or AMEX."),
-    ],
     start: Annotated[
         str,
         typer.Option("--start", help="Start date in YYYY-MM-DD or YYYYMMDD format."),
     ],
     end: Annotated[
-        str,
-        typer.Option("--end", help="End date in YYYY-MM-DD or YYYYMMDD format."),
-    ],
+        str | None,
+        typer.Option("--end", help="End date in YYYY-MM-DD or YYYYMMDD format. Defaults to today."),
+    ] = None,
     period: Annotated[
         str,
         typer.Option("--period", help="Period: D, W, M, or Y."),
@@ -514,7 +510,6 @@ def chart_history(
     """Collect domestic or overseas OHLCV history with continuation support."""
     _run_chart_history(
         symbol=symbol,
-        market=market,
         start=start,
         end=end,
         period=period,
@@ -530,9 +525,8 @@ def chart_history(
 @chart_app.command("daily")
 def chart_daily(
     symbol: Annotated[str, typer.Option("--symbol", help="Stock symbol to collect.")],
-    market: Annotated[str, typer.Option("--market", help="Market to collect.")],
     start: Annotated[str, typer.Option("--start", help="Start date.")],
-    end: Annotated[str, typer.Option("--end", help="End date.")],
+    end: Annotated[str | None, typer.Option("--end", help="End date. Defaults to today.")] = None,
     profile: Annotated[str | None, typer.Option("--profile")] = None,
     path: Annotated[Path | None, typer.Option("--path")] = None,
     db_path: Annotated[Path | None, typer.Option("--db-path")] = None,
@@ -543,7 +537,6 @@ def chart_daily(
     """Collect daily OHLCV history."""
     _run_chart_history(
         symbol=symbol,
-        market=market,
         start=start,
         end=end,
         period="D",
@@ -559,9 +552,8 @@ def chart_daily(
 @chart_app.command("weekly")
 def chart_weekly(
     symbol: Annotated[str, typer.Option("--symbol", help="Stock symbol to collect.")],
-    market: Annotated[str, typer.Option("--market", help="Market to collect.")],
     start: Annotated[str, typer.Option("--start", help="Start date.")],
-    end: Annotated[str, typer.Option("--end", help="End date.")],
+    end: Annotated[str | None, typer.Option("--end", help="End date. Defaults to today.")] = None,
     profile: Annotated[str | None, typer.Option("--profile")] = None,
     path: Annotated[Path | None, typer.Option("--path")] = None,
     db_path: Annotated[Path | None, typer.Option("--db-path")] = None,
@@ -572,7 +564,6 @@ def chart_weekly(
     """Collect weekly OHLCV history."""
     _run_chart_history(
         symbol=symbol,
-        market=market,
         start=start,
         end=end,
         period="W",
@@ -588,9 +579,8 @@ def chart_weekly(
 @chart_app.command("monthly")
 def chart_monthly(
     symbol: Annotated[str, typer.Option("--symbol", help="Stock symbol to collect.")],
-    market: Annotated[str, typer.Option("--market", help="Market to collect.")],
     start: Annotated[str, typer.Option("--start", help="Start date.")],
-    end: Annotated[str, typer.Option("--end", help="End date.")],
+    end: Annotated[str | None, typer.Option("--end", help="End date. Defaults to today.")] = None,
     profile: Annotated[str | None, typer.Option("--profile")] = None,
     path: Annotated[Path | None, typer.Option("--path")] = None,
     db_path: Annotated[Path | None, typer.Option("--db-path")] = None,
@@ -601,7 +591,6 @@ def chart_monthly(
     """Collect monthly OHLCV history."""
     _run_chart_history(
         symbol=symbol,
-        market=market,
         start=start,
         end=end,
         period="M",
@@ -617,9 +606,8 @@ def chart_monthly(
 @chart_app.command("yearly")
 def chart_yearly(
     symbol: Annotated[str, typer.Option("--symbol", help="Stock symbol to collect.")],
-    market: Annotated[str, typer.Option("--market", help="Market to collect.")],
     start: Annotated[str, typer.Option("--start", help="Start date.")],
-    end: Annotated[str, typer.Option("--end", help="End date.")],
+    end: Annotated[str | None, typer.Option("--end", help="End date. Defaults to today.")] = None,
     profile: Annotated[str | None, typer.Option("--profile")] = None,
     path: Annotated[Path | None, typer.Option("--path")] = None,
     db_path: Annotated[Path | None, typer.Option("--db-path")] = None,
@@ -630,7 +618,6 @@ def chart_yearly(
     """Collect yearly OHLCV history."""
     _run_chart_history(
         symbol=symbol,
-        market=market,
         start=start,
         end=end,
         period="Y",
@@ -699,9 +686,8 @@ def query_ohlcv(
 def _run_chart_history(
     *,
     symbol: str,
-    market: str,
     start: str,
-    end: str,
+    end: str | None,
     period: str,
     profile: str | None,
     path: Path | None,
@@ -713,7 +699,6 @@ def _run_chart_history(
     try:
         result = collect_ohlcv_history(
             symbol=symbol,
-            market=market,
             start=start,
             end=end,
             period=period,
