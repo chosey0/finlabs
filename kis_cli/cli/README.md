@@ -108,7 +108,7 @@ kiscli chart monthly --profile csq1404 --market KOSPI --symbol 005930 --start 20
 kiscli chart yearly --profile csq1404 --market KOSPI --symbol 005930 --start 2020-01-01 --end 2026-05-07
 ```
 
-국내 OHLCV는 응답 제한에 맞춰 가장 오래된 수집일 이전 구간을 이어 조회합니다. 해외 OHLCV는 응답 헤더 `tr_cont`가 `M` 또는 `F`이면 `tr_cont=N`으로 연속 조회합니다.
+국내 OHLCV는 응답 제한에 맞춰 가장 오래된 수집일 이전 구간을 이어 조회합니다. 해외 개별주식의 일/주/월 OHLCV는 `[해외주식] 해외주식 기간별시세` API(`/dailyprice`)를 사용합니다. 1회 최대 100건을 기준으로, 응답에 다음 `KEYB`가 있으면 같은 `BYMD`에서 다음 묶음을 이어 조회하고, `KEYB`가 없더라도 100건이 꽉 찬 응답이면 가장 오래된 응답일 이전으로 `BYMD`를 이동해 이어 조회합니다. 해외 개별주식 연봉(`Y`)은 지원하지 않습니다.
 
 ## query 명령
 

@@ -12,7 +12,14 @@ DOMESTIC_CHART_PATH = "/uapi/domestic-stock/v1/quotations/inquire-daily-itemchar
 DOMESTIC_CHART_TR_ID = "FHKST03010100"
 OVERSEAS_CHART_PATH = "/uapi/overseas-price/v1/quotations/inquire-daily-chartprice"
 OVERSEAS_CHART_TR_ID = "FHKST03030100"
+OVERSEAS_STOCK_DAILYPRICE_PATH = "/uapi/overseas-price/v1/quotations/dailyprice"
+OVERSEAS_STOCK_DAILYPRICE_TR_ID = "HHDFS76240000"
+OVERSEAS_STOCK_DAILYPRICE_PAGE_SIZE = 100
 PERIOD_TO_INTERVAL = {"D": "1d", "W": "1w", "M": "1mo", "Y": "1y"}
+PERIOD_TO_OVERSEAS_DAILYPRICE_GUBN = {"D": "0", "W": "1", "M": "2"}
+OVERSEAS_STOCK_PERIOD_MARKETS = {
+    market for market in OVERSEAS_MARKET_CODES if not market.endswith("_INDEX")
+}
 OVERSEAS_CHART_CONDITION_CODES = {
     "OVERSEAS_INDEX": "N",
     "OVERSEAS_EXCHANGE_RATE": "X",
@@ -72,6 +79,17 @@ def fetch_ohlcv_history(
 
     if normalized_market in DOMESTIC_MARKETS:
         return fetch_domestic_ohlcv_history(
+            client,
+            market=normalized_market,
+            symbol=normalized_symbol,
+            start_date=start_date,
+            end_date=end_date,
+            period=normalized_period,
+            adjusted=adjusted,
+            max_pages=max_pages,
+        )
+    if normalized_market in OVERSEAS_STOCK_PERIOD_MARKETS:
+        return fetch_overseas_stock_period_history(
             client,
             market=normalized_market,
             symbol=normalized_symbol,
@@ -145,6 +163,76 @@ def fetch_domestic_ohlcv_history(
     return _sorted_bars(bars.values())
 
 
+def fetch_overseas_stock_period_history(
+    client: KisClient,
+    *,
+    market: str,
+    symbol: str,
+    start_date: date,
+    end_date: date,
+    period: str,
+    adjusted: bool,
+    max_pages: int,
+) -> list[OhlcvBar]:
+    if period not in PERIOD_TO_OVERSEAS_DAILYPRICE_GUBN:
+        raise ValueError("overseas stock period price supports only D, W, or M")
+
+    bars: dict[str, OhlcvBar] = {}
+    keyb = ""
+    page_end = end_date
+
+    for _ in range(max_pages):
+        payload = client.get(
+            OVERSEAS_STOCK_DAILYPRICE_PATH,
+            tr_id=OVERSEAS_STOCK_DAILYPRICE_TR_ID,
+            params={
+                "AUTH": "",
+                "EXCD": OVERSEAS_MARKET_CODES[market].upper(),
+                "SYMB": symbol,
+                "GUBN": PERIOD_TO_OVERSEAS_DAILYPRICE_GUBN[period],
+                "BYMD": format_date(page_end),
+                "MODP": "1" if adjusted else "0",
+                "KEYB": keyb,
+            },
+        )
+        rows = _output_rows(payload)
+        raw_dates = [parse_date(_date_value(row, "xymd")) for row in rows]
+        parsed = [
+            bar
+            for bar in (
+                parse_overseas_ohlcv_bar(
+                    market=market,
+                    symbol=symbol,
+                    interval=PERIOD_TO_INTERVAL[period],
+                    row=row,
+                )
+                for row in rows
+            )
+            if start_date <= parse_date(bar.timestamp) <= end_date
+        ]
+        for bar in parsed:
+            bars[bar.timestamp] = bar
+
+        if raw_dates and min(raw_dates) <= start_date:
+            break
+
+        next_keyb = _next_keyb(payload)
+        if next_keyb and next_keyb != keyb:
+            keyb = next_keyb
+            continue
+
+        if len(rows) < OVERSEAS_STOCK_DAILYPRICE_PAGE_SIZE or not raw_dates:
+            break
+
+        next_page_end = min(raw_dates) - timedelta(days=1)
+        if next_page_end >= page_end:
+            break
+        page_end = next_page_end
+        keyb = ""
+
+    return _sorted_bars(bars.values())
+
+
 def fetch_overseas_ohlcv_history(
     client: KisClient,
     *,
@@ -156,13 +244,11 @@ def fetch_overseas_ohlcv_history(
     max_pages: int,
 ) -> list[OhlcvBar]:
     bars: dict[str, OhlcvBar] = {}
-    tr_cont = ""
 
     for _ in range(max_pages):
-        response = client.get_response(
+        payload = client.get(
             OVERSEAS_CHART_PATH,
             tr_id=OVERSEAS_CHART_TR_ID,
-            tr_cont=tr_cont,
             params={
                 "FID_COND_MRKT_DIV_CODE": _overseas_condition_code(market, symbol),
                 "FID_INPUT_ISCD": symbol,
@@ -171,22 +257,18 @@ def fetch_overseas_ohlcv_history(
                 "FID_PERIOD_DIV_CODE": period,
             },
         )
-        rows = _output_rows(response.payload)
         parsed = [
             bar
             for bar in (
                 parse_overseas_ohlcv_bar(market=market, symbol=symbol, interval=PERIOD_TO_INTERVAL[period], row=row)
-                for row in rows
+                for row in _output_rows(payload)
             )
             if start_date <= parse_date(bar.timestamp) <= end_date
         ]
         for bar in parsed:
             bars[bar.timestamp] = bar
 
-        continuation = response.headers.get("tr_cont", "")
-        if continuation not in {"M", "F"}:
-            break
-        tr_cont = "N"
+        break
 
     return _sorted_bars(bars.values())
 
@@ -267,6 +349,20 @@ def _output_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
     if isinstance(output, list):
         return [row for row in output if isinstance(row, dict)]
     raise ValueError("KIS response output rows had an unsupported shape")
+
+
+def _next_keyb(payload: dict[str, Any]) -> str:
+    for key in ("KEYB", "keyb"):
+        value = str(payload.get(key) or "").strip()
+        if value:
+            return value
+    output1 = payload.get("output1")
+    if isinstance(output1, dict):
+        for key in ("KEYB", "keyb"):
+            value = str(output1.get(key) or "").strip()
+            if value:
+                return value
+    return ""
 
 
 def _overseas_condition_code(market: str, symbol: str) -> str:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date, timedelta
 from decimal import Decimal
 from pathlib import Path
 
@@ -8,8 +9,10 @@ from typer.testing import CliRunner
 from kis_cli.cli.app import app
 from kis_cli.core.chart import (
     OhlcvBar,
+    fetch_ohlcv_history,
     fetch_domestic_ohlcv_history,
     fetch_overseas_ohlcv_history,
+    fetch_overseas_stock_period_history,
     parse_domestic_ohlcv_bar,
     parse_overseas_ohlcv_bar,
 )
@@ -25,6 +28,22 @@ class FakeClient:
 
     def get(self, path: str, *, tr_id: str, params: dict[str, str], tr_cont: str = ""):
         self.calls.append((path, tr_id, params, tr_cont))
+        if "dailyprice" in path:
+            if params["KEYB"] == "":
+                return {
+                    "rt_cd": "0",
+                    "KEYB": "1",
+                    "output2": [_overseas_row("20260507", "207")],
+                }
+            return {
+                "rt_cd": "0",
+                "output2": [_overseas_row("20260506", "206")],
+            }
+        if "inquire-daily-chartprice" in path:
+            return {
+                "rt_cd": "0",
+                "output2": [_overseas_chartprice_row("20260507", "307")],
+            }
         end = params["FID_INPUT_DATE_2"]
         if end == "20260507":
             rows = [
@@ -110,22 +129,108 @@ def test_domestic_history_continues_by_moving_end_date() -> None:
     assert client.calls[1][2]["FID_INPUT_DATE_2"] == "20260505"
 
 
-def test_overseas_history_uses_tr_continuation() -> None:
+def test_overseas_stock_period_history_uses_dailyprice_keyb() -> None:
     client = FakeClient()
 
-    bars = fetch_overseas_ohlcv_history(
+    bars = fetch_overseas_stock_period_history(
         client,
         market="NASDAQ",
         symbol="AAPL",
         start_date=__import__("datetime").date(2026, 5, 6),
         end_date=__import__("datetime").date(2026, 5, 7),
         period="D",
+        adjusted=True,
         max_pages=10,
     )
 
     assert [bar.timestamp for bar in bars] == ["2026-05-06", "2026-05-07"]
-    assert client.calls[0][3] == ""
-    assert client.calls[1][3] == "N"
+    assert client.calls[0][0] == "/uapi/overseas-price/v1/quotations/dailyprice"
+    assert client.calls[0][1] == "HHDFS76240000"
+    assert client.calls[0][2]["EXCD"] == "NAS"
+    assert client.calls[0][2]["GUBN"] == "0"
+    assert client.calls[0][2]["MODP"] == "1"
+    assert client.calls[0][2]["KEYB"] == ""
+    assert client.calls[1][2]["KEYB"] == "1"
+
+
+def test_overseas_stock_period_history_falls_back_to_moving_bymd_without_keyb() -> None:
+    class NoKeybClient:
+        def __init__(self) -> None:
+            self.calls = []
+
+        def get(self, path: str, *, tr_id: str, params: dict[str, str], tr_cont: str = ""):
+            self.calls.append((path, tr_id, params, tr_cont))
+            if params["BYMD"] == "20260507":
+                end = date(2026, 5, 7)
+                return {
+                    "rt_cd": "0",
+                    "output2": [
+                        _overseas_row((end - timedelta(days=offset)).strftime("%Y%m%d"), str(300 - offset))
+                        for offset in range(100)
+                    ],
+                }
+            return {
+                "rt_cd": "0",
+                "output2": [_overseas_row("20260127", "199")],
+            }
+
+    client = NoKeybClient()
+
+    bars = fetch_overseas_stock_period_history(
+        client,
+        market="NASDAQ",
+        symbol="NVDA",
+        start_date=date(2026, 1, 27),
+        end_date=date(2026, 5, 7),
+        period="D",
+        adjusted=True,
+        max_pages=10,
+    )
+
+    assert len(client.calls) == 2
+    assert client.calls[0][2]["BYMD"] == "20260507"
+    assert client.calls[1][2]["BYMD"] == "20260127"
+    assert client.calls[1][2]["KEYB"] == ""
+    assert bars[0].timestamp == "2026-01-27"
+    assert bars[-1].timestamp == "2026-05-07"
+
+
+def test_overseas_stock_yearly_history_is_unsupported() -> None:
+    client = FakeClient()
+
+    try:
+        fetch_ohlcv_history(
+            client,
+            market="NASDAQ",
+            symbol="AAPL",
+            start="2026-01-01",
+            end="2026-05-07",
+            period="Y",
+        )
+    except ValueError as exc:
+        assert "supports only D, W, or M" in str(exc)
+    else:
+        raise AssertionError("expected ValueError")
+
+
+def test_overseas_special_history_keeps_chartprice_api() -> None:
+    client = FakeClient()
+
+    bars = fetch_overseas_ohlcv_history(
+        client,
+        market="OVERSEAS_INDEX",
+        symbol=".IXIC",
+        start_date=__import__("datetime").date(2026, 5, 7),
+        end_date=__import__("datetime").date(2026, 5, 7),
+        period="Y",
+        max_pages=10,
+    )
+
+    assert [bar.timestamp for bar in bars] == ["2026-05-07"]
+    assert client.calls[0][0] == "/uapi/overseas-price/v1/quotations/inquire-daily-chartprice"
+    assert client.calls[0][1] == "FHKST03030100"
+    assert client.calls[0][2]["FID_COND_MRKT_DIV_CODE"] == "N"
+    assert client.calls[0][2]["FID_PERIOD_DIV_CODE"] == "Y"
 
 
 def test_insert_ohlcv_bars_ignores_duplicates(tmp_path: Path) -> None:
@@ -233,4 +338,15 @@ def _overseas_row(date: str, close: str) -> dict[str, str]:
         "low": "190",
         "clos": close,
         "tvol": "2000",
+    }
+
+
+def _overseas_chartprice_row(date: str, close: str) -> dict[str, str]:
+    return {
+        "stck_bsop_date": date,
+        "ovrs_nmix_oprc": "300",
+        "ovrs_nmix_hgpr": "310",
+        "ovrs_nmix_lwpr": "290",
+        "ovrs_nmix_prpr": close,
+        "acml_vol": "3000",
     }

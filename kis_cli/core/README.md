@@ -65,7 +65,7 @@ from kis_cli.core.token_cache import read_cached_token, write_cached_token, clea
 - `tr_cont`
 - `custtype`
 
-KIS 응답의 `rt_cd`가 `0`이 아니면 `KisApiError`를 발생시킵니다. 해외 연속 조회처럼 응답 헤더가 필요한 경우 `get_response()`를 사용합니다.
+KIS 응답의 `rt_cd`가 `0`이 아니면 `KisApiError`를 발생시킵니다. 응답 헤더까지 필요한 API는 `get_response()`를 사용할 수 있습니다.
 
 ## 현재가 조회
 
@@ -111,11 +111,22 @@ Y -> 1y
 - TR ID: `FHKST03010100`
 - 응답 제한에 맞춰 가장 오래된 수집일 이전 구간을 이어 조회
 
-해외 OHLCV:
+해외 개별주식 OHLCV:
+
+- Path: `/uapi/overseas-price/v1/quotations/dailyprice`
+- TR ID: `HHDFS76240000`
+- 지원 period: `D`, `W`, `M`
+- 요청의 `GUBN`은 `D=0`, `W=1`, `M=2`로 변환
+- 1회 최대 100건 기준으로 조회
+- 응답에 다음 `KEYB`가 있으면 같은 `BYMD`에서 다음 묶음을 이어 조회
+- `KEYB`가 없더라도 100건이 꽉 찬 응답이면 가장 오래된 응답일 이전으로 `BYMD`를 이동해 이어 조회
+- 해외 개별주식 `Y`는 지원하지 않음
+
+해외 지수/환율/특수 상품 OHLCV:
 
 - Path: `/uapi/overseas-price/v1/quotations/inquire-daily-chartprice`
 - TR ID: `FHKST03030100`
-- 응답 헤더 `tr_cont`가 `M` 또는 `F`이면 다음 요청에 `tr_cont=N` 사용
+- 지원 period: `D`, `W`, `M`, `Y`
 
 CLI 예:
 
