@@ -272,7 +272,7 @@ def list_ohlcv_bars(
         SELECT market, symbol, interval, timestamp, open, high, low, close, volume
         FROM ohlcv_bars
         WHERE market = ? AND symbol = ? AND interval = ?
-        ORDER BY timestamp
+        ORDER BY timestamp DESC
     """
     params: list[object] = [market, symbol, interval]
     if limit is not None:
@@ -300,19 +300,13 @@ def query_daily_ohlcv_bars(
 
     sql = f"""
         SELECT market, symbol, interval, timestamp, open, high, low, close, volume
-        FROM (
-            SELECT market, symbol, interval, timestamp, open, high, low, close, volume
-            FROM ohlcv_bars
-            WHERE {where}
-            ORDER BY timestamp DESC
+        FROM ohlcv_bars
+        WHERE {where}
+        ORDER BY timestamp DESC
     """
     if limit is not None:
         sql += " LIMIT ?"
         params.append(limit)
-    sql += """
-        )
-        ORDER BY timestamp
-    """
     return _dict_rows(connection.execute(sql, params))
 
 

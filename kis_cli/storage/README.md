@@ -151,7 +151,7 @@ list_ohlcv_bars(connection, market="NASDAQ", symbol="AAPL", interval="1d")
 query_daily_ohlcv_bars(connection, symbol="AAPL", start="2026-04-01", end="2026-05-07")
 ```
 
-`query_daily_ohlcv_bars()`는 `interval='1d'`만 조회합니다. 최근 N개를 가져온 뒤 출력 순서는 날짜 오름차순입니다.
+`query_daily_ohlcv_bars()`는 `interval='1d'`만 조회합니다. 결과는 최신 날짜가 먼저 나오도록 정렬합니다.
 
 실시간 tick:
 

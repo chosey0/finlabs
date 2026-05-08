@@ -52,8 +52,8 @@ def test_query_stored_daily_ohlcv_uses_symbol_only_and_daily_interval(tmp_path) 
 
     assert result.symbol == "AAPL"
     assert result.interval == "1d"
-    assert [row["timestamp"] for row in result.rows] == ["2026-05-08", "2026-05-09"]
-    assert [row["close"] for row in result.rows] == [108.0, 109.0]
+    assert [row["timestamp"] for row in result.rows] == ["2026-05-09", "2026-05-08"]
+    assert [row["close"] for row in result.rows] == [109.0, 108.0]
 
 
 def test_query_ohlcv_command_outputs_json(tmp_path) -> None:
@@ -137,8 +137,8 @@ def test_query_ohlcv_command_all_returns_every_matching_row(tmp_path) -> None:
     assert len(json.loads(default_result.output)) == 20
     all_rows = json.loads(all_result.output)
     assert len(all_rows) == 23
-    assert all_rows[0]["timestamp"] == "2026-05-01"
-    assert all_rows[-1]["timestamp"] == "2026-05-23"
+    assert all_rows[0]["timestamp"] == "2026-05-23"
+    assert all_rows[-1]["timestamp"] == "2026-05-01"
 
 
 def test_query_ohlcv_command_exports_csv(tmp_path) -> None:

@@ -299,7 +299,7 @@ uv run kiscli query ohlcv --symbol 005930 --limit 30
 uv run kiscli query ohlcv --symbol AAPL --all
 ```
 
-기본 조회는 최신 20개 일봉을 반환합니다. `--all`을 사용하면 날짜 조건에 맞는 모든 일봉을 조회합니다.
+기본 조회는 최신 20개 일봉을 반환합니다. `--all`을 사용하면 날짜 조건에 맞는 모든 일봉을 조회합니다. 조회 결과는 최신 날짜가 먼저 나옵니다.
 
 기간 조회:
 

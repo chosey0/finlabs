@@ -295,7 +295,7 @@ def test_realtime_tick_unique_constraint_prevents_duplicate_inserts(tmp_path) ->
     assert count == 1
 
 
-def test_ohlcv_query_uses_deterministic_timestamp_order(tmp_path) -> None:
+def test_ohlcv_query_uses_latest_first_timestamp_order(tmp_path) -> None:
     db_path = tmp_path / "test-warehouse.duckdb"
     init_database(db_path)
 
@@ -326,8 +326,8 @@ def test_ohlcv_query_uses_deterministic_timestamp_order(tmp_path) -> None:
         )
 
     assert [row["timestamp"] for row in rows] == [
-        "2026-05-07",
-        "2026-05-08",
         "2026-05-09",
+        "2026-05-08",
+        "2026-05-07",
     ]
-    assert [row["close"] for row in rows] == [107.0, 108.0, 109.0]
+    assert [row["close"] for row in rows] == [109.0, 108.0, 107.0]
