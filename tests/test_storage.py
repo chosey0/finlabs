@@ -140,6 +140,17 @@ def test_symbol_unique_constraint_prevents_duplicate_inserts(tmp_path) -> None:
     assert first_inserted is True
     assert duplicate_inserted is False
     assert count == 1
+    with connect(db_path) as connection:
+        downloaded_at, created_at, updated_at = connection.execute(
+            """
+            SELECT downloaded_at, created_at, updated_at
+            FROM symbols
+            WHERE market = 'NASDAQ' AND symbol = 'AAPL'
+            """
+        ).fetchone()
+    assert str(downloaded_at).endswith("+09:00")
+    assert str(created_at).endswith("+09:00")
+    assert str(updated_at).endswith("+09:00")
 
 
 def test_symbol_upsert_replaces_existing_market_snapshot(tmp_path) -> None:
@@ -259,6 +270,15 @@ def test_ohlcv_unique_constraint_prevents_duplicate_inserts(tmp_path) -> None:
     assert first_inserted is True
     assert duplicate_inserted is False
     assert count == 1
+    with connect(db_path) as connection:
+        created_at = connection.execute(
+            """
+            SELECT created_at
+            FROM ohlcv_bars
+            WHERE market = 'NASDAQ' AND symbol = 'AAPL'
+            """
+        ).fetchone()[0]
+    assert str(created_at).endswith("+09:00")
 
 
 def test_realtime_tick_unique_constraint_prevents_duplicate_inserts(tmp_path) -> None:
@@ -293,6 +313,15 @@ def test_realtime_tick_unique_constraint_prevents_duplicate_inserts(tmp_path) ->
     assert first_inserted is True
     assert duplicate_inserted is False
     assert count == 1
+    with connect(db_path) as connection:
+        created_at = connection.execute(
+            """
+            SELECT created_at
+            FROM realtime_ticks
+            WHERE market = 'NASDAQ' AND symbol = 'AAPL'
+            """
+        ).fetchone()[0]
+    assert str(created_at).endswith("+09:00")
 
 
 def test_ohlcv_query_uses_latest_first_timestamp_order(tmp_path) -> None:

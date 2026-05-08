@@ -5,8 +5,9 @@ import json
 import urllib.request
 import zipfile
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from io import BytesIO, StringIO
+
+from kis_cli.utils.time import now_kst_iso
 
 DOMESTIC_MARKETS = {"KOSPI", "KOSDAQ"}
 OVERSEAS_MARKET_CODES = {
@@ -257,7 +258,7 @@ def download_symbol_master(market: str) -> list[SymbolRecord]:
     normalized = normalize_market(market)
     data = _download_zip(_master_url(normalized))
     records = parse_symbol_master(normalized, data)
-    downloaded_at = datetime.now(UTC).isoformat()
+    downloaded_at = now_kst_iso()
     return [record.with_downloaded_at(downloaded_at) for record in records]
 
 
@@ -366,7 +367,7 @@ def record_to_db_values(record: SymbolRecord) -> dict[str, object]:
         "lot_size": record.lot_size,
         "raw_source": record.raw_source,
         "raw": json.dumps(record.raw, ensure_ascii=False, sort_keys=True),
-        "downloaded_at": record.downloaded_at or datetime.now(UTC).isoformat(),
+        "downloaded_at": record.downloaded_at or now_kst_iso(),
     }
 
 

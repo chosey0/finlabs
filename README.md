@@ -106,7 +106,7 @@ Warehouse: ~/.local/share/kis-cli/warehouse.duckdb
 ```
 
 API 키, API 시크릿, 계좌번호, 토큰은 패키지 소스 안에 저장하지 않습니다. CLI 출력에서도 민감 값은 마스킹합니다.
-`symbols download`와 `chart ... --save` 실행 기록은 앱 DB의 `ingest_runs`, `api_logs` 테이블에 저장됩니다.
+`symbols download`와 `chart ... --save` 실행 기록은 앱 DB의 `ingest_runs`, `api_logs` 테이블에 저장됩니다. 저장되는 시각 값은 KST ISO 형식입니다.
 
 ## 설정 명령
 

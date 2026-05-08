@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from pathlib import Path
 
 from kis_cli.storage.app_db import connect_app
+from kis_cli.utils.time import now_kst_iso
 
 
 @dataclass(frozen=True)
@@ -35,7 +35,7 @@ def start_ingest_run(
             )
             VALUES (?, ?, ?, ?, 'running')
             """,
-            [kind, market, symbol, _now_utc()],
+            [kind, market, symbol, now_kst_iso()],
         )
         return int(cursor.lastrowid)
 
@@ -55,7 +55,7 @@ def finish_ingest_run(
             SET finished_at = ?, status = ?, rows_written = ?, error = ?
             WHERE id = ?
             """,
-            [_now_utc(), status, rows_written, error, run_id],
+            [now_kst_iso(), status, rows_written, error, run_id],
         )
 
 
@@ -76,7 +76,7 @@ def record_api_log(
             )
             VALUES (?, ?, ?, ?, ?, ?)
             """,
-            [endpoint, tr_id, status_code, _now_utc(), elapsed_ms, error],
+            [endpoint, tr_id, status_code, now_kst_iso(), elapsed_ms, error],
         )
 
 
@@ -119,7 +119,3 @@ def list_api_logs(app_db_path: Path, *, limit: int = 20) -> list[dict[str, objec
             [limit],
         ).fetchall()
     return [dict(row) for row in rows]
-
-
-def _now_utc() -> str:
-    return datetime.now(UTC).isoformat()

@@ -11,6 +11,7 @@ from kis_cli.core.symbol_master import (
     KOSPI_WIDTHS,
     SymbolRecord,
     parse_symbol_master,
+    record_to_db_values,
 )
 from kis_cli.services.symbols import SymbolDownloadResult
 from kis_cli.storage import connect
@@ -94,6 +95,12 @@ def test_parse_overseas_master_normalizes_tab_separated_record() -> None:
     assert record.country_code == "US"
     assert record.base_price == 1234
     assert record.lot_size == 1
+
+
+def test_symbol_record_defaults_downloaded_at_to_kst() -> None:
+    values = record_to_db_values(SymbolRecord(market="NASDAQ", symbol="AAPL"))
+
+    assert str(values["downloaded_at"]).endswith("+09:00")
 
 
 def test_symbols_download_command_upserts_downloaded_records(tmp_path, monkeypatch) -> None:

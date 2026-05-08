@@ -56,8 +56,8 @@ def create_warehouse_schema(connection) -> None:
             raw_source VARCHAR NOT NULL DEFAULT '',
             raw JSON NOT NULL DEFAULT '{}',
             downloaded_at VARCHAR NOT NULL DEFAULT '',
-            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            created_at VARCHAR NOT NULL DEFAULT '',
+            updated_at VARCHAR NOT NULL DEFAULT '',
             UNIQUE (market, symbol)
         )
         """
@@ -74,7 +74,7 @@ def create_warehouse_schema(connection) -> None:
             low DOUBLE NOT NULL,
             close DOUBLE NOT NULL,
             volume BIGINT NOT NULL,
-            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            created_at VARCHAR NOT NULL DEFAULT '',
             UNIQUE (market, symbol, interval, timestamp)
         )
         """
@@ -90,7 +90,7 @@ def create_warehouse_schema(connection) -> None:
             seq BIGINT NOT NULL,
             price DOUBLE NOT NULL,
             volume BIGINT NOT NULL,
-            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            created_at VARCHAR NOT NULL DEFAULT '',
             UNIQUE (market, symbol, exchange_ts, seq)
         )
         """

@@ -37,6 +37,7 @@ def test_logs_runs_command_prints_recent_ingest_runs(tmp_path) -> None:
     assert "failed" in result.output
     assert "boom" in result.output
     assert "symbols" not in result.output
+    assert runs_have_kst_offset(app_db_path)
 
 
 def test_logs_api_command_prints_recent_api_logs(tmp_path) -> None:
@@ -75,3 +76,11 @@ def test_app_log_repositories_return_recent_rows_first(tmp_path) -> None:
 
     assert [run.market for run in runs] == ["NASDAQ"]
     assert [row["endpoint"] for row in api_logs] == ["second"]
+    assert runs[0].started_at.endswith("+09:00")
+    assert runs[0].finished_at.endswith("+09:00")
+    assert str(api_logs[0]["requested_at"]).endswith("+09:00")
+
+
+def runs_have_kst_offset(app_db_path) -> bool:
+    runs = list_ingest_runs(app_db_path, limit=1)
+    return runs[0].started_at.endswith("+09:00") and runs[0].finished_at.endswith("+09:00")

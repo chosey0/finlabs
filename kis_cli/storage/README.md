@@ -39,7 +39,7 @@ SQLite app DB 테이블:
 - `api_logs`
 - `ingest_runs`
 
-`symbols download`와 `chart ... --save`는 `ingest_runs`에 시작/종료 상태와 저장 건수를 기록하고, 관련 요청 결과는 `api_logs`에 기록합니다.
+`symbols download`와 `chart ... --save`는 `ingest_runs`에 시작/종료 상태와 저장 건수를 기록하고, 관련 요청 결과는 `api_logs`에 기록합니다. 저장되는 시각 값은 KST ISO 형식입니다.
 
 ## 스키마
 
@@ -69,6 +69,8 @@ SQLite app DB 테이블:
 - `raw_source`
 - `raw`
 - `downloaded_at`
+- `created_at`
+- `updated_at`
 
 중복 방지:
 

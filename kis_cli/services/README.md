@@ -75,7 +75,7 @@ from kis_cli.services.chart import collect_ohlcv_history
 3. KIS OHLCV 이력 조회
 4. `--save`가 있으면 DuckDB warehouse 초기화 후 `ohlcv_bars`에 저장
 5. 저장은 DuckDB bulk insert와 DB UNIQUE 제약 기반으로 중복을 방지
-6. `--save` 실행 결과를 앱 DB의 `ingest_runs`, `api_logs`에 기록
+6. `--save` 실행 결과를 앱 DB의 `ingest_runs`, `api_logs`에 KST 시각으로 기록
 
 저장 interval:
 

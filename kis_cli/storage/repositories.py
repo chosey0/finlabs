@@ -6,6 +6,8 @@ from collections.abc import Iterable, Sequence
 from pathlib import Path
 from uuid import uuid4
 
+from kis_cli.utils.time import now_kst_iso
+
 
 def insert_symbol(
     connection,
@@ -15,15 +17,16 @@ def insert_symbol(
     name: str,
 ) -> bool:
     before = _count_rows(connection, "symbols")
+    stored_at = now_kst_iso()
     connection.execute(
         """
         INSERT INTO symbols (
-            market, symbol, korean_name, raw_source, raw, downloaded_at
+            market, symbol, korean_name, raw_source, raw, downloaded_at, created_at, updated_at
         )
-        VALUES (?, ?, ?, '', '{}', CURRENT_TIMESTAMP)
+        VALUES (?, ?, ?, '', '{}', ?, ?, ?)
         ON CONFLICT DO NOTHING
         """,
-        [market, symbol, name],
+        [market, symbol, name, stored_at, stored_at, stored_at],
     )
     return _count_rows(connection, "symbols") > before
 
@@ -32,6 +35,7 @@ def upsert_symbols(connection, records: Iterable[dict[str, object]]) -> int:
     rows = list(records)
     if not rows:
         return 0
+    stored_at = now_kst_iso()
     temp_table = f"tmp_symbols_{uuid4().hex}"
     connection.execute(
         f"""
@@ -81,13 +85,13 @@ def upsert_symbols(connection, records: Iterable[dict[str, object]]) -> int:
                 market, symbol, standard_code, realtime_symbol, korean_name, english_name,
                 security_type, currency, exchange_id, exchange_code, exchange_name,
                 country_code, listed_date, base_price, lot_size, raw_source, raw,
-                downloaded_at, updated_at
+                downloaded_at, created_at, updated_at
             )
             SELECT
                 market, symbol, standard_code, realtime_symbol, korean_name, english_name,
                 security_type, currency, exchange_id, exchange_code, exchange_name,
                 country_code, listed_date, base_price, lot_size, raw_source, raw::JSON,
-                downloaded_at, now()
+                downloaded_at, {_quote_literal(stored_at)}, {_quote_literal(stored_at)}
             FROM (
                 SELECT *,
                     row_number() OVER (
@@ -252,15 +256,16 @@ def insert_ohlcv_bar(
     volume: int,
 ) -> bool:
     before = _count_rows(connection, "ohlcv_bars")
+    stored_at = now_kst_iso()
     connection.execute(
         """
         INSERT INTO ohlcv_bars (
-            market, symbol, interval, timestamp, open, high, low, close, volume
+            market, symbol, interval, timestamp, open, high, low, close, volume, created_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT DO NOTHING
         """,
-        [market, symbol, interval, timestamp, open, high, low, close, volume],
+        [market, symbol, interval, timestamp, open, high, low, close, volume, stored_at],
     )
     return _count_rows(connection, "ohlcv_bars") > before
 
@@ -272,6 +277,7 @@ def insert_ohlcv_bars(
     rows = list(records)
     if not rows:
         return 0
+    stored_at = now_kst_iso()
     temp_table = f"tmp_ohlcv_bars_{uuid4().hex}"
     connection.execute(
         f"""
@@ -325,9 +331,11 @@ def insert_ohlcv_bars(
         connection.execute(
             f"""
             INSERT INTO ohlcv_bars (
-                market, symbol, interval, timestamp, open, high, low, close, volume
+                market, symbol, interval, timestamp, open, high, low, close, volume, created_at
             )
-            SELECT market, symbol, interval, timestamp, open, high, low, close, volume
+            SELECT
+                market, symbol, interval, timestamp, open, high, low, close, volume,
+                {_quote_literal(stored_at)}
             FROM (
                 SELECT *,
                     row_number() OVER (
@@ -421,15 +429,16 @@ def insert_realtime_tick(
     volume: int,
 ) -> bool:
     before = _count_rows(connection, "realtime_ticks")
+    stored_at = now_kst_iso()
     connection.execute(
         """
         INSERT INTO realtime_ticks (
-            market, symbol, exchange_ts, received_at, received_seq, seq, price, volume
+            market, symbol, exchange_ts, received_at, received_seq, seq, price, volume, created_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT DO NOTHING
         """,
-        [market, symbol, exchange_ts, received_at, received_seq, seq, price, volume],
+        [market, symbol, exchange_ts, received_at, received_seq, seq, price, volume, stored_at],
     )
     return _count_rows(connection, "realtime_ticks") > before
 
