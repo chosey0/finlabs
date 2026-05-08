@@ -11,7 +11,7 @@ CLI 파일은 얇게 유지하고, 사용자 관점의 기능 흐름은 이 패�
 주요 함수:
 
 ```python
-from kis_cli.services.auth import get_auth_statuses, get_rest_token, test_auth
+from kis_cli.services.auth import clear_auth_tokens, get_auth_statuses, get_rest_token, test_auth
 ```
 
 동작:
@@ -20,8 +20,9 @@ from kis_cli.services.auth import get_auth_statuses, get_rest_token, test_auth
 - 유효한 캐시 토큰이 있으면 재사용
 - `--refresh` 또는 캐시 만료 시 KIS 토큰 발급
 - `get_auth_statuses()`로 KIS 서버 요청 없이 캐시 상태 확인
+- `clear_auth_tokens()`로 로컬 캐시 토큰 삭제
 - 토큰은 캐시 파일에 저장하고 CLI에는 원문을 출력하지 않음
-- CLI 만료 시각은 KST 기준으로 표시
+- CLI 만료 시각은 KST 기준으로 표시하고 상태 조회에는 남은 시간 포함
 
 CLI 예:
 
@@ -30,6 +31,7 @@ kiscli auth test --profile csq1404
 kiscli auth test --profile csq1404 --refresh
 kiscli auth status --profile csq1404
 kiscli auth status --all
+kiscli auth clear --profile csq1404
 ```
 
 ## 현재가 서비스
@@ -92,6 +94,8 @@ kiscli chart history --profile csq1404 --symbol AAPL --period D --start 2026-04-
 ```
 
 `chart` 서비스는 `symbols` 테이블에서 `symbol`의 market을 해석합니다. `end`가 비어 있으면 오늘 날짜를 종료일로 사용합니다.
+
+`price`와 `chart` 서비스는 REST 호출 중 토큰 만료/인증 오류가 발생하면 토큰을 강제 갱신하고 1회만 재시도합니다.
 
 ## 심볼 서비스
 

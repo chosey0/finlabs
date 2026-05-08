@@ -7,6 +7,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from kis_cli.cli.app import app
+from kis_cli.core.auth import KisAuthError
 from kis_cli.core.chart import (
     OhlcvBar,
     fetch_ohlcv_history,
@@ -274,11 +275,8 @@ def test_collect_ohlcv_history_resolves_market_from_symbol_table(monkeypatch, tm
     with connect(db_path) as connection:
         insert_symbol(connection, market="NASDAQ", symbol="NVDA", name="NVIDIA")
 
-    def fake_resolve_profile(**kwargs):
-        return object()
-
-    def fake_get_rest_token(**kwargs):
-        return object(), "reused"
+    def fake_call_with_token_refresh_retry(operation, **kwargs):
+        return operation(object())
 
     def fake_fetch_ohlcv_history(client, **kwargs):
         assert kwargs["market"] == "NASDAQ"
@@ -298,8 +296,10 @@ def test_collect_ohlcv_history_resolves_market_from_symbol_table(monkeypatch, tm
             )
         ]
 
-    monkeypatch.setattr("kis_cli.services.chart.resolve_profile", fake_resolve_profile)
-    monkeypatch.setattr("kis_cli.services.chart.get_rest_token", fake_get_rest_token)
+    monkeypatch.setattr(
+        "kis_cli.services.chart.call_with_token_refresh_retry",
+        fake_call_with_token_refresh_retry,
+    )
     monkeypatch.setattr("kis_cli.services.chart.fetch_ohlcv_history", fake_fetch_ohlcv_history)
 
     result = collect_ohlcv_history(
@@ -313,6 +313,53 @@ def test_collect_ohlcv_history_resolves_market_from_symbol_table(monkeypatch, tm
     assert result.market == "NASDAQ"
     assert result.symbol == "NVDA"
     assert result.fetched == 1
+
+
+def test_collect_ohlcv_history_refreshes_token_after_auth_error(monkeypatch, tmp_path: Path) -> None:
+    db_path = tmp_path / "chart.db"
+    init_database(db_path)
+    with connect(db_path) as connection:
+        insert_symbol(connection, market="NASDAQ", symbol="AAPL", name="Apple")
+
+    refresh_calls: list[bool] = []
+    attempts = {"count": 0}
+
+    def fake_build_rest_client(*, profile=None, config_path=None, refresh=False):
+        refresh_calls.append(refresh)
+        return object()
+
+    def fake_fetch_ohlcv_history(client, **kwargs):
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            raise KisAuthError("token expired")
+        return [
+            OhlcvBar(
+                market="NASDAQ",
+                symbol="AAPL",
+                interval="1d",
+                timestamp="2026-05-07",
+                open=Decimal("100"),
+                high=Decimal("110"),
+                low=Decimal("90"),
+                close=Decimal("105"),
+                volume=1000,
+            )
+        ]
+
+    monkeypatch.setattr("kis_cli.services.auth.build_rest_client", fake_build_rest_client)
+    monkeypatch.setattr("kis_cli.services.chart.fetch_ohlcv_history", fake_fetch_ohlcv_history)
+
+    result = collect_ohlcv_history(
+        symbol="AAPL",
+        start="2026-05-01",
+        end="2026-05-07",
+        period="D",
+        db_path=db_path,
+    )
+
+    assert result.fetched == 1
+    assert refresh_calls == [False, True]
+    assert attempts["count"] == 2
 
 
 def test_chart_daily_command_prints_summary(monkeypatch, tmp_path: Path) -> None:

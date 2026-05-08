@@ -7,8 +7,7 @@ from pathlib import Path
 
 from kis_cli.config.resolver import resolve_profile
 from kis_cli.core.chart import OhlcvBar, bar_to_db_values, fetch_ohlcv_history, normalize_period
-from kis_cli.core.client import KisClient
-from kis_cli.services.auth import get_rest_token
+from kis_cli.services.auth import call_with_token_refresh_retry
 from kis_cli.storage import connect, default_database_file, init_database
 from kis_cli.storage.repositories import find_symbol_markets, insert_ohlcv_bars
 
@@ -43,18 +42,19 @@ def collect_ohlcv_history(
     resolved_market = resolve_symbol_market(normalized_symbol, db_path=db_path)
     resolved_end = end or date.today().isoformat()
 
-    resolved = resolve_profile(profile=profile, config_path=config_path)
-    token, _ = get_rest_token(profile=profile, config_path=config_path)
-    client = KisClient(profile=resolved, token=token)
-    bars = fetch_ohlcv_history(
-        client,
-        market=resolved_market,
-        symbol=normalized_symbol,
-        start=start,
-        end=resolved_end,
-        period=period,
-        adjusted=adjusted,
-        max_pages=max_pages,
+    bars = call_with_token_refresh_retry(
+        lambda client: fetch_ohlcv_history(
+            client,
+            market=resolved_market,
+            symbol=normalized_symbol,
+            start=start,
+            end=resolved_end,
+            period=period,
+            adjusted=adjusted,
+            max_pages=max_pages,
+        ),
+        profile=profile,
+        config_path=config_path,
     )
     interval = _period_to_interval(period)
     stored = 0

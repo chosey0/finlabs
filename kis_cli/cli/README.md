@@ -35,16 +35,19 @@ kiscli auth test --profile csq1404 --refresh
 kiscli auth status
 kiscli auth status --profile csq1404
 kiscli auth status --all
+kiscli auth clear --profile csq1404
+kiscli auth clear --all
 ```
 
-`auth test`는 토큰을 발급하거나 유효한 캐시 토큰을 재사용합니다. `auth status`는 KIS 서버에 요청하지 않고 로컬 캐시만 확인합니다.
+`auth test`는 토큰을 발급하거나 유효한 캐시 토큰을 재사용합니다. `auth status`는 KIS 서버에 요청하지 않고 로컬 캐시만 확인합니다. `auth clear`는 로컬 캐시 토큰을 삭제합니다.
 
-토큰 값은 출력하지 않고, 발급/재사용 여부 또는 캐시 상태, 만료 시각, 캐시 경로만 보여줍니다. 만료 시각은 KST 기준으로 표시됩니다.
+토큰 값은 출력하지 않고, 발급/재사용 여부 또는 캐시 상태, 만료 시각, 남은 시간, 캐시 경로만 보여줍니다. 만료 시각은 KST 기준으로 표시됩니다.
 
 `auth status` 상태값:
 
 - `valid`: 캐시 토큰이 있고 만료 5분 전 기준으로 유효
-- `expired`: 캐시 토큰이 만료됐거나 만료 임박
+- `expiring`: 캐시 토큰이 아직 만료되지 않았지만 5분 이내 만료
+- `expired`: 캐시 토큰 만료
 - `none`: 토큰 캐시 파일 없음
 - `invalid`: 캐시 파일이 손상됐거나 프로필/환경과 맞지 않음
 

@@ -5,11 +5,13 @@ from decimal import Decimal
 from typer.testing import CliRunner
 
 from kis_cli.cli.app import app
+from kis_cli.core.auth import KisAuthError
 from kis_cli.core.price import (
     CurrentPrice,
     parse_domestic_current_price,
     parse_overseas_current_price,
 )
+from kis_cli.services.price import get_current_price
 
 runner = CliRunner()
 
@@ -115,3 +117,62 @@ def test_price_current_command_prints_quote_without_secret_values(monkeypatch) -
     assert "190.25" in result.output
     assert "secret-token" not in result.output
     assert "secret-app-key" not in result.output
+
+
+def test_get_current_price_refreshes_token_once_after_auth_error(monkeypatch) -> None:
+    refresh_flags: list[bool] = []
+    attempts = {"count": 0}
+
+    def fake_build_rest_client(*, profile=None, config_path=None, refresh=False):
+        refresh_flags.append(refresh)
+        return object()
+
+    def fake_inquire_current_price(client, *, market: str, symbol: str) -> CurrentPrice:
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            raise KisAuthError("token expired")
+        return CurrentPrice(
+            market=market,
+            symbol=symbol,
+            name="Apple Inc.",
+            price=Decimal("190.25"),
+            currency="USD",
+            change=None,
+            change_rate=None,
+            open=None,
+            high=None,
+            low=None,
+            volume=None,
+        )
+
+    monkeypatch.setattr("kis_cli.services.auth.build_rest_client", fake_build_rest_client)
+    monkeypatch.setattr("kis_cli.services.price.inquire_current_price", fake_inquire_current_price)
+
+    result = get_current_price(symbol="AAPL", market="NASDAQ", profile="csq1404")
+
+    assert result.symbol == "AAPL"
+    assert refresh_flags == [False, True]
+    assert attempts["count"] == 2
+
+
+def test_get_current_price_does_not_retry_more_than_once(monkeypatch) -> None:
+    refresh_flags: list[bool] = []
+
+    def fake_build_rest_client(*, profile=None, config_path=None, refresh=False):
+        refresh_flags.append(refresh)
+        return object()
+
+    def always_fail(client, *, market: str, symbol: str) -> CurrentPrice:
+        raise KisAuthError("token expired")
+
+    monkeypatch.setattr("kis_cli.services.auth.build_rest_client", fake_build_rest_client)
+    monkeypatch.setattr("kis_cli.services.price.inquire_current_price", always_fail)
+
+    try:
+        get_current_price(symbol="AAPL", market="NASDAQ", profile="csq1404")
+    except KisAuthError:
+        pass
+    else:
+        raise AssertionError("expected KisAuthError")
+
+    assert refresh_flags == [False, True]

@@ -136,6 +136,7 @@ uv run kiscli auth test --profile csq1404
 uv run kiscli auth test --profile csq1404 --refresh
 uv run kiscli auth status --profile csq1404
 uv run kiscli auth status --all
+uv run kiscli auth clear --profile csq1404
 ```
 
 `--refresh`를 사용하면 유효한 캐시가 있어도 새 토큰을 요청합니다.
@@ -143,11 +144,12 @@ uv run kiscli auth status --all
 `auth status`는 KIS 서버에 요청하지 않고 로컬 토큰 캐시만 확인합니다. `--profile`을 생략하면 `active_profile`을 사용하고, `--all`은 모든 프로필의 토큰 상태를 보여줍니다. 상태값은 다음과 같습니다.
 
 - `valid`: 캐시 토큰이 있고 만료 5분 전 기준으로 유효
-- `expired`: 캐시 토큰이 만료됐거나 만료 임박
+- `expiring`: 캐시 토큰이 아직 만료되지 않았지만 5분 이내 만료
+- `expired`: 캐시 토큰 만료
 - `none`: 토큰 캐시 파일 없음
 - `invalid`: 캐시 파일이 손상됐거나 프로필/환경과 맞지 않음
 
-토큰 만료 시각은 CLI 출력에서 KST 기준으로 표시됩니다.
+토큰 만료 시각은 CLI 출력에서 KST 기준으로 표시되며, `auth status`는 남은 시간도 함께 보여줍니다. `auth clear`는 캐시된 토큰을 삭제하며 KIS 서버에는 요청하지 않습니다.
 
 ## DB 관리
 
@@ -239,6 +241,8 @@ uv run kiscli price current --profile csq1404 --market NASDAQ --symbol AAPL
 
 출력 항목은 시장, 심볼, 이름, 현재가, 통화, 전일 대비, 등락률, 시가, 고가, 저가, 거래량입니다.
 
+현재가 조회 중 KIS가 토큰 만료/인증 오류를 반환하면 토큰을 새로 발급하고 1회만 재시도합니다.
+
 ## OHLCV 수집
 
 일봉 수집:
@@ -281,6 +285,8 @@ Y -> 1y
 `chart` 명령은 `symbols` 테이블에서 `--symbol`의 market을 해석합니다. 먼저 `kiscli symbols download`로 대상 시장의 심볼을 저장해두세요. `--end`를 생략하면 오늘 날짜까지 조회합니다.
 
 국내 OHLCV는 응답 제한에 맞춰 가장 오래된 수집일 기준으로 다음 구간을 이어 조회합니다. 해외 개별주식의 일/주/월 OHLCV는 `[해외주식] 해외주식 기간별시세` API(`/dailyprice`)를 사용합니다. 1회 최대 100건을 기준으로, 응답에 다음 `KEYB`가 있으면 같은 `BYMD`에서 다음 묶음을 이어 조회하고, `KEYB`가 없더라도 100건이 꽉 찬 응답이면 가장 오래된 응답일 이전으로 `BYMD`를 이동해 이어 조회합니다. 해외 개별주식 연봉(`Y`)은 지원하지 않습니다.
+
+OHLCV 수집 중 KIS가 토큰 만료/인증 오류를 반환하면 토큰을 새로 발급하고 1회만 재시도합니다.
 
 ## 저장 데이터 조회와 내보내기
 
