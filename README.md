@@ -1,8 +1,8 @@
 # kis-cli
 
-`kis-cli`는 Korea Investment & Securities Open API를 사용해 국내/해외 주식 시장 데이터를 수집하고 SQLite에 저장하는 Python CLI 프로젝트입니다. CLI 명령은 `kiscli`로 제공됩니다.
+`kis-cli`는 Korea Investment & Securities Open API를 사용해 국내/해외 주식 시장 데이터를 수집하고 로컬 DuckDB warehouse에 저장하는 Python CLI 프로젝트입니다. CLI 명령은 `kiscli`로 제공됩니다.
 
-현재 구현 범위는 설정 관리, REST 인증 확인, 심볼 마스터 다운로드/검색, 현재가 조회, OHLCV 이력 수집/저장, 저장 데이터 조회/내보내기, SQLite DB 점검입니다.
+현재 구현 범위는 설정 관리, REST 인증 확인, 심볼 마스터 다운로드/검색, 현재가 조회, OHLCV 이력 수집/저장, 저장 데이터 조회/내보내기, 로컬 저장소 점검입니다.
 
 이 프로젝트는 시장 데이터 수집용 CLI입니다. UI, 웹 대시보드, 차트 렌더링, 자동매매, 주문 실행, 전략/백테스트 기능은 포함하지 않습니다.
 
@@ -10,13 +10,13 @@
 
 - 프로필 기반 설정 관리와 시크릿 분리 저장
 - KIS REST access token 발급/캐시/검증
-- KOSPI, KOSDAQ, 해외 시장 심볼 마스터 다운로드와 SQLite upsert
+- KOSPI, KOSDAQ, 해외 시장 심볼 마스터 다운로드와 warehouse upsert
 - 저장된 심볼 검색, query 유사도 기반 정렬, realtime symbol 출력
 - 국내/해외 REST 현재가 조회
 - 국내/해외 OHLCV 이력 수집
 - `--save` 사용 시 `ohlcv_bars`에 중복 방지 저장
 - 저장된 일봉 OHLCV 조회, table/json/csv 출력, csv/json export
-- SQLite 스키마 생성, 구조 확인, 테이블별 레코드 수 확인
+- 앱용 SQLite DB와 시장 데이터용 DuckDB warehouse 초기화/점검
 
 ## 설치
 
@@ -47,45 +47,45 @@ kiscli --help
 uv run kiscli config init
 ```
 
-2. KIS API 프로필을 추가합니다.
+1. KIS API 프로필을 추가합니다.
 
 ```bash
 uv run kiscli config add
 ```
 
-3. 설정을 검증합니다.
+1. 설정을 검증합니다.
 
 ```bash
 uv run kiscli config validate --profile csq1404
 ```
 
-4. REST 인증을 확인합니다.
+1. REST 인증을 확인합니다.
 
 ```bash
 uv run kiscli auth test --profile csq1404
 uv run kiscli auth status --profile csq1404
 ```
 
-5. DB를 초기화합니다.
+1. DB를 초기화합니다.
 
 ```bash
 uv run kiscli db init
 ```
 
-6. 심볼 마스터를 다운로드합니다.
+1. 심볼 마스터를 다운로드합니다.
 
 ```bash
 uv run kiscli symbols download --market KOSPI
 uv run kiscli symbols download --market NASDAQ
 ```
 
-7. OHLCV를 수집하고 저장합니다.
+1. OHLCV를 수집하고 저장합니다.
 
 ```bash
 uv run kiscli chart daily --profile csq1404 --symbol 005930 --start 2026-04-01 --end 2026-05-07 --save
 ```
 
-8. 저장된 일봉 데이터를 조회합니다.
+1. 저장된 일봉 데이터를 조회합니다.
 
 ```bash
 uv run kiscli query ohlcv --symbol 005930
@@ -100,7 +100,8 @@ Config: ~/.config/kis-cli/config.yaml
 Secrets: ~/.config/kis-cli/profiles.env
 Cache:  ~/.cache/kis-cli/
 Data:   ~/.local/share/kis-cli/
-DB:     ~/.local/share/kis-cli/kis-cli.db
+App DB: ~/.local/share/kis-cli/app.db
+Warehouse: ~/.local/share/kis-cli/warehouse.duckdb
 ```
 
 API 키, API 시크릿, 계좌번호, 토큰은 패키지 소스 안에 저장하지 않습니다. CLI 출력에서도 민감 값은 마스킹합니다.
@@ -153,25 +154,25 @@ uv run kiscli auth clear --profile csq1404
 
 ## DB 관리
 
-SQLite 스키마 생성:
+로컬 저장소 초기화:
 
 ```bash
 uv run kiscli db init
-uv run kiscli db init --path ./kis-cli.db
+uv run kiscli db init --path ./warehouse.duckdb
 ```
 
 DB 구조 확인:
 
 ```bash
 uv run kiscli db schema
-uv run kiscli db schema --path ./kis-cli.db
+uv run kiscli db schema --path ./warehouse.duckdb
 ```
 
 테이블별 레코드 수 확인:
 
 ```bash
 uv run kiscli db counts
-uv run kiscli db counts --path ./kis-cli.db
+uv run kiscli db counts --path ./warehouse.duckdb
 ```
 
 현재 주요 테이블은 다음과 같습니다.
@@ -179,8 +180,6 @@ uv run kiscli db counts --path ./kis-cli.db
 - `symbols`
 - `ohlcv_bars`
 - `realtime_ticks`
-- `api_logs`
-- `ingest_runs`
 
 중복 방지는 DB 제약조건으로 처리합니다.
 
@@ -204,7 +203,7 @@ uv run kiscli symbols download --all
 커스텀 DB 경로:
 
 ```bash
-uv run kiscli symbols download --market NASDAQ --db-path ./kis-cli.db
+uv run kiscli symbols download --market NASDAQ --db-path ./warehouse.duckdb
 ```
 
 저장된 심볼 검색:
@@ -338,7 +337,7 @@ kis_cli/
 ├── config/    # 설정 파일, 프로필, 시크릿 참조 해석
 ├── core/      # KIS REST 인증/클라이언트/현재가/OHLCV/심볼 파서
 ├── services/  # CLI 유즈케이스 조립
-└── storage/   # SQLite 스키마, repository, DB 점검
+└── storage/   # 앱 SQLite DB, DuckDB warehouse, repository, 저장소 점검
 ```
 
 각 패키지 폴더에는 더 자세한 설명이 있습니다.
@@ -383,13 +382,13 @@ uv run python -m build
 - 단위 테스트는 실제 KIS API를 호출하지 않습니다.
 - REST 응답은 mock payload로 검증합니다.
 - 심볼 마스터 파서는 synthetic zip 데이터를 사용합니다.
-- SQLite 중복 방지와 deterministic query는 실제 임시 DB로 검증합니다.
+- DuckDB 중복 방지와 deterministic query는 실제 임시 DB로 검증합니다.
 
 ## 보안 주의
 
 이 프로젝트는 민감한 API 자격증명을 다룹니다.
 
 - API key, app secret, 계좌번호, access token을 소스 코드에 저장하지 마세요.
-- 실제 config, token cache, SQLite DB, 로그 파일을 커밋하지 마세요.
+- 실제 config, token cache, 로컬 DB/warehouse, 로그 파일을 커밋하지 마세요.
 - CLI 출력이나 로그에 시크릿 원문을 노출하지 마세요.
 - 주문/매매 기능은 현재 범위가 아니며 구현되어 있지 않습니다.

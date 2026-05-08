@@ -140,7 +140,7 @@ kiscli chart daily --profile csq1404 --symbol 005930 --start 2026-04-01 --end 20
 kiscli chart history --profile csq1404 --symbol 005930 --period W --start 2025-01-01 --end 2026-05-07
 ```
 
-정규화 결과는 `OhlcvBar`이며, 저장 시 `bar_to_db_values()`로 SQLite 저장 형태로 변환합니다.
+정규화 결과는 `OhlcvBar`이며, 저장 시 `bar_to_db_values()`로 warehouse 저장 형태로 변환합니다.
 
 ## 심볼 마스터
 

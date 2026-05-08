@@ -53,37 +53,37 @@ kiscli auth clear --all
 
 ## db 명령
 
-SQLite DB를 초기화하고 구조와 레코드 수를 확인합니다.
+앱 SQLite DB와 시장 데이터용 DuckDB warehouse를 초기화하고, warehouse 구조와 레코드 수를 확인합니다.
 
 ```bash
 kiscli db init
-kiscli db init --path ./kis-cli.db
+kiscli db init --path ./warehouse.duckdb
 ```
 
 ```bash
 kiscli db schema
-kiscli db schema --path ./kis-cli.db
+kiscli db schema --path ./warehouse.duckdb
 ```
 
 `db schema`는 테이블별 컬럼, 타입, 필수 여부, PK 여부, 기본값, 인덱스 및 UNIQUE 여부를 출력합니다.
 
 ```bash
 kiscli db counts
-kiscli db counts --path ./kis-cli.db
+kiscli db counts --path ./warehouse.duckdb
 ```
 
 `db counts`는 테이블별 `COUNT(*)`와 전체 합계를 출력합니다.
 
 ## symbols 명령
 
-KIS 심볼 마스터 파일을 다운로드해 SQLite에 저장하고, 저장된 심볼을 검색합니다.
+KIS 심볼 마스터 파일을 다운로드해 DuckDB warehouse에 저장하고, 저장된 심볼을 검색합니다.
 
 ```bash
 kiscli symbols download --market KOSPI
 kiscli symbols download --market KOSDAQ
 kiscli symbols download --market NASDAQ
 kiscli symbols download --all
-kiscli symbols download --market NASDAQ --db-path ./kis-cli.db
+kiscli symbols download --market NASDAQ --db-path ./warehouse.duckdb
 ```
 
 ```bash
@@ -107,7 +107,7 @@ kiscli price current --profile csq1404 --market NASDAQ --symbol AAPL
 
 ## chart 명령
 
-KIS REST OHLCV 이력을 수집합니다. `--save`를 주면 `ohlcv_bars`에 `INSERT OR IGNORE`로 저장합니다.
+KIS REST OHLCV 이력을 수집합니다. `--save`를 주면 DuckDB warehouse의 `ohlcv_bars`에 중복 방지 insert로 저장합니다.
 
 ```bash
 kiscli chart history --profile csq1404 --symbol 005930 --period D --start 2026-04-01 --end 2026-05-07 --save

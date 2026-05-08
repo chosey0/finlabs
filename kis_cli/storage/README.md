@@ -1,21 +1,22 @@
 # storage 패키지
 
-`kis_cli.storage`는 SQLite-first 저장 계층입니다. DB 연결, 스키마 생성, 중복 방지, deterministic query, DB 구조/레코드 수 확인을 담당합니다.
+`kis_cli.storage`는 앱 메타데이터용 SQLite DB와 시장 데이터용 DuckDB warehouse를 분리한 저장 계층입니다. DB 연결, 스키마 생성, 중복 방지, deterministic query, DB 구조/레코드 수 확인을 담당합니다.
 
 ## 기본 DB 경로
 
 기본 DB 파일은 사용자 데이터 디렉터리에 생성됩니다.
 
 ```text
-~/.local/share/kis-cli/kis-cli.db
+~/.local/share/kis-cli/app.db
+~/.local/share/kis-cli/warehouse.duckdb
 ```
 
 CLI에서 다른 파일을 사용하려면 `--path` 또는 `--db-path`를 지정합니다.
 
 ```bash
-kiscli db init --path ./kis-cli.db
-kiscli symbols download --market NASDAQ --db-path ./kis-cli.db
-kiscli query ohlcv --symbol AAPL --db-path ./kis-cli.db
+kiscli db init --path ./warehouse.duckdb
+kiscli symbols download --market NASDAQ --db-path ./warehouse.duckdb
+kiscli query ohlcv --symbol AAPL --db-path ./warehouse.duckdb
 ```
 
 ## DB 초기화
@@ -24,20 +25,23 @@ kiscli query ohlcv --symbol AAPL --db-path ./kis-cli.db
 
 ```bash
 kiscli db init
-kiscli db init --path ./kis-cli.db
+kiscli db init --path ./warehouse.duckdb
 ```
 
-생성되는 테이블:
+DuckDB warehouse 테이블:
 
 - `symbols`
 - `ohlcv_bars`
 - `realtime_ticks`
+
+SQLite app DB 테이블:
+
 - `api_logs`
 - `ingest_runs`
 
 ## 스키마
 
-`schema.py`는 SQLite 스키마를 정의합니다.
+`warehouse.py`는 시장 데이터용 DuckDB 스키마를 정의하고, `app_db.py`는 앱 내부 상태용 SQLite 스키마를 정의합니다.
 
 ### symbols
 
@@ -171,7 +175,7 @@ insert_realtime_tick(
 
 ```bash
 kiscli db schema
-kiscli db schema --path ./kis-cli.db
+kiscli db schema --path ./warehouse.duckdb
 ```
 
 출력 정보:
@@ -194,7 +198,7 @@ DB 파일이 없으면 새로 만들지 않고 `kiscli db init`을 먼저 실행
 
 ```bash
 kiscli db counts
-kiscli db counts --path ./kis-cli.db
+kiscli db counts --path ./warehouse.duckdb
 ```
 
 예상 출력 항목:
@@ -203,8 +207,6 @@ kiscli db counts --path ./kis-cli.db
 symbols        3000
 ohlcv_bars     250
 realtime_ticks   0
-api_logs         0
-ingest_runs      0
 Total         3250
 ```
 

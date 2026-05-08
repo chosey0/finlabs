@@ -73,8 +73,8 @@ from kis_cli.services.chart import collect_ohlcv_history
 1. 프로필 해석
 2. REST 토큰 확보
 3. KIS OHLCV 이력 조회
-4. `--save`가 있으면 SQLite DB 초기화 후 `ohlcv_bars`에 저장
-5. 저장은 `INSERT OR IGNORE` 기반으로 중복을 방지
+4. `--save`가 있으면 DuckDB warehouse 초기화 후 `ohlcv_bars`에 저장
+5. 저장은 DB UNIQUE 제약 기반으로 중복을 방지
 
 저장 interval:
 
@@ -116,7 +116,7 @@ CLI 예:
 
 ```bash
 kiscli symbols download --market KOSPI
-kiscli symbols download --market NASDAQ --db-path ./kis-cli.db
+kiscli symbols download --market NASDAQ --db-path ./warehouse.duckdb
 kiscli symbols search --query apple
 kiscli symbols search --query 삼성 --limit 10
 ```

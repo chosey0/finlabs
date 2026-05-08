@@ -8,7 +8,7 @@
 
 - `config_dir()`: 설정 디렉터리
 - `cache_dir()`: 토큰 캐시 등 캐시 디렉터리
-- `data_dir()`: SQLite DB 등 데이터 디렉터리
+- `data_dir()`: 앱 DB와 DuckDB warehouse 등 데이터 디렉터리
 - `log_dir()`: 로그 디렉터리
 - `default_config_file()`: 기본 `config.yaml` 경로
 
