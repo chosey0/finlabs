@@ -77,16 +77,23 @@ kiscli db counts --path ./warehouse.duckdb
 ## logs 명령
 
 앱 SQLite DB에 저장된 최근 작업 이력과 API 로그를 확인합니다.
+`logs` 명령은 기존 app DB를 읽기만 하며, DB가 없으면 `kiscli db init`을 먼저 실행해야 합니다.
 
 ```bash
 kiscli logs runs
 kiscli logs runs --limit 50
+kiscli logs runs --status failed
+kiscli logs runs --kind symbols --market KOSPI
+kiscli logs runs --symbol AAPL --since 2026-05-08
 kiscli logs runs --path ./app.db
 ```
 
 ```bash
 kiscli logs api
 kiscli logs api --limit 50
+kiscli logs api --endpoint ohlcv
+kiscli logs api --format json
+kiscli logs api --format csv
 kiscli logs api --path ./app.db
 ```
 

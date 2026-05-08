@@ -193,11 +193,16 @@ UNIQUE (market, symbol, exchange_ts, seq)
 
 ## 로그 조회
 
+`logs` 명령은 기존 app SQLite DB를 읽기만 합니다. DB가 아직 없으면 먼저 `db init`을 실행합니다.
+
 최근 저장 작업 이력:
 
 ```bash
 uv run kiscli logs runs
 uv run kiscli logs runs --limit 50
+uv run kiscli logs runs --status failed
+uv run kiscli logs runs --kind symbols --market KOSPI
+uv run kiscli logs runs --symbol AAPL --since 2026-05-08
 ```
 
 최근 API/다운로드 기록:
@@ -205,8 +210,10 @@ uv run kiscli logs runs --limit 50
 ```bash
 uv run kiscli logs api
 uv run kiscli logs api --limit 50
+uv run kiscli logs api --endpoint ohlcv
 ```
 
+스크립트에서 사용하려면 `--format json` 또는 `--format csv`를 지정합니다.
 커스텀 app DB 경로를 확인하려면 `--path ./app.db`를 지정합니다.
 
 ## 심볼 마스터
