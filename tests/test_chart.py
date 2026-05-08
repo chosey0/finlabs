@@ -446,7 +446,7 @@ def test_chart_daily_command_prints_summary(monkeypatch, tmp_path: Path) -> None
             ],
         )
 
-    monkeypatch.setattr("kis_cli.cli.app.collect_ohlcv_history", fake_collect_ohlcv_history)
+    monkeypatch.setattr("kis_cli.cli.chart.collect_ohlcv_history", fake_collect_ohlcv_history)
 
     result = runner.invoke(
         app,

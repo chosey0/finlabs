@@ -81,15 +81,48 @@ def record_api_log(
 
 
 def list_ingest_runs(app_db_path: Path, *, limit: int = 20) -> list[IngestRunRecord]:
+    return find_ingest_runs(app_db_path, limit=limit)
+
+
+def find_ingest_runs(
+    app_db_path: Path,
+    *,
+    limit: int = 20,
+    status: str | None = None,
+    kind: str | None = None,
+    market: str | None = None,
+    symbol: str | None = None,
+    since: str | None = None,
+) -> list[IngestRunRecord]:
+    where: list[str] = []
+    params: list[object] = []
+    if status:
+        where.append("lower(status) = lower(?)")
+        params.append(status)
+    if kind:
+        where.append("lower(kind) = lower(?)")
+        params.append(kind)
+    if market:
+        where.append("lower(market) = lower(?)")
+        params.append(market)
+    if symbol:
+        where.append("lower(symbol) = lower(?)")
+        params.append(symbol)
+    if since:
+        where.append("started_at >= ?")
+        params.append(since)
+    where_sql = f"WHERE {' AND '.join(where)}" if where else ""
+    params.append(limit)
     with connect_app(app_db_path) as connection:
         rows = connection.execute(
-            """
+            f"""
             SELECT id, kind, market, symbol, started_at, finished_at, status, rows_written, error
             FROM ingest_runs
+            {where_sql}
             ORDER BY id DESC
             LIMIT ?
             """,
-            [limit],
+            params,
         ).fetchall()
     return [
         IngestRunRecord(
@@ -108,14 +141,35 @@ def list_ingest_runs(app_db_path: Path, *, limit: int = 20) -> list[IngestRunRec
 
 
 def list_api_logs(app_db_path: Path, *, limit: int = 20) -> list[dict[str, object]]:
+    return find_api_logs(app_db_path, limit=limit)
+
+
+def find_api_logs(
+    app_db_path: Path,
+    *,
+    limit: int = 20,
+    endpoint: str | None = None,
+    since: str | None = None,
+) -> list[dict[str, object]]:
+    where: list[str] = []
+    params: list[object] = []
+    if endpoint:
+        where.append("lower(endpoint) LIKE lower(?)")
+        params.append(f"%{endpoint}%")
+    if since:
+        where.append("requested_at >= ?")
+        params.append(since)
+    where_sql = f"WHERE {' AND '.join(where)}" if where else ""
+    params.append(limit)
     with connect_app(app_db_path) as connection:
         rows = connection.execute(
-            """
+            f"""
             SELECT endpoint, tr_id, status_code, requested_at, elapsed_ms, error
             FROM api_logs
+            {where_sql}
             ORDER BY id DESC
             LIMIT ?
             """,
-            [limit],
+            params,
         ).fetchall()
     return [dict(row) for row in rows]

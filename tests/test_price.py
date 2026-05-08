@@ -95,7 +95,7 @@ def test_price_current_command_prints_quote_without_secret_values(monkeypatch) -
             raw={"access_token": "secret-token", "appkey": "secret-app-key"},
         )
 
-    monkeypatch.setattr("kis_cli.cli.app.get_current_price", fake_get_current_price)
+    monkeypatch.setattr("kis_cli.cli.price.get_current_price", fake_get_current_price)
 
     result = runner.invoke(
         app,

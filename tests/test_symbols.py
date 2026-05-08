@@ -165,9 +165,9 @@ def test_symbols_download_all_uses_progressbar(tmp_path, monkeypatch) -> None:
             stored=1,
         )
 
-    monkeypatch.setattr("kis_cli.cli.app.ALL_SYMBOL_MARKETS", ("KOSPI", "NASDAQ"))
+    monkeypatch.setattr("kis_cli.cli.symbols.ALL_SYMBOL_MARKETS", ("KOSPI", "NASDAQ"))
     monkeypatch.setattr(
-        "kis_cli.cli.app.download_and_store_symbols",
+        "kis_cli.cli.symbols.download_and_store_symbols",
         fake_download_and_store_symbols,
     )
 
