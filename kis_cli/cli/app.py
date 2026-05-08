@@ -29,7 +29,14 @@ from kis_cli.core.auth import KisAuthError
 from kis_cli.core.client import KisApiError
 from kis_cli.core.price import CurrentPrice
 from kis_cli.core.symbol_master import ALL_SYMBOL_MARKETS
-from kis_cli.services.auth import AuthStatusResult, AuthTestResult, get_auth_statuses, test_auth
+from kis_cli.services.auth import (
+    AuthClearResult,
+    AuthStatusResult,
+    AuthTestResult,
+    clear_auth_tokens,
+    get_auth_statuses,
+    test_auth,
+)
 from kis_cli.services.chart import ChartHistoryResult, collect_ohlcv_history
 from kis_cli.services.price import get_current_price
 from kis_cli.services.query import OhlcvQueryResult, query_stored_daily_ohlcv
@@ -310,6 +317,43 @@ def auth_status(
         raise typer.BadParameter(str(exc)) from exc
 
     _print_auth_status_result(results)
+
+
+@auth_app.command("clear")
+def auth_clear(
+    profile: Annotated[
+        str | None,
+        typer.Option(
+            "--profile",
+            help="Profile name to clear. Defaults to active_profile.",
+        ),
+    ] = None,
+    all_profiles: Annotated[
+        bool,
+        typer.Option(
+            "--all",
+            help="Clear cached tokens for every configured profile.",
+        ),
+    ] = False,
+    path: Annotated[
+        Path | None,
+        typer.Option(
+            "--path",
+            help="Read config from a custom path instead of the platform config directory.",
+        ),
+    ] = None,
+) -> None:
+    """Remove cached REST tokens without contacting KIS."""
+    try:
+        results = clear_auth_tokens(
+            profile=profile,
+            all_profiles=all_profiles,
+            config_path=path,
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+    _print_auth_clear_result(results)
 
 
 @db_app.command("init")
@@ -946,6 +990,7 @@ def _print_auth_status_result(results: list[AuthStatusResult]) -> None:
     table.add_column("Environment")
     table.add_column("Token")
     table.add_column("Expires at")
+    table.add_column("Expires in")
     table.add_column("Cache")
     for result in results:
         table.add_row(
@@ -953,6 +998,7 @@ def _print_auth_status_result(results: list[AuthStatusResult]) -> None:
             result.environment,
             result.token_status,
             result.expires_at,
+            result.expires_in,
             str(result.cache_path),
         )
     console.print(
@@ -960,6 +1006,29 @@ def _print_auth_status_result(results: list[AuthStatusResult]) -> None:
             table,
             title="Auth status",
             border_style="green",
+            box=box.ROUNDED,
+        )
+    )
+
+
+def _print_auth_clear_result(results: list[AuthClearResult]) -> None:
+    table = Table(box=box.SIMPLE_HEAVY)
+    table.add_column("Profile", style="bold cyan")
+    table.add_column("Environment")
+    table.add_column("Removed")
+    table.add_column("Cache")
+    for result in results:
+        table.add_row(
+            result.profile_name,
+            result.environment,
+            "yes" if result.removed else "no",
+            str(result.cache_path),
+        )
+    console.print(
+        Panel(
+            table,
+            title="Auth cache cleared",
+            border_style="yellow",
             box=box.ROUNDED,
         )
     )

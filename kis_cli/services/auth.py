@@ -8,9 +8,12 @@ from zoneinfo import ZoneInfo
 from kis_cli.config.paths import default_config_file
 from kis_cli.config.resolver import read_config, resolve_profile
 from kis_cli.core.auth import KisAuthError, issue_access_token
+from kis_cli.core.client import KisClient
 from kis_cli.core.token_cache import (
     CachedToken,
+    clear_cached_token,
     read_cached_token,
+    read_cached_token_result,
     token_cache_path,
     write_cached_token,
 )
@@ -36,7 +39,17 @@ class AuthStatusResult:
     environment: str
     token_status: str
     expires_at: str
+    expires_in: str
     cache_path: Path
+
+
+@dataclass(frozen=True)
+class AuthClearResult:
+    profile_name: str
+    profile_id: str
+    environment: str
+    cache_path: Path
+    removed: bool
 
 
 def get_rest_token(
@@ -68,6 +81,35 @@ def get_rest_token(
         environment=resolved.environment,
     )
     return cached, "issued"
+
+
+def build_rest_client(
+    *,
+    profile: str | None = None,
+    config_path: Path | None = None,
+    refresh: bool = False,
+) -> KisClient:
+    resolved = resolve_profile(profile=profile, config_path=config_path)
+    token, _ = get_rest_token(profile=profile, config_path=config_path, refresh=refresh)
+    return KisClient(profile=resolved, token=token)
+
+
+def call_with_token_refresh_retry(
+    operation,
+    *,
+    profile: str | None = None,
+    config_path: Path | None = None,
+):
+    client = build_rest_client(profile=profile, config_path=config_path)
+    try:
+        return operation(client)
+    except KisAuthError:
+        refreshed_client = build_rest_client(
+            profile=profile,
+            config_path=config_path,
+            refresh=True,
+        )
+        return operation(refreshed_client)
 
 
 def test_auth(
@@ -133,6 +175,7 @@ def get_auth_statuses(
                     environment=environment or "-",
                     token_status="invalid",
                     expires_at="-",
+                    expires_in="-",
                     cache_path=token_cache_path(name),
                 )
             )
@@ -156,22 +199,25 @@ def _build_auth_status(
             environment=environment or "-",
             token_status="none",
             expires_at="-",
+            expires_in="-",
             cache_path=path,
         )
 
-    cached = read_cached_token(profile_id=profile_id)
-    if cached is None:
+    read_result = read_cached_token_result(profile_id=profile_id)
+    if read_result.status == "invalid" or read_result.token is None:
         return AuthStatusResult(
             profile_name=profile_name,
             profile_id=profile_id,
             environment=environment or "-",
             token_status="invalid",
             expires_at="-",
+            expires_in="-",
             cache_path=path,
         )
 
+    cached = read_result.token
     now = datetime.now(UTC)
-    status = "valid" if cached.is_valid(now=now) else "expired"
+    status = _token_status(cached, now=now)
     if cached.profile_name != profile_name or cached.environment != environment:
         status = "invalid"
 
@@ -181,9 +227,77 @@ def _build_auth_status(
         environment=environment or cached.environment,
         token_status=status,
         expires_at=format_kst(cached.expires_at),
+        expires_in=format_remaining(cached.expires_at, now=now) if status != "invalid" else "-",
         cache_path=path,
     )
 
 
+def clear_auth_tokens(
+    *,
+    profile: str | None = None,
+    all_profiles: bool = False,
+    config_path: Path | None = None,
+) -> list[AuthClearResult]:
+    if profile and all_profiles:
+        raise ValueError("pass either --profile or --all, not both")
+
+    path = (config_path or default_config_file()).expanduser()
+    if not path.exists():
+        raise FileNotFoundError(f"config not found at {path}")
+
+    active_profile, profiles = read_config(path)
+    if all_profiles:
+        selected_names = list(profiles)
+    else:
+        selected_name = profile or active_profile
+        if not selected_name:
+            raise ValueError("active_profile is missing; pass --profile explicitly")
+        selected_names = [selected_name]
+
+    results: list[AuthClearResult] = []
+    for name in selected_names:
+        raw = profiles.get(name)
+        if raw is None:
+            raise ValueError(f"profile '{name}' not found in {path}")
+        profile_id = raw.values.get("id", "")
+        environment = raw.values.get("environment", "")
+        cache_path = token_cache_path(profile_id or name)
+        removed = clear_cached_token(profile_id=profile_id) if profile_id else False
+        results.append(
+            AuthClearResult(
+                profile_name=name,
+                profile_id=profile_id or "-",
+                environment=environment or "-",
+                cache_path=cache_path,
+                removed=removed,
+            )
+        )
+
+    return results
+
+
 def format_kst(value: datetime) -> str:
     return f"{value.astimezone(KST).strftime('%Y-%m-%d %H:%M:%S')} {KST_LABEL}"
+
+
+def format_remaining(expires_at: datetime, *, now: datetime | None = None) -> str:
+    current = now or datetime.now(UTC)
+    seconds = int((expires_at - current).total_seconds())
+    sign = "-" if seconds < 0 else ""
+    seconds = abs(seconds)
+    days, remainder = divmod(seconds, 86400)
+    hours, remainder = divmod(remainder, 3600)
+    minutes, _ = divmod(remainder, 60)
+    if days:
+        return f"{sign}{days}d {hours}h {minutes}m"
+    if hours:
+        return f"{sign}{hours}h {minutes}m"
+    return f"{sign}{minutes}m"
+
+
+def _token_status(token: CachedToken, *, now: datetime) -> str:
+    if token.expires_at <= now:
+        return "expired"
+    if not token.is_valid(now=now):
+        return "expiring"
+    return "valid"

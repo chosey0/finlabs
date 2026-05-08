@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -9,6 +10,10 @@ from typing import Any
 
 from kis_cli.core.endpoints import token_url
 
+SECRET_PATTERNS = (
+    re.compile(r"(app(?:key|secret)[\"':=\s]+)([A-Za-z0-9_\-]{8,})", re.IGNORECASE),
+    re.compile(r"(access_token[\"':=\s]+)([A-Za-z0-9._\-]{8,})", re.IGNORECASE),
+)
 
 class KisAuthError(RuntimeError):
     """Raised when KIS authentication fails."""
@@ -109,4 +114,13 @@ def _read_error_message(exc: urllib.error.HTTPError) -> str:
         payload = json.loads(body)
     except json.JSONDecodeError:
         return f"HTTP {exc.code}"
-    return str(payload.get("msg1") or payload.get("error_description") or f"HTTP {exc.code}")
+    return mask_sensitive_message(
+        str(payload.get("msg1") or payload.get("error_description") or f"HTTP {exc.code}")
+    )
+
+
+def mask_sensitive_message(message: str) -> str:
+    masked = message
+    for pattern in SECRET_PATTERNS:
+        masked = pattern.sub(r"\1********", masked)
+    return masked

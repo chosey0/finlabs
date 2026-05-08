@@ -6,8 +6,8 @@ from typer.testing import CliRunner
 
 from kis_cli.cli.app import app
 from kis_cli.config.profiles import ProfileCredentials, add_profile
-from kis_cli.core.auth import IssuedToken, KisAuthError, parse_token_response
-from kis_cli.core.token_cache import read_cached_token, write_cached_token
+from kis_cli.core.auth import IssuedToken, KisAuthError, mask_sensitive_message, parse_token_response
+from kis_cli.core.token_cache import read_cached_token, read_cached_token_result, write_cached_token
 
 runner = CliRunner()
 
@@ -41,6 +41,17 @@ def test_parse_token_response_rejects_missing_access_token() -> None:
         raise AssertionError("expected KisAuthError")
 
 
+def test_mask_sensitive_message_masks_token_like_values() -> None:
+    message = "bad appkey='abc123456789' appsecret: sec987654321 access_token=tok123456789"
+
+    masked = mask_sensitive_message(message)
+
+    assert "abc123456789" not in masked
+    assert "sec987654321" not in masked
+    assert "tok123456789" not in masked
+    assert "appkey='********" in masked
+
+
 def test_token_cache_roundtrip(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr("kis_cli.core.token_cache.cache_dir", lambda: tmp_path)
     issued_at = datetime(2026, 5, 7, 1, 0, tzinfo=UTC)
@@ -65,6 +76,18 @@ def test_token_cache_roundtrip(tmp_path, monkeypatch) -> None:
     assert loaded.access_token == "secret-token"
     assert loaded.is_valid(now=issued_at)
     assert "secret-token" in cached.path.read_text(encoding="utf-8")
+
+
+def test_token_cache_reports_invalid_json(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("kis_cli.core.token_cache.cache_dir", lambda: tmp_path)
+    path = tmp_path / "tokens" / "profile-id.json"
+    path.parent.mkdir(parents=True)
+    path.write_text("{not json", encoding="utf-8")
+
+    result = read_cached_token_result(profile_id="profile-id")
+
+    assert result.status == "invalid"
+    assert result.token is None
 
 
 def test_auth_test_command_issues_token_without_printing_secret(tmp_path, monkeypatch) -> None:
@@ -208,7 +231,7 @@ def test_auth_status_reports_valid_and_expired_tokens_for_all_profiles(
     )
     add_profile(
         ProfileCredentials(
-            profile_name="old",
+            profile_name="expiring",
             environment="real",
             account_no="22222222",
             app_key="app-key-2",
@@ -216,6 +239,19 @@ def test_auth_status_reports_valid_and_expired_tokens_for_all_profiles(
             owner="choe",
             expires_at="2026-12-31",
             profile_id="bbbb4567-e89b-12d3-a456-426614174000",
+        ),
+        config_path=config_path,
+    )
+    add_profile(
+        ProfileCredentials(
+            profile_name="old",
+            environment="real",
+            account_no="33333333",
+            app_key="app-key-3",
+            app_secret="app-secret-3",
+            owner="choe",
+            expires_at="2026-12-31",
+            profile_id="cccc4567-e89b-12d3-a456-426614174000",
         ),
         config_path=config_path,
     )
@@ -237,11 +273,23 @@ def test_auth_status_reports_valid_and_expired_tokens_for_all_profiles(
         IssuedToken(
             access_token="expired-secret-token",
             token_type="Bearer",
+            issued_at=issued_at,
+            expires_at=issued_at + timedelta(minutes=2),
+            raw={},
+        ),
+        profile_id="bbbb4567-e89b-12d3-a456-426614174000",
+        profile_name="expiring",
+        environment="real",
+    )
+    write_cached_token(
+        IssuedToken(
+            access_token="old-secret-token",
+            token_type="Bearer",
             issued_at=issued_at - timedelta(hours=2),
             expires_at=issued_at - timedelta(hours=1),
             raw={},
         ),
-        profile_id="bbbb4567-e89b-12d3-a456-426614174000",
+        profile_id="cccc4567-e89b-12d3-a456-426614174000",
         profile_name="old",
         environment="real",
     )
@@ -253,11 +301,14 @@ def test_auth_status_reports_valid_and_expired_tokens_for_all_profiles(
 
     assert result.exit_code == 0
     assert "valid" in result.output
+    assert "expiring" in result.output
     assert "old" in result.output
     assert "expired" in result.output
+    assert "Expires in" in result.output
     assert "KST" in result.output
     assert "valid-secret-token" not in result.output
     assert "expired-secret-token" not in result.output
+    assert "old-secret-token" not in result.output
 
 
 def test_auth_status_rejects_profile_and_all_together(tmp_path) -> None:
@@ -279,6 +330,73 @@ def test_auth_status_rejects_profile_and_all_together(tmp_path) -> None:
     result = runner.invoke(
         app,
         ["auth", "status", "--profile", "csq1404", "--all", "--path", str(config_path)],
+    )
+
+    assert result.exit_code != 0
+    assert "pass either --profile or --all" in result.output
+
+
+def test_auth_clear_removes_cached_token(tmp_path, monkeypatch) -> None:
+    config_path = tmp_path / "config.yaml"
+    add_profile(
+        ProfileCredentials(
+            profile_name="csq1404",
+            environment="real",
+            account_no="12345678",
+            app_key="app-key-secret",
+            app_secret="app-secret-secret",
+            owner="choe",
+            expires_at="2026-12-31",
+            profile_id="123e4567-e89b-12d3-a456-426614174000",
+        ),
+        config_path=config_path,
+    )
+    monkeypatch.setattr("kis_cli.core.token_cache.cache_dir", lambda: tmp_path / "cache")
+    issued_at = datetime.now(UTC)
+    cached = write_cached_token(
+        IssuedToken(
+            access_token="cached-secret-token",
+            token_type="Bearer",
+            issued_at=issued_at,
+            expires_at=issued_at + timedelta(hours=1),
+            raw={},
+        ),
+        profile_id="123e4567-e89b-12d3-a456-426614174000",
+        profile_name="csq1404",
+        environment="real",
+    )
+
+    result = runner.invoke(
+        app,
+        ["auth", "clear", "--profile", "csq1404", "--path", str(config_path)],
+    )
+
+    assert result.exit_code == 0
+    assert "Auth cache cleared" in result.output
+    assert "yes" in result.output
+    assert not cached.path.exists()
+    assert "cached-secret-token" not in result.output
+
+
+def test_auth_clear_rejects_profile_and_all_together(tmp_path) -> None:
+    config_path = tmp_path / "config.yaml"
+    add_profile(
+        ProfileCredentials(
+            profile_name="csq1404",
+            environment="real",
+            account_no="12345678",
+            app_key="app-key-secret",
+            app_secret="app-secret-secret",
+            owner="choe",
+            expires_at="2026-12-31",
+            profile_id="123e4567-e89b-12d3-a456-426614174000",
+        ),
+        config_path=config_path,
+    )
+
+    result = runner.invoke(
+        app,
+        ["auth", "clear", "--profile", "csq1404", "--all", "--path", str(config_path)],
     )
 
     assert result.exit_code != 0
