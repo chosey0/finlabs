@@ -10,6 +10,7 @@ from kis_cli.config.resolver import resolve_profile
 from kis_cli.core.chart import OhlcvBar, bar_to_db_values, fetch_ohlcv_history, normalize_period
 from kis_cli.services.auth import call_with_token_refresh_retry
 from kis_cli.storage import connect, default_database_file, init_database
+from kis_cli.storage.app_repositories import finish_ingest_run, record_api_log, start_ingest_run
 from kis_cli.storage.repositories import find_symbol_markets, insert_ohlcv_bars
 
 
@@ -42,32 +43,66 @@ def collect_ohlcv_history(
         raise ValueError("symbol must not be empty")
     resolved_market = resolve_symbol_market(normalized_symbol, db_path=db_path)
     resolved_end = end or date.today().isoformat()
-
-    bars = call_with_token_refresh_retry(
-        lambda client: fetch_ohlcv_history(
-            client,
+    interval = _period_to_interval(period)
+    init_result = init_database(db_path) if save else None
+    initialized_path = init_result.path if init_result else None
+    run_id: int | None = None
+    if init_result:
+        run_id = start_ingest_run(
+            init_result.app_path,
+            kind=f"ohlcv:{interval}",
             market=resolved_market,
             symbol=normalized_symbol,
-            start=start,
-            end=resolved_end,
-            period=period,
-            adjusted=adjusted,
-            max_pages=max_pages,
-        ),
-        profile=profile,
-        config_path=config_path,
-    )
-    interval = _period_to_interval(period)
-    stored = 0
-    initialized_path: Path | None = None
-    if save:
-        init_result = init_database(db_path)
-        initialized_path = init_result.path
-        with connect(init_result.path) as connection:
-            stored = insert_ohlcv_bars(
-                connection,
-                (bar_to_db_values(bar) for bar in bars),
+        )
+
+    try:
+        bars = call_with_token_refresh_retry(
+            lambda client: fetch_ohlcv_history(
+                client,
+                market=resolved_market,
+                symbol=normalized_symbol,
+                start=start,
+                end=resolved_end,
+                period=period,
+                adjusted=adjusted,
+                max_pages=max_pages,
+            ),
+            profile=profile,
+            config_path=config_path,
+        )
+        stored = 0
+        if init_result:
+            with connect(init_result.path) as connection:
+                stored = insert_ohlcv_bars(
+                    connection,
+                    (bar_to_db_values(bar) for bar in bars),
+                )
+            finish_ingest_run(
+                init_result.app_path,
+                run_id,
+                status="success",
+                rows_written=stored,
             )
+            record_api_log(
+                init_result.app_path,
+                endpoint=f"ohlcv:{resolved_market}:{interval}",
+                status_code=200,
+            )
+    except Exception as exc:
+        if init_result and run_id is not None:
+            message = str(exc)
+            finish_ingest_run(
+                init_result.app_path,
+                run_id,
+                status="failed",
+                error=message,
+            )
+            record_api_log(
+                init_result.app_path,
+                endpoint=f"ohlcv:{resolved_market}:{interval}",
+                error=message,
+            )
+        raise
 
     return ChartHistoryResult(
         db_path=initialized_path,

@@ -74,7 +74,8 @@ from kis_cli.services.chart import collect_ohlcv_history
 2. REST 토큰 확보
 3. KIS OHLCV 이력 조회
 4. `--save`가 있으면 DuckDB warehouse 초기화 후 `ohlcv_bars`에 저장
-5. 저장은 DB UNIQUE 제약 기반으로 중복을 방지
+5. 저장은 DuckDB bulk insert와 DB UNIQUE 제약 기반으로 중복을 방지
+6. `--save` 실행 결과를 앱 DB의 `ingest_runs`, `api_logs`에 기록
 
 저장 interval:
 
@@ -109,7 +110,7 @@ from kis_cli.services.symbols import download_and_store_symbols, search_stored_s
 
 동작:
 
-- `download_and_store_symbols()`: 시장 정규화, DB 초기화, 심볼 마스터 다운로드, 파싱 결과 upsert
+- `download_and_store_symbols()`: 시장 정규화, DB 초기화, 심볼 마스터 다운로드, 파싱 결과 upsert, 작업 로그 기록
 - `search_stored_symbols()`: 저장된 심볼을 symbol/한글명/영문명 기준으로 검색
 
 CLI 예:

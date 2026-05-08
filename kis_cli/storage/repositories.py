@@ -150,6 +150,33 @@ def _csv_value(value: object) -> object:
     return r"\N" if value is None else value
 
 
+def _write_ohlcv_staging_csv(rows: Sequence[dict[str, object]]) -> Path:
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        newline="",
+        prefix="kis-cli-ohlcv-",
+        suffix=".csv",
+        delete=False,
+    ) as file:
+        writer = csv.writer(file)
+        for row in rows:
+            writer.writerow(
+                [
+                    row["market"],
+                    row["symbol"],
+                    row["interval"],
+                    row["timestamp"],
+                    row["open"],
+                    row["high"],
+                    row["low"],
+                    row["close"],
+                    row["volume"],
+                ]
+            )
+        return Path(file.name)
+
+
 def search_symbols(
     connection,
     *,
@@ -242,22 +269,93 @@ def insert_ohlcv_bars(
     connection,
     records: Iterable[dict[str, object]],
 ) -> int:
-    inserted = 0
-    for row in records:
-        if insert_ohlcv_bar(
-            connection,
-            market=str(row["market"]),
-            symbol=str(row["symbol"]),
-            interval=str(row["interval"]),
-            timestamp=str(row["timestamp"]),
-            open=float(row["open"]),
-            high=float(row["high"]),
-            low=float(row["low"]),
-            close=float(row["close"]),
-            volume=int(row["volume"]),
-        ):
-            inserted += 1
-    return inserted
+    rows = list(records)
+    if not rows:
+        return 0
+    temp_table = f"tmp_ohlcv_bars_{uuid4().hex}"
+    connection.execute(
+        f"""
+        CREATE TEMP TABLE "{temp_table}" (
+            market VARCHAR NOT NULL,
+            symbol VARCHAR NOT NULL,
+            interval VARCHAR NOT NULL,
+            timestamp VARCHAR NOT NULL,
+            open DOUBLE NOT NULL,
+            high DOUBLE NOT NULL,
+            low DOUBLE NOT NULL,
+            close DOUBLE NOT NULL,
+            volume BIGINT NOT NULL
+        )
+        """
+    )
+    csv_path = _write_ohlcv_staging_csv(rows)
+    transaction_started = False
+    try:
+        connection.execute(
+            f"""
+            COPY "{temp_table}"
+            FROM {_quote_literal(str(csv_path))}
+            (FORMAT CSV, HEADER false)
+            """
+        )
+        connection.execute("BEGIN TRANSACTION")
+        transaction_started = True
+        inserted = connection.execute(
+            f"""
+            SELECT COUNT(*)
+            FROM (
+                SELECT *,
+                    row_number() OVER (
+                        PARTITION BY market, symbol, interval, timestamp
+                        ORDER BY timestamp DESC
+                    ) AS row_number
+                FROM "{temp_table}"
+            ) source
+            WHERE row_number = 1
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM ohlcv_bars target
+                    WHERE target.market = source.market
+                        AND target.symbol = source.symbol
+                        AND target.interval = source.interval
+                        AND target.timestamp = source.timestamp
+                )
+            """
+        ).fetchone()[0]
+        connection.execute(
+            f"""
+            INSERT INTO ohlcv_bars (
+                market, symbol, interval, timestamp, open, high, low, close, volume
+            )
+            SELECT market, symbol, interval, timestamp, open, high, low, close, volume
+            FROM (
+                SELECT *,
+                    row_number() OVER (
+                        PARTITION BY market, symbol, interval, timestamp
+                        ORDER BY timestamp DESC
+                    ) AS row_number
+                FROM "{temp_table}"
+            ) source
+            WHERE row_number = 1
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM ohlcv_bars target
+                    WHERE target.market = source.market
+                        AND target.symbol = source.symbol
+                        AND target.interval = source.interval
+                        AND target.timestamp = source.timestamp
+                )
+            """
+        )
+        connection.execute("COMMIT")
+    except Exception:
+        if transaction_started:
+            connection.execute("ROLLBACK")
+        raise
+    finally:
+        connection.execute(f'DROP TABLE IF EXISTS "{temp_table}"')
+        csv_path.unlink(missing_ok=True)
+    return int(inserted)
 
 
 def list_ohlcv_bars(

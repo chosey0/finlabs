@@ -5,6 +5,7 @@ from pathlib import Path
 
 from kis_cli.core.symbol_master import download_symbol_master, normalize_market, record_to_db_values
 from kis_cli.storage import connect, init_database
+from kis_cli.storage.app_repositories import finish_ingest_run, record_api_log, start_ingest_run
 from kis_cli.storage.repositories import search_symbols, upsert_symbols
 
 
@@ -19,9 +20,41 @@ class SymbolDownloadResult:
 def download_and_store_symbols(*, market: str, db_path: Path | None = None) -> SymbolDownloadResult:
     normalized = normalize_market(market)
     init_result = init_database(db_path)
-    records = download_symbol_master(normalized)
-    with connect(init_result.path) as connection:
-        stored = upsert_symbols(connection, (record_to_db_values(record) for record in records))
+    run_id = start_ingest_run(
+        init_result.app_path,
+        kind="symbols",
+        market=normalized,
+    )
+    try:
+        records = download_symbol_master(normalized)
+        with connect(init_result.path) as connection:
+            stored = upsert_symbols(connection, (record_to_db_values(record) for record in records))
+    except Exception as exc:
+        message = str(exc)
+        finish_ingest_run(
+            init_result.app_path,
+            run_id,
+            status="failed",
+            error=message,
+        )
+        record_api_log(
+            init_result.app_path,
+            endpoint=f"symbol_master:{normalized}",
+            error=message,
+        )
+        raise
+
+    finish_ingest_run(
+        init_result.app_path,
+        run_id,
+        status="success",
+        rows_written=stored,
+    )
+    record_api_log(
+        init_result.app_path,
+        endpoint=f"symbol_master:{normalized}",
+        status_code=200,
+    )
     return SymbolDownloadResult(
         db_path=init_result.path,
         market=normalized,

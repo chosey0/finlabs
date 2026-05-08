@@ -19,6 +19,7 @@ from kis_cli.core.chart import (
 )
 from kis_cli.services.chart import collect_ohlcv_history
 from kis_cli.storage import connect, init_database
+from kis_cli.storage.app_repositories import list_api_logs, list_ingest_runs
 from kis_cli.storage.repositories import insert_ohlcv_bars, insert_symbol
 
 runner = CliRunner()
@@ -264,9 +265,11 @@ def test_insert_ohlcv_bars_ignores_duplicates(tmp_path: Path) -> None:
     with connect(db_path) as connection:
         first = insert_ohlcv_bars(connection, [values])
         duplicate = insert_ohlcv_bars(connection, [values])
+        duplicate_batch = insert_ohlcv_bars(connection, [values, values])
 
     assert first == 1
     assert duplicate == 0
+    assert duplicate_batch == 0
 
 
 def test_collect_ohlcv_history_resolves_market_from_symbol_table(monkeypatch, tmp_path: Path) -> None:
@@ -360,6 +363,59 @@ def test_collect_ohlcv_history_refreshes_token_after_auth_error(monkeypatch, tmp
     assert result.fetched == 1
     assert refresh_calls == [False, True]
     assert attempts["count"] == 2
+
+
+def test_collect_ohlcv_history_records_saved_ingest_run(monkeypatch, tmp_path: Path) -> None:
+    db_path = tmp_path / "chart.db"
+    init_database(db_path)
+    with connect(db_path) as connection:
+        insert_symbol(connection, market="NASDAQ", symbol="AAPL", name="Apple")
+
+    def fake_call_with_token_refresh_retry(operation, **kwargs):
+        return operation(object())
+
+    def fake_fetch_ohlcv_history(client, **kwargs):
+        return [
+            OhlcvBar(
+                market="NASDAQ",
+                symbol="AAPL",
+                interval="1d",
+                timestamp="2026-05-07",
+                open=Decimal("100"),
+                high=Decimal("110"),
+                low=Decimal("90"),
+                close=Decimal("105"),
+                volume=1000,
+            )
+        ]
+
+    monkeypatch.setattr(
+        "kis_cli.services.chart.call_with_token_refresh_retry",
+        fake_call_with_token_refresh_retry,
+    )
+    monkeypatch.setattr("kis_cli.services.chart.fetch_ohlcv_history", fake_fetch_ohlcv_history)
+
+    result = collect_ohlcv_history(
+        symbol="AAPL",
+        start="2026-05-01",
+        end="2026-05-07",
+        period="D",
+        db_path=db_path,
+        save=True,
+    )
+
+    runs = list_ingest_runs(tmp_path / "app.db")
+    api_logs = list_api_logs(tmp_path / "app.db")
+    assert result.stored == 1
+    assert len(runs) == 1
+    assert runs[0].kind == "ohlcv:1d"
+    assert runs[0].market == "NASDAQ"
+    assert runs[0].symbol == "AAPL"
+    assert runs[0].status == "success"
+    assert runs[0].rows_written == 1
+    assert runs[0].finished_at is not None
+    assert api_logs[0]["endpoint"] == "ohlcv:NASDAQ:1d"
+    assert api_logs[0]["status_code"] == 200
 
 
 def test_chart_daily_command_prints_summary(monkeypatch, tmp_path: Path) -> None:

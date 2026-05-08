@@ -16,6 +16,7 @@
 - 국내/해외 OHLCV 이력 수집
 - `--save` 사용 시 `ohlcv_bars`에 중복 방지 저장
 - 저장된 일봉 OHLCV 조회, table/json/csv 출력, csv/json export
+- 심볼/OHLCV 저장 작업 로그를 앱 SQLite DB에 기록
 - 앱용 SQLite DB와 시장 데이터용 DuckDB warehouse 초기화/점검
 
 ## 설치
@@ -105,6 +106,7 @@ Warehouse: ~/.local/share/kis-cli/warehouse.duckdb
 ```
 
 API 키, API 시크릿, 계좌번호, 토큰은 패키지 소스 안에 저장하지 않습니다. CLI 출력에서도 민감 값은 마스킹합니다.
+`symbols download`와 `chart ... --save` 실행 기록은 앱 DB의 `ingest_runs`, `api_logs` 테이블에 저장됩니다.
 
 ## 설정 명령
 

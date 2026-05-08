@@ -14,6 +14,7 @@ from kis_cli.core.symbol_master import (
 )
 from kis_cli.services.symbols import SymbolDownloadResult
 from kis_cli.storage import connect
+from kis_cli.storage.app_repositories import list_api_logs, list_ingest_runs
 
 runner = CliRunner()
 
@@ -131,6 +132,17 @@ def test_symbols_download_command_upserts_downloaded_records(tmp_path, monkeypat
         ).fetchone()
 
     assert row == ("NASDAQ", "AAPL", "애플", "Apple Inc.")
+    runs = list_ingest_runs(tmp_path / "app.db")
+    api_logs = list_api_logs(tmp_path / "app.db")
+
+    assert len(runs) == 1
+    assert runs[0].kind == "symbols"
+    assert runs[0].market == "NASDAQ"
+    assert runs[0].status == "success"
+    assert runs[0].rows_written == 1
+    assert runs[0].finished_at is not None
+    assert api_logs[0]["endpoint"] == "symbol_master:NASDAQ"
+    assert api_logs[0]["status_code"] == 200
 
 
 def test_symbols_download_all_uses_progressbar(tmp_path, monkeypatch) -> None:

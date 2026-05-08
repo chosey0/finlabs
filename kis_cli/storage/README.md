@@ -39,6 +39,8 @@ SQLite app DB 테이블:
 - `api_logs`
 - `ingest_runs`
 
+`symbols download`와 `chart ... --save`는 `ingest_runs`에 시작/종료 상태와 저장 건수를 기록하고, 관련 요청 결과는 `api_logs`에 기록합니다.
+
 ## 스키마
 
 `warehouse.py`는 시장 데이터용 DuckDB 스키마를 정의하고, `app_db.py`는 앱 내부 상태용 SQLite 스키마를 정의합니다.
@@ -152,6 +154,7 @@ query_daily_ohlcv_bars(connection, symbol="AAPL", start="2026-04-01", end="2026-
 ```
 
 `query_daily_ohlcv_bars()`는 `interval='1d'`만 조회합니다. 결과는 최신 날짜가 먼저 나오도록 정렬합니다.
+`insert_ohlcv_bars()`는 임시 CSV와 DuckDB `COPY`를 사용해 bulk insert를 수행하고, 이미 존재하는 `(market, symbol, interval, timestamp)` 행은 건너뜁니다.
 
 실시간 tick:
 
