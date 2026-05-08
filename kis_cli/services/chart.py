@@ -6,7 +6,6 @@ from pathlib import Path
 
 import duckdb
 
-from kis_cli.config.resolver import resolve_profile
 from kis_cli.core.chart import OhlcvBar, bar_to_db_values, fetch_ohlcv_history, normalize_period
 from kis_cli.services.auth import call_with_token_refresh_retry
 from kis_cli.storage import connect, default_database_file, init_database
