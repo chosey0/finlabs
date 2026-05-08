@@ -56,7 +56,7 @@ app = typer.Typer(
 )
 config_app = typer.Typer(help="Manage kis-cli configuration.", no_args_is_help=True)
 auth_app = typer.Typer(help="Authenticate with the KIS Open API.", no_args_is_help=True)
-db_app = typer.Typer(help="Manage kis-cli SQLite storage.", no_args_is_help=True)
+db_app = typer.Typer(help="Manage kis-cli local storage.", no_args_is_help=True)
 symbols_app = typer.Typer(help="Download and query symbol masters.", no_args_is_help=True)
 price_app = typer.Typer(help="Query REST price data.", no_args_is_help=True)
 chart_app = typer.Typer(help="Collect REST OHLCV history.", no_args_is_help=True)
@@ -362,11 +362,11 @@ def db_init(
         Path | None,
         typer.Option(
             "--path",
-            help="Create or update a SQLite database at a custom path.",
+            help="Create or update a DuckDB warehouse at a custom path.",
         ),
     ] = None,
 ) -> None:
-    """Create the SQLite database schema."""
+    """Create the local app database and DuckDB warehouse schemas."""
     result = init_database(path)
     _print_database_init_result(result)
 
@@ -377,11 +377,11 @@ def db_schema(
         Path | None,
         typer.Option(
             "--path",
-            help="Inspect a SQLite database at a custom path.",
+            help="Inspect a DuckDB warehouse at a custom path.",
         ),
     ] = None,
 ) -> None:
-    """Inspect local SQLite tables, columns, and indexes."""
+    """Inspect local warehouse tables, columns, and indexes."""
     try:
         result = inspect_database_schema(path)
     except FileNotFoundError as exc:
@@ -395,11 +395,11 @@ def db_counts(
         Path | None,
         typer.Option(
             "--path",
-            help="Inspect row counts in a SQLite database at a custom path.",
+            help="Inspect row counts in a DuckDB warehouse at a custom path.",
         ),
     ] = None,
 ) -> None:
-    """Show row counts for each local SQLite table."""
+    """Show row counts for each local warehouse table."""
     try:
         result = inspect_database_counts(path)
     except FileNotFoundError as exc:
@@ -427,11 +427,11 @@ def symbols_download(
         Path | None,
         typer.Option(
             "--db-path",
-            help="Use a custom SQLite database path.",
+            help="Use a custom DuckDB warehouse path.",
         ),
     ] = None,
 ) -> None:
-    """Download KIS symbol master files and upsert them into SQLite."""
+    """Download KIS symbol master files and upsert them into the warehouse."""
     if all_markets and market:
         raise typer.BadParameter("pass either --market or --all, not both")
     if not all_markets and not market:
@@ -440,8 +440,13 @@ def symbols_download(
     markets = ALL_SYMBOL_MARKETS if all_markets else (market or "",)
     results = []
     try:
-        for item in markets:
-            results.append(download_and_store_symbols(market=item, db_path=db_path))
+        if all_markets:
+            with typer.progressbar(markets, label="Downloading symbol masters") as progress:
+                for item in progress:
+                    results.append(download_and_store_symbols(market=item, db_path=db_path))
+        else:
+            for item in markets:
+                results.append(download_and_store_symbols(market=item, db_path=db_path))
     except ValueError as exc:
         raise typer.BadParameter(str(exc)) from exc
     except OSError as exc:
@@ -480,7 +485,7 @@ def symbols_search(
         Path | None,
         typer.Option(
             "--db-path",
-            help="Use a custom SQLite database path.",
+            help="Use a custom DuckDB warehouse path.",
         ),
     ] = None,
 ) -> None:
@@ -573,11 +578,11 @@ def chart_history(
     ] = None,
     db_path: Annotated[
         Path | None,
-        typer.Option("--db-path", help="Use a custom SQLite database path."),
+        typer.Option("--db-path", help="Use a custom DuckDB warehouse path."),
     ] = None,
     save: Annotated[
         bool,
-        typer.Option("--save", help="Persist bars into the local SQLite ohlcv_bars table."),
+        typer.Option("--save", help="Persist bars into the local warehouse ohlcv_bars table."),
     ] = False,
     adjusted: Annotated[
         bool,
@@ -743,7 +748,7 @@ def query_ohlcv(
     ] = None,
     db_path: Annotated[
         Path | None,
-        typer.Option("--db-path", help="Use a custom SQLite database path."),
+        typer.Option("--db-path", help="Use a custom DuckDB warehouse path."),
     ] = None,
 ) -> None:
     """Query locally stored daily OHLCV bars."""
@@ -1040,7 +1045,8 @@ def _print_auth_clear_result(results: list[AuthClearResult]) -> None:
 
 def _print_database_init_result(result: DatabaseInitResult) -> None:
     table = _result_table()
-    table.add_row("Database", str(result.path))
+    table.add_row("App database", str(result.app_path))
+    table.add_row("Warehouse", str(result.warehouse_path))
     table.add_row("Tables", ", ".join(result.tables))
     console.print(
         Panel(

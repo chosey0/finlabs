@@ -1,17 +1,53 @@
 from __future__ import annotations
 
-import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 
-from kis_cli.config.paths import data_dir
-from kis_cli.storage.schema import TABLE_NAMES, create_schema
+from kis_cli.storage.app_db import (
+    APP_TABLE_NAMES,
+    connect_app,
+    default_app_database_file,
+    init_app_database,
+)
+from kis_cli.storage.warehouse import (
+    WAREHOUSE_TABLE_NAMES,
+    connect_warehouse,
+    default_warehouse_file,
+    init_warehouse,
+)
+
+TABLE_NAMES = WAREHOUSE_TABLE_NAMES
+__all__ = [
+    "APP_TABLE_NAMES",
+    "WAREHOUSE_TABLE_NAMES",
+    "DatabaseCountsResult",
+    "DatabaseInitResult",
+    "DatabaseSchemaResult",
+    "DatabaseTable",
+    "TableColumn",
+    "TableCount",
+    "TableIndex",
+    "TABLE_NAMES",
+    "connect",
+    "connect_app",
+    "connect_warehouse",
+    "default_app_database_file",
+    "default_database_file",
+    "default_warehouse_file",
+    "init_app_database",
+    "init_database",
+    "init_warehouse",
+    "inspect_database_counts",
+    "inspect_database_schema",
+]
 
 
 @dataclass(frozen=True)
 class DatabaseInitResult:
     path: Path
     tables: tuple[str, ...]
+    app_path: Path
+    warehouse_path: Path
 
 
 @dataclass(frozen=True)
@@ -59,31 +95,32 @@ class DatabaseCountsResult:
 
 
 def default_database_file() -> Path:
-    return data_dir() / "kis-cli.db"
+    return default_warehouse_file()
 
 
-def connect(path: Path | None = None) -> sqlite3.Connection:
-    db_path = (path or default_database_file()).expanduser()
-    connection = sqlite3.connect(db_path)
-    connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA foreign_keys = ON")
-    return connection
+def connect(path: Path | None = None):
+    return connect_warehouse(path)
 
 
 def init_database(path: Path | None = None) -> DatabaseInitResult:
-    db_path = (path or default_database_file()).expanduser()
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    with connect(db_path) as connection:
-        create_schema(connection)
-    return DatabaseInitResult(path=db_path, tables=TABLE_NAMES)
+    app_path = init_app_database(
+        path.expanduser().parent / "app.db" if path is not None else None
+    )
+    warehouse = init_warehouse(path)
+    return DatabaseInitResult(
+        path=warehouse.path,
+        tables=warehouse.tables,
+        app_path=app_path,
+        warehouse_path=warehouse.path,
+    )
 
 
 def inspect_database_schema(path: Path | None = None) -> DatabaseSchemaResult:
     db_path = (path or default_database_file()).expanduser()
     if not db_path.exists():
-        raise FileNotFoundError(f"database not found at {db_path}; run 'kiscli db init' first")
+        raise FileNotFoundError(f"warehouse not found at {db_path}; run 'kiscli db init' first")
 
-    with connect(db_path) as connection:
+    with connect_warehouse(db_path) as connection:
         table_names = _table_names(connection)
         tables = tuple(_inspect_table(connection, table_name) for table_name in table_names)
     return DatabaseSchemaResult(path=db_path, tables=tables)
@@ -92,15 +129,15 @@ def inspect_database_schema(path: Path | None = None) -> DatabaseSchemaResult:
 def inspect_database_counts(path: Path | None = None) -> DatabaseCountsResult:
     db_path = (path or default_database_file()).expanduser()
     if not db_path.exists():
-        raise FileNotFoundError(f"database not found at {db_path}; run 'kiscli db init' first")
+        raise FileNotFoundError(f"warehouse not found at {db_path}; run 'kiscli db init' first")
 
-    with connect(db_path) as connection:
+    with connect_warehouse(db_path) as connection:
         tables = tuple(
             TableCount(
                 name=table_name,
                 rows=connection.execute(
                     f"SELECT COUNT(*) AS count FROM {_quote_identifier(table_name)}"
-                ).fetchone()["count"],
+                ).fetchone()[0],
             )
             for table_name in _table_names(connection)
         )
@@ -111,50 +148,61 @@ def inspect_database_counts(path: Path | None = None) -> DatabaseCountsResult:
     )
 
 
-def _table_names(connection: sqlite3.Connection) -> list[str]:
-    return [
-        row["name"]
-        for row in connection.execute(
-            """
-            SELECT name
-            FROM sqlite_master
-            WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
-            ORDER BY name
-            """
-        )
-    ]
+def _table_names(connection) -> list[str]:
+    rows = connection.execute(
+        """
+        SELECT table_name
+        FROM information_schema.tables
+        WHERE table_schema = 'main' AND table_type = 'BASE TABLE'
+        ORDER BY table_name
+        """
+    ).fetchall()
+    return [row[0] for row in rows]
 
 
-def _inspect_table(connection: sqlite3.Connection, table_name: str) -> DatabaseTable:
+def _inspect_table(connection, table_name: str) -> DatabaseTable:
+    column_rows = connection.execute(
+        f"PRAGMA table_info({_quote_literal(table_name)})"
+    ).fetchall()
     columns = tuple(
         TableColumn(
-            cid=row["cid"],
-            name=row["name"],
-            type=row["type"],
-            not_null=bool(row["notnull"]),
-            default=row["dflt_value"],
-            primary_key=bool(row["pk"]),
+            cid=row[0],
+            name=row[1],
+            type=row[2],
+            not_null=bool(row[3]),
+            default=row[4],
+            primary_key=bool(row[5]),
         )
-        for row in connection.execute(f"PRAGMA table_info({_quote_identifier(table_name)})")
+        for row in column_rows
     )
-    indexes = tuple(
-        TableIndex(
-            name=index["name"],
-            unique=bool(index["unique"]),
-            origin=index["origin"],
-            columns=_index_columns(connection, index["name"]),
-        )
-        for index in connection.execute(f"PRAGMA index_list({_quote_identifier(table_name)})")
-    )
+    indexes = _unique_constraints(connection, table_name)
     return DatabaseTable(name=table_name, columns=columns, indexes=indexes)
 
 
-def _index_columns(connection: sqlite3.Connection, index_name: str) -> tuple[str, ...]:
+def _unique_constraints(connection, table_name: str) -> tuple[TableIndex, ...]:
+    rows = connection.execute(
+        """
+        SELECT constraint_name, constraint_column_names
+        FROM duckdb_constraints()
+        WHERE table_name = ? AND constraint_type = 'UNIQUE'
+        ORDER BY constraint_name
+        """,
+        [table_name],
+    ).fetchall()
     return tuple(
-        row["name"]
-        for row in connection.execute(f"PRAGMA index_info({_quote_identifier(index_name)})")
+        TableIndex(
+            name=row[0],
+            unique=True,
+            origin="u",
+            columns=tuple(row[1]),
+        )
+        for row in rows
     )
 
 
 def _quote_identifier(value: str) -> str:
     return '"' + value.replace('"', '""') + '"'
+
+
+def _quote_literal(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"

@@ -53,7 +53,7 @@ def query_stored_daily_ohlcv(
         interval=DAILY_INTERVAL,
         start=normalized_start,
         end=normalized_end,
-        rows=[dict(row) for row in rows],
+        rows=list(rows),
     )
 
 

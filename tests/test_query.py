@@ -14,7 +14,7 @@ runner = CliRunner()
 
 
 def test_query_stored_daily_ohlcv_uses_symbol_only_and_daily_interval(tmp_path) -> None:
-    db_path = tmp_path / "kis-cli.db"
+    db_path = tmp_path / "test-warehouse.duckdb"
     init_database(db_path)
 
     with connect(db_path) as connection:
@@ -57,7 +57,7 @@ def test_query_stored_daily_ohlcv_uses_symbol_only_and_daily_interval(tmp_path) 
 
 
 def test_query_ohlcv_command_outputs_json(tmp_path) -> None:
-    db_path = tmp_path / "kis-cli.db"
+    db_path = tmp_path / "test-warehouse.duckdb"
     init_database(db_path)
     with connect(db_path) as connection:
         insert_ohlcv_bar(
@@ -96,7 +96,7 @@ def test_query_ohlcv_command_outputs_json(tmp_path) -> None:
 
 
 def test_query_ohlcv_command_all_returns_every_matching_row(tmp_path) -> None:
-    db_path = tmp_path / "kis-cli.db"
+    db_path = tmp_path / "test-warehouse.duckdb"
     init_database(db_path)
     with connect(db_path) as connection:
         for day in range(1, 24):
@@ -142,7 +142,7 @@ def test_query_ohlcv_command_all_returns_every_matching_row(tmp_path) -> None:
 
 
 def test_query_ohlcv_command_exports_csv(tmp_path) -> None:
-    db_path = tmp_path / "kis-cli.db"
+    db_path = tmp_path / "test-warehouse.duckdb"
     export_path = tmp_path / "exports" / "aapl.csv"
     init_database(db_path)
     with connect(db_path) as connection:

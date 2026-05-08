@@ -10,6 +10,7 @@ from kis_cli.storage.repositories import (
     insert_symbol,
     list_ohlcv_bars,
     search_symbols,
+    upsert_symbols,
 )
 from kis_cli.storage.schema import TABLE_NAMES
 
@@ -17,7 +18,7 @@ runner = CliRunner()
 
 
 def test_init_database_creates_required_tables(tmp_path) -> None:
-    db_path = tmp_path / "kis-cli.db"
+    db_path = tmp_path / "test-warehouse.duckdb"
 
     result = init_database(db_path)
 
@@ -25,10 +26,14 @@ def test_init_database_creates_required_tables(tmp_path) -> None:
     assert result.tables == TABLE_NAMES
     with connect(db_path) as connection:
         table_names = {
-            row["name"]
+            row[0]
             for row in connection.execute(
-                "SELECT name FROM sqlite_master WHERE type = 'table'"
-            )
+                """
+                SELECT table_name
+                FROM information_schema.tables
+                WHERE table_schema = 'main' AND table_type = 'BASE TABLE'
+                """
+            ).fetchall()
         }
     assert set(TABLE_NAMES).issubset(table_names)
 
@@ -114,7 +119,7 @@ def test_db_counts_command_prints_table_row_counts(tmp_path) -> None:
 
 
 def test_symbol_unique_constraint_prevents_duplicate_inserts(tmp_path) -> None:
-    db_path = tmp_path / "kis-cli.db"
+    db_path = tmp_path / "test-warehouse.duckdb"
     init_database(db_path)
 
     with connect(db_path) as connection:
@@ -137,8 +142,42 @@ def test_symbol_unique_constraint_prevents_duplicate_inserts(tmp_path) -> None:
     assert count == 1
 
 
+def test_symbol_upsert_replaces_existing_market_snapshot(tmp_path) -> None:
+    db_path = tmp_path / "test-warehouse.duckdb"
+    init_database(db_path)
+
+    with connect(db_path) as connection:
+        upsert_symbols(
+            connection,
+            [
+                _symbol_values(market="NASDAQ", symbol="AAPL", english_name="Apple"),
+                _symbol_values(market="NASDAQ", symbol="MSFT", english_name="Microsoft"),
+                _symbol_values(market="NYSE", symbol="IBM", english_name="IBM"),
+            ],
+        )
+        stored = upsert_symbols(
+            connection,
+            [
+                _symbol_values(market="NASDAQ", symbol="AAPL", english_name="Apple Inc."),
+            ],
+        )
+        rows = connection.execute(
+            """
+            SELECT market, symbol, english_name
+            FROM symbols
+            ORDER BY market, symbol
+            """
+        ).fetchall()
+
+    assert stored == 1
+    assert rows == [
+        ("NASDAQ", "AAPL", "Apple Inc."),
+        ("NYSE", "IBM", "IBM"),
+    ]
+
+
 def test_symbol_search_orders_by_query_similarity(tmp_path) -> None:
-    db_path = tmp_path / "kis-cli.db"
+    db_path = tmp_path / "test-warehouse.duckdb"
     init_database(db_path)
 
     with connect(db_path) as connection:
@@ -163,8 +202,31 @@ def test_symbol_search_orders_by_query_similarity(tmp_path) -> None:
     assert [row["symbol"] for row in rows] == ["APPLE", "AAPL", "APPLEW", "PINE"]
 
 
+def _symbol_values(*, market: str, symbol: str, english_name: str) -> dict[str, object]:
+    return {
+        "market": market,
+        "symbol": symbol,
+        "standard_code": "",
+        "realtime_symbol": symbol,
+        "korean_name": "",
+        "english_name": english_name,
+        "security_type": "",
+        "currency": "USD",
+        "exchange_id": "",
+        "exchange_code": "",
+        "exchange_name": market,
+        "country_code": "US",
+        "listed_date": "",
+        "base_price": None,
+        "lot_size": None,
+        "raw_source": "test",
+        "raw": "{}",
+        "downloaded_at": "2026-05-07T00:00:00+00:00",
+    }
+
+
 def test_ohlcv_unique_constraint_prevents_duplicate_inserts(tmp_path) -> None:
-    db_path = tmp_path / "kis-cli.db"
+    db_path = tmp_path / "test-warehouse.duckdb"
     init_database(db_path)
 
     with connect(db_path) as connection:
@@ -200,7 +262,7 @@ def test_ohlcv_unique_constraint_prevents_duplicate_inserts(tmp_path) -> None:
 
 
 def test_realtime_tick_unique_constraint_prevents_duplicate_inserts(tmp_path) -> None:
-    db_path = tmp_path / "kis-cli.db"
+    db_path = tmp_path / "test-warehouse.duckdb"
     init_database(db_path)
 
     with connect(db_path) as connection:
@@ -234,7 +296,7 @@ def test_realtime_tick_unique_constraint_prevents_duplicate_inserts(tmp_path) ->
 
 
 def test_ohlcv_query_uses_deterministic_timestamp_order(tmp_path) -> None:
-    db_path = tmp_path / "kis-cli.db"
+    db_path = tmp_path / "test-warehouse.duckdb"
     init_database(db_path)
 
     with connect(db_path) as connection:

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import sqlite3
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
+
+import duckdb
 
 from kis_cli.config.resolver import resolve_profile
 from kis_cli.core.chart import OhlcvBar, bar_to_db_values, fetch_ohlcv_history, normalize_period
@@ -83,12 +84,12 @@ def resolve_symbol_market(symbol: str, *, db_path: Path | None = None) -> str:
     path = (db_path or default_database_file()).expanduser()
     if not path.exists():
         raise FileNotFoundError(
-            f"symbol database not found at {path}; run 'kiscli symbols download' first"
+            f"symbol warehouse not found at {path}; run 'kiscli symbols download' first"
         )
     try:
         with connect(path) as connection:
             markets = list(find_symbol_markets(connection, symbol=symbol))
-    except sqlite3.OperationalError as exc:
+    except duckdb.Error as exc:
         raise ValueError(
             f"symbols table is not initialized in {path}; run 'kiscli symbols download' first"
         ) from exc

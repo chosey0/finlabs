@@ -12,6 +12,7 @@ from kis_cli.core.symbol_master import (
     SymbolRecord,
     parse_symbol_master,
 )
+from kis_cli.services.symbols import SymbolDownloadResult
 from kis_cli.storage import connect
 
 runner = CliRunner()
@@ -129,12 +130,37 @@ def test_symbols_download_command_upserts_downloaded_records(tmp_path, monkeypat
             "SELECT market, symbol, korean_name, english_name FROM symbols"
         ).fetchone()
 
-    assert dict(row) == {
-        "market": "NASDAQ",
-        "symbol": "AAPL",
-        "korean_name": "애플",
-        "english_name": "Apple Inc.",
-    }
+    assert row == ("NASDAQ", "AAPL", "애플", "Apple Inc.")
+
+
+def test_symbols_download_all_uses_progressbar(tmp_path, monkeypatch) -> None:
+    db_path = tmp_path / "symbols.duckdb"
+    calls: list[str] = []
+
+    def fake_download_and_store_symbols(*, market: str, db_path):
+        calls.append(market)
+        return SymbolDownloadResult(
+            db_path=db_path,
+            market=market,
+            downloaded=1,
+            stored=1,
+        )
+
+    monkeypatch.setattr("kis_cli.cli.app.ALL_SYMBOL_MARKETS", ("KOSPI", "NASDAQ"))
+    monkeypatch.setattr(
+        "kis_cli.cli.app.download_and_store_symbols",
+        fake_download_and_store_symbols,
+    )
+
+    result = runner.invoke(
+        app,
+        ["symbols", "download", "--all", "--db-path", str(db_path)],
+    )
+
+    assert result.exit_code == 0
+    assert calls == ["KOSPI", "NASDAQ"]
+    assert "Downloading symbol masters" in result.output
+    assert "Symbols downloaded" in result.output
 
 
 def _fixed_width_row(
