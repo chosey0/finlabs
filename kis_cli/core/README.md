@@ -36,9 +36,11 @@ CLI에서는 다음 명령을 통해 사용됩니다.
 ```bash
 kiscli auth test --profile csq1404
 kiscli auth test --profile csq1404 --refresh
+kiscli auth status --profile csq1404
+kiscli auth status --all
 ```
 
-토큰 값은 출력하지 않습니다.
+토큰 값은 출력하지 않습니다. CLI에 표시되는 토큰 만료 시각은 KST 기준입니다.
 
 ## 토큰 캐시
 
@@ -47,6 +49,7 @@ kiscli auth test --profile csq1404 --refresh
 - 캐시 경로: `~/.cache/kis-cli/tokens/{profile_id}.json`
 - 만료 5분 전부터 유효하지 않은 것으로 판단
 - 손상된 캐시는 조용히 무시하고 새 발급 흐름으로 넘어갈 수 있도록 설계
+- `auth status`는 캐시 파일만 읽어서 `valid`, `expired`, `none`, `invalid` 상태를 표시
 
 주요 함수:
 
