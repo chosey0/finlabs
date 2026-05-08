@@ -115,6 +115,9 @@ def _print_ohlcv_query_result(result: OhlcvQueryResult, *, output_format: str) -
     table.add_column("Low", justify="right")
     table.add_column("Close", justify="right")
     table.add_column("Volume", justify="right")
+    table.add_column("Change", justify="right")
+    table.add_column("Change Rate", justify="right")
+    table.add_column("Amount", justify="right")
     for row in result.rows:
         table.add_row(
             str(row["market"]),
@@ -125,6 +128,9 @@ def _print_ohlcv_query_result(result: OhlcvQueryResult, *, output_format: str) -
             str(row["low"]),
             str(row["close"]),
             str(row["volume"]),
+            _format_optional(row.get("change")),
+            _format_optional(row.get("change_rate")),
+            _format_optional(row.get("amount")),
         )
     console.print(table)
 
@@ -135,3 +141,7 @@ def _print_export_result(*, export_path: Path, row_count: int, export_format: st
     table.add_row("Format", export_format)
     table.add_row("Rows", str(row_count))
     console.print(Panel(table, title="OHLCV exported", border_style="green", box=box.ROUNDED))
+
+
+def _format_optional(value: object) -> str:
+    return "" if value is None else str(value)

@@ -41,7 +41,20 @@ def export_ohlcv_rows(rows: list[dict[str, object]], path: Path, export_format: 
 
 
 def write_ohlcv_csv(rows, file) -> None:
-    fieldnames = ["market", "symbol", "interval", "timestamp", "open", "high", "low", "close", "volume"]
+    fieldnames = [
+        "market",
+        "symbol",
+        "interval",
+        "timestamp",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+        "change",
+        "change_rate",
+        "amount",
+    ]
     writer = csv.DictWriter(file, fieldnames=fieldnames, extrasaction="ignore")
     writer.writeheader()
     writer.writerows(rows)

@@ -93,6 +93,9 @@ def test_parse_domestic_ohlcv_bar() -> None:
     assert bar.low == Decimal("90")
     assert bar.close == Decimal("107")
     assert bar.volume == 1000
+    assert bar.change == Decimal("7")
+    assert bar.change_rate == Decimal("7.00")
+    assert bar.amount == Decimal("107000")
 
 
 def test_parse_overseas_ohlcv_bar() -> None:
@@ -106,6 +109,9 @@ def test_parse_overseas_ohlcv_bar() -> None:
     assert bar.timestamp == "2026-05-07"
     assert bar.close == Decimal("207")
     assert bar.volume == 2000
+    assert bar.change == Decimal("3.5")
+    assert bar.change_rate == Decimal("1.72")
+    assert bar.amount == Decimal("414000")
 
 
 def test_domestic_history_continues_by_moving_end_date() -> None:
@@ -249,6 +255,9 @@ def test_insert_ohlcv_bars_ignores_duplicates(tmp_path: Path) -> None:
         low=Decimal("90"),
         close=Decimal("107"),
         volume=1000,
+        change=Decimal("7"),
+        change_rate=Decimal("7.00"),
+        amount=Decimal("107000"),
     )
     values = {
         "market": bar.market,
@@ -260,16 +269,27 @@ def test_insert_ohlcv_bars_ignores_duplicates(tmp_path: Path) -> None:
         "low": float(bar.low),
         "close": float(bar.close),
         "volume": bar.volume,
+        "change": float(bar.change),
+        "change_rate": float(bar.change_rate),
+        "amount": float(bar.amount),
     }
 
     with connect(db_path) as connection:
         first = insert_ohlcv_bars(connection, [values])
         duplicate = insert_ohlcv_bars(connection, [values])
         duplicate_batch = insert_ohlcv_bars(connection, [values, values])
+        stored = connection.execute(
+            """
+            SELECT change, change_rate, amount
+            FROM ohlcv_bars
+            WHERE symbol = '005930'
+            """
+        ).fetchone()
 
     assert first == 1
     assert duplicate == 0
     assert duplicate_batch == 0
+    assert stored == (7.0, 7.0, 107000.0)
 
 
 def test_collect_ohlcv_history_resolves_market_from_symbol_table(monkeypatch, tmp_path: Path) -> None:
@@ -475,6 +495,9 @@ def _domestic_row(date: str, close: str) -> dict[str, str]:
         "stck_lwpr": "90",
         "stck_clpr": close,
         "acml_vol": "1000",
+        "prdy_vrss": "7",
+        "prdy_ctrt": "7.00",
+        "acml_tr_pbmn": "107000",
     }
 
 
@@ -486,6 +509,9 @@ def _overseas_row(date: str, close: str) -> dict[str, str]:
         "low": "190",
         "clos": close,
         "tvol": "2000",
+        "diff": "3.5",
+        "rate": "1.72",
+        "tamt": "414000",
     }
 
 
@@ -497,4 +523,6 @@ def _overseas_chartprice_row(date: str, close: str) -> dict[str, str]:
         "ovrs_nmix_lwpr": "290",
         "ovrs_nmix_prpr": close,
         "acml_vol": "3000",
+        "ovrs_nmix_prdy_vrss": "7",
+        "prdy_ctrt": "2.33",
     }

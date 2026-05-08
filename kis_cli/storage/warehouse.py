@@ -74,11 +74,17 @@ def create_warehouse_schema(connection) -> None:
             low DOUBLE NOT NULL,
             close DOUBLE NOT NULL,
             volume BIGINT NOT NULL,
+            change DOUBLE,
+            change_rate DOUBLE,
+            amount DOUBLE,
             created_at VARCHAR NOT NULL DEFAULT '',
             UNIQUE (market, symbol, interval, timestamp)
         )
         """
     )
+    connection.execute("ALTER TABLE ohlcv_bars ADD COLUMN IF NOT EXISTS change DOUBLE")
+    connection.execute("ALTER TABLE ohlcv_bars ADD COLUMN IF NOT EXISTS change_rate DOUBLE")
+    connection.execute("ALTER TABLE ohlcv_bars ADD COLUMN IF NOT EXISTS amount DOUBLE")
     connection.execute(
         """
         CREATE TABLE IF NOT EXISTS realtime_ticks (

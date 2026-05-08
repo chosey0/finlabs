@@ -176,6 +176,9 @@ def _write_ohlcv_staging_csv(rows: Sequence[dict[str, object]]) -> Path:
                     row["low"],
                     row["close"],
                     row["volume"],
+                    _csv_value(row.get("change")),
+                    _csv_value(row.get("change_rate")),
+                    _csv_value(row.get("amount")),
                 ]
             )
         return Path(file.name)
@@ -254,18 +257,36 @@ def insert_ohlcv_bar(
     low: float,
     close: float,
     volume: int,
+    change: float | None = None,
+    change_rate: float | None = None,
+    amount: float | None = None,
 ) -> bool:
     before = _count_rows(connection, "ohlcv_bars")
     stored_at = now_kst_iso()
     connection.execute(
         """
         INSERT INTO ohlcv_bars (
-            market, symbol, interval, timestamp, open, high, low, close, volume, created_at
+            market, symbol, interval, timestamp, open, high, low, close, volume,
+            change, change_rate, amount, created_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT DO NOTHING
         """,
-        [market, symbol, interval, timestamp, open, high, low, close, volume, stored_at],
+        [
+            market,
+            symbol,
+            interval,
+            timestamp,
+            open,
+            high,
+            low,
+            close,
+            volume,
+            change,
+            change_rate,
+            amount,
+            stored_at,
+        ],
     )
     return _count_rows(connection, "ohlcv_bars") > before
 
@@ -290,7 +311,10 @@ def insert_ohlcv_bars(
             high DOUBLE NOT NULL,
             low DOUBLE NOT NULL,
             close DOUBLE NOT NULL,
-            volume BIGINT NOT NULL
+            volume BIGINT NOT NULL,
+            change DOUBLE,
+            change_rate DOUBLE,
+            amount DOUBLE
         )
         """
     )
@@ -301,7 +325,7 @@ def insert_ohlcv_bars(
             f"""
             COPY "{temp_table}"
             FROM {_quote_literal(str(csv_path))}
-            (FORMAT CSV, HEADER false)
+            (FORMAT CSV, HEADER false, NULLSTR '\\N')
             """
         )
         connection.execute("BEGIN TRANSACTION")
@@ -331,10 +355,12 @@ def insert_ohlcv_bars(
         connection.execute(
             f"""
             INSERT INTO ohlcv_bars (
-                market, symbol, interval, timestamp, open, high, low, close, volume, created_at
+                market, symbol, interval, timestamp, open, high, low, close, volume,
+                change, change_rate, amount, created_at
             )
             SELECT
                 market, symbol, interval, timestamp, open, high, low, close, volume,
+                change, change_rate, amount,
                 {_quote_literal(stored_at)}
             FROM (
                 SELECT *,
@@ -375,7 +401,8 @@ def list_ohlcv_bars(
     limit: int | None = None,
 ) -> Sequence[dict[str, object]]:
     sql = """
-        SELECT market, symbol, interval, timestamp, open, high, low, close, volume
+        SELECT market, symbol, interval, timestamp, open, high, low, close, volume,
+            change, change_rate, amount
         FROM ohlcv_bars
         WHERE market = ? AND symbol = ? AND interval = ?
         ORDER BY timestamp DESC
@@ -405,7 +432,8 @@ def query_daily_ohlcv_bars(
         params.append(end)
 
     sql = f"""
-        SELECT market, symbol, interval, timestamp, open, high, low, close, volume
+        SELECT market, symbol, interval, timestamp, open, high, low, close, volume,
+            change, change_rate, amount
         FROM ohlcv_bars
         WHERE {where}
         ORDER BY timestamp DESC

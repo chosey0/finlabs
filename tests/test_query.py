@@ -71,6 +71,9 @@ def test_query_ohlcv_command_outputs_json(tmp_path) -> None:
             low=69000.0,
             close=70500.0,
             volume=1234,
+            change=500.0,
+            change_rate=0.71,
+            amount=87000000.0,
         )
 
     result = runner.invoke(
@@ -91,6 +94,9 @@ def test_query_ohlcv_command_outputs_json(tmp_path) -> None:
             "low": 69000.0,
             "close": 70500.0,
             "volume": 1234,
+            "change": 500.0,
+            "change_rate": 0.71,
+            "amount": 87000000.0,
         }
     ]
 
@@ -157,6 +163,9 @@ def test_query_ohlcv_command_exports_csv(tmp_path) -> None:
             low=99.0,
             close=105.0,
             volume=1000,
+            change=5.0,
+            change_rate=5.0,
+            amount=105000.0,
         )
 
     result = runner.invoke(
@@ -189,5 +198,8 @@ def test_query_ohlcv_command_exports_csv(tmp_path) -> None:
             "low": "99.0",
             "close": "105.0",
             "volume": "1000",
+            "change": "5.0",
+            "change_rate": "5.0",
+            "amount": "105000.0",
         }
     ]

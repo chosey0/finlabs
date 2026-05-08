@@ -39,6 +39,9 @@ class OhlcvBar:
     low: Decimal
     close: Decimal
     volume: int
+    change: Decimal | None = None
+    change_rate: Decimal | None = None
+    amount: Decimal | None = None
     raw: dict[str, Any] = field(default_factory=dict)
 
 
@@ -290,6 +293,9 @@ def parse_domestic_ohlcv_bar(
         low=_required_decimal(row, "stck_lwpr"),
         close=_required_decimal(row, "stck_clpr"),
         volume=_required_int(row, "acml_vol"),
+        change=_optional_decimal(row, "prdy_vrss"),
+        change_rate=_optional_decimal(row, "prdy_ctrt"),
+        amount=_optional_decimal(row, "acml_tr_pbmn"),
         raw=row,
     )
 
@@ -311,6 +317,9 @@ def parse_overseas_ohlcv_bar(
         low=_required_decimal(row, "low", "ovrs_nmix_lwpr"),
         close=_required_decimal(row, "clos", "close", "ovrs_nmix_prpr"),
         volume=_required_int(row, "tvol", "volume", "acml_vol"),
+        change=_optional_decimal(row, "diff", "ovrs_nmix_prdy_vrss"),
+        change_rate=_optional_decimal(row, "rate", "prdy_ctrt"),
+        amount=_optional_decimal(row, "tamt"),
         raw=row,
     )
 
@@ -337,6 +346,9 @@ def bar_to_db_values(bar: OhlcvBar) -> dict[str, object]:
         "low": float(bar.low),
         "close": float(bar.close),
         "volume": bar.volume,
+        "change": float(bar.change) if bar.change is not None else None,
+        "change_rate": float(bar.change_rate) if bar.change_rate is not None else None,
+        "amount": float(bar.amount) if bar.amount is not None else None,
     }
 
 
@@ -394,6 +406,21 @@ def _required_decimal(row: dict[str, Any], *keys: str) -> Decimal:
         except InvalidOperation:
             continue
     raise ValueError(f"missing numeric field; expected one of: {', '.join(keys)}")
+
+
+def _optional_decimal(row: dict[str, Any], *keys: str) -> Decimal | None:
+    for key in keys:
+        value = row.get(key)
+        if value is None:
+            continue
+        text = str(value).strip().replace(",", "")
+        if not text:
+            continue
+        try:
+            return Decimal(text)
+        except InvalidOperation:
+            continue
+    return None
 
 
 def _required_int(row: dict[str, Any], *keys: str) -> int:
