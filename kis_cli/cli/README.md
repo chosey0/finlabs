@@ -130,7 +130,7 @@ kiscli price current --profile csq1404 --market NASDAQ --symbol AAPL
 
 ## chart 명령
 
-KIS REST OHLCV 이력을 수집합니다. `--save`를 주면 DuckDB warehouse의 `ohlcv_bars`에 중복 방지 insert로 저장합니다.
+KIS REST OHLCV 이력을 수집합니다. `--save`를 주면 DuckDB warehouse의 `ohlcv_bars`에 시가/고가/저가/종가/거래량과 대비/등락률/거래대금을 중복 방지 insert로 저장합니다.
 
 ```bash
 kiscli chart history --profile csq1404 --symbol 005930 --period D --start 2026-04-01 --end 2026-05-07 --save
@@ -152,7 +152,7 @@ kiscli chart yearly --profile csq1404 --symbol 005930 --start 2020-01-01 --end 2
 
 ## query 명령
 
-저장된 일봉 OHLCV를 조회하거나 내보냅니다. 현재는 `interval=1d`만 조회하며, `--market`과 `--interval` 옵션은 받지 않습니다.
+저장된 일봉 OHLCV를 조회하거나 내보냅니다. 현재는 `interval=1d`만 조회하며, `--market`과 `--interval` 옵션은 받지 않습니다. 출력과 export에는 대비, 등락률, 거래대금 컬럼도 포함됩니다.
 
 ```bash
 kiscli query ohlcv --symbol AAPL

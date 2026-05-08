@@ -80,7 +80,7 @@ UNIQUE (market, symbol)
 
 ### ohlcv_bars
 
-OHLCV 저장 테이블입니다.
+OHLCV 저장 테이블입니다. 기본 OHLCV 값과 KIS 응답의 대비, 등락률, 거래대금을 함께 저장합니다.
 
 주요 컬럼:
 
@@ -93,6 +93,9 @@ OHLCV 저장 테이블입니다.
 - `low`
 - `close`
 - `volume`
+- `change`
+- `change_rate`
+- `amount`
 
 중복 방지:
 

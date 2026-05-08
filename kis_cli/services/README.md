@@ -73,7 +73,7 @@ from kis_cli.services.chart import collect_ohlcv_history
 1. 프로필 해석
 2. REST 토큰 확보
 3. KIS OHLCV 이력 조회
-4. `--save`가 있으면 DuckDB warehouse 초기화 후 `ohlcv_bars`에 저장
+4. `--save`가 있으면 DuckDB warehouse 초기화 후 `ohlcv_bars`에 OHLCV, 대비, 등락률, 거래대금을 저장
 5. 저장은 DuckDB bulk insert와 DB UNIQUE 제약 기반으로 중복을 방지
 6. `--save` 실행 결과를 앱 DB의 `ingest_runs`, `api_logs`에 KST 시각으로 기록
 
