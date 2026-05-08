@@ -135,7 +135,10 @@ kiscli chart yearly --profile csq1404 --symbol 005930 --start 2020-01-01 --end 2
 kiscli query ohlcv --symbol AAPL
 kiscli query ohlcv --symbol 005930 --start 2026-04-01 --end 2026-05-07
 kiscli query ohlcv --symbol AAPL --limit 50
+kiscli query ohlcv --symbol AAPL --all
 ```
+
+기본 조회는 최신 20개 일봉을 반환합니다. `--all`을 사용하면 날짜 조건에 맞는 모든 일봉을 조회합니다.
 
 출력 형식:
 

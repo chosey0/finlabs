@@ -297,7 +297,10 @@ OHLCV 수집 중 KIS가 토큰 만료/인증 오류를 반환하면 토큰을 �
 ```bash
 uv run kiscli query ohlcv --symbol AAPL
 uv run kiscli query ohlcv --symbol 005930 --limit 30
+uv run kiscli query ohlcv --symbol AAPL --all
 ```
+
+기본 조회는 최신 20개 일봉을 반환합니다. `--all`을 사용하면 날짜 조건에 맞는 모든 일봉을 조회합니다.
 
 기간 조회:
 

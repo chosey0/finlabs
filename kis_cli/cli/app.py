@@ -729,6 +729,10 @@ def query_ohlcv(
         int,
         typer.Option("--limit", min=1, max=10000, help="Maximum number of daily bars to show."),
     ] = 20,
+    all_rows: Annotated[
+        bool,
+        typer.Option("--all", help="Show all matching daily bars instead of applying --limit."),
+    ] = False,
     output_format: Annotated[
         str,
         typer.Option("--format", help="Output format: table, json, or csv."),
@@ -749,7 +753,7 @@ def query_ohlcv(
             symbol=symbol,
             start=start,
             end=end,
-            limit=limit,
+            limit=None if all_rows else limit,
             db_path=db_path,
         )
     except (FileNotFoundError, ValueError) as exc:

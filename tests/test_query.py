@@ -95,6 +95,52 @@ def test_query_ohlcv_command_outputs_json(tmp_path) -> None:
     ]
 
 
+def test_query_ohlcv_command_all_returns_every_matching_row(tmp_path) -> None:
+    db_path = tmp_path / "kis-cli.db"
+    init_database(db_path)
+    with connect(db_path) as connection:
+        for day in range(1, 24):
+            insert_ohlcv_bar(
+                connection,
+                market="KOSPI",
+                symbol="005930",
+                interval="1d",
+                timestamp=f"2026-05-{day:02d}",
+                open=70000.0,
+                high=71000.0,
+                low=69000.0,
+                close=70000.0 + day,
+                volume=1000 + day,
+            )
+
+    default_result = runner.invoke(
+        app,
+        ["query", "ohlcv", "--symbol", "005930", "--format", "json", "--db-path", str(db_path)],
+    )
+    all_result = runner.invoke(
+        app,
+        [
+            "query",
+            "ohlcv",
+            "--symbol",
+            "005930",
+            "--all",
+            "--format",
+            "json",
+            "--db-path",
+            str(db_path),
+        ],
+    )
+
+    assert default_result.exit_code == 0
+    assert all_result.exit_code == 0
+    assert len(json.loads(default_result.output)) == 20
+    all_rows = json.loads(all_result.output)
+    assert len(all_rows) == 23
+    assert all_rows[0]["timestamp"] == "2026-05-01"
+    assert all_rows[-1]["timestamp"] == "2026-05-23"
+
+
 def test_query_ohlcv_command_exports_csv(tmp_path) -> None:
     db_path = tmp_path / "kis-cli.db"
     export_path = tmp_path / "exports" / "aapl.csv"
