@@ -191,6 +191,24 @@ UNIQUE (market, symbol, interval, timestamp)
 UNIQUE (market, symbol, exchange_ts, seq)
 ```
 
+## 로그 조회
+
+최근 저장 작업 이력:
+
+```bash
+uv run kiscli logs runs
+uv run kiscli logs runs --limit 50
+```
+
+최근 API/다운로드 기록:
+
+```bash
+uv run kiscli logs api
+uv run kiscli logs api --limit 50
+```
+
+커스텀 app DB 경로를 확인하려면 `--path ./app.db`를 지정합니다.
+
 ## 심볼 마스터
 
 심볼 마스터 다운로드:

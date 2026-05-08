@@ -74,6 +74,22 @@ kiscli db counts --path ./warehouse.duckdb
 
 `db counts`는 테이블별 `COUNT(*)`와 전체 합계를 출력합니다.
 
+## logs 명령
+
+앱 SQLite DB에 저장된 최근 작업 이력과 API 로그를 확인합니다.
+
+```bash
+kiscli logs runs
+kiscli logs runs --limit 50
+kiscli logs runs --path ./app.db
+```
+
+```bash
+kiscli logs api
+kiscli logs api --limit 50
+kiscli logs api --path ./app.db
+```
+
 ## symbols 명령
 
 KIS 심볼 마스터 파일을 다운로드해 DuckDB warehouse에 저장하고, 저장된 심볼을 검색합니다.

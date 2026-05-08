@@ -80,14 +80,16 @@ def record_api_log(
         )
 
 
-def list_ingest_runs(app_db_path: Path) -> list[IngestRunRecord]:
+def list_ingest_runs(app_db_path: Path, *, limit: int = 20) -> list[IngestRunRecord]:
     with connect_app(app_db_path) as connection:
         rows = connection.execute(
             """
             SELECT id, kind, market, symbol, started_at, finished_at, status, rows_written, error
             FROM ingest_runs
-            ORDER BY id
-            """
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            [limit],
         ).fetchall()
     return [
         IngestRunRecord(
@@ -105,14 +107,16 @@ def list_ingest_runs(app_db_path: Path) -> list[IngestRunRecord]:
     ]
 
 
-def list_api_logs(app_db_path: Path) -> list[dict[str, object]]:
+def list_api_logs(app_db_path: Path, *, limit: int = 20) -> list[dict[str, object]]:
     with connect_app(app_db_path) as connection:
         rows = connection.execute(
             """
             SELECT endpoint, tr_id, status_code, requested_at, elapsed_ms, error
             FROM api_logs
-            ORDER BY id
-            """
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            [limit],
         ).fetchall()
     return [dict(row) for row in rows]
 

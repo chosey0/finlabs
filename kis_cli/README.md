@@ -23,6 +23,8 @@ kiscli auth test
 kiscli db init
 kiscli db schema
 kiscli db counts
+kiscli logs runs
+kiscli logs api
 
 kiscli symbols download --market KOSPI
 kiscli symbols download --all

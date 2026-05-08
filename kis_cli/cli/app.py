@@ -49,6 +49,8 @@ from kis_cli.storage import (
     inspect_database_counts,
     inspect_database_schema,
 )
+from kis_cli.storage.app_db import init_app_database
+from kis_cli.storage.app_repositories import list_api_logs, list_ingest_runs
 
 app = typer.Typer(
     help="Collect domestic and overseas stock data with the KIS Open API.",
@@ -61,6 +63,7 @@ symbols_app = typer.Typer(help="Download and query symbol masters.", no_args_is_
 price_app = typer.Typer(help="Query REST price data.", no_args_is_help=True)
 chart_app = typer.Typer(help="Collect REST OHLCV history.", no_args_is_help=True)
 query_app = typer.Typer(help="Query and export locally stored data.", no_args_is_help=True)
+logs_app = typer.Typer(help="Inspect local app logs.", no_args_is_help=True)
 app.add_typer(config_app, name="config")
 app.add_typer(auth_app, name="auth")
 app.add_typer(db_app, name="db")
@@ -68,6 +71,7 @@ app.add_typer(symbols_app, name="symbols")
 app.add_typer(price_app, name="price")
 app.add_typer(chart_app, name="chart")
 app.add_typer(query_app, name="query")
+app.add_typer(logs_app, name="logs")
 console = Console()
 CANCEL_EXIT_CODE = 130
 
@@ -405,6 +409,38 @@ def db_counts(
     except FileNotFoundError as exc:
         raise typer.BadParameter(str(exc)) from exc
     _print_database_counts_result(result)
+
+
+@logs_app.command("runs")
+def logs_runs(
+    limit: Annotated[
+        int,
+        typer.Option("--limit", min=1, max=500, help="Maximum number of runs to show."),
+    ] = 20,
+    path: Annotated[
+        Path | None,
+        typer.Option("--path", help="Inspect a custom app SQLite database path."),
+    ] = None,
+) -> None:
+    """Show recent ingest run records from the app database."""
+    app_db_path = init_app_database(path)
+    _print_ingest_runs(list_ingest_runs(app_db_path, limit=limit), app_db_path)
+
+
+@logs_app.command("api")
+def logs_api(
+    limit: Annotated[
+        int,
+        typer.Option("--limit", min=1, max=500, help="Maximum number of API log rows to show."),
+    ] = 20,
+    path: Annotated[
+        Path | None,
+        typer.Option("--path", help="Inspect a custom app SQLite database path."),
+    ] = None,
+) -> None:
+    """Show recent API log records from the app database."""
+    app_db_path = init_app_database(path)
+    _print_api_logs(list_api_logs(app_db_path, limit=limit), app_db_path)
 
 
 @symbols_app.command("download")
@@ -1120,6 +1156,62 @@ def _print_database_counts_result(result: DatabaseCountsResult) -> None:
             box=box.ROUNDED,
         )
     )
+
+
+def _print_ingest_runs(rows, app_db_path: Path) -> None:
+    summary = _result_table()
+    summary.add_row("App database", str(app_db_path))
+    summary.add_row("Rows", str(len(rows)))
+    console.print(Panel(summary, title="Ingest runs", border_style="green", box=box.ROUNDED))
+
+    table = Table(box=box.SIMPLE_HEAVY)
+    table.add_column("ID", justify="right")
+    table.add_column("Kind", style="bold cyan", no_wrap=True)
+    table.add_column("Market")
+    table.add_column("Symbol")
+    table.add_column("Status")
+    table.add_column("Rows", justify="right")
+    table.add_column("Started at")
+    table.add_column("Finished at")
+    table.add_column("Error")
+    for row in rows:
+        table.add_row(
+            str(row.id),
+            row.kind,
+            row.market or "",
+            row.symbol or "",
+            row.status,
+            str(row.rows_written),
+            row.started_at,
+            row.finished_at or "",
+            row.error or "",
+        )
+    console.print(table)
+
+
+def _print_api_logs(rows, app_db_path: Path) -> None:
+    summary = _result_table()
+    summary.add_row("App database", str(app_db_path))
+    summary.add_row("Rows", str(len(rows)))
+    console.print(Panel(summary, title="API logs", border_style="green", box=box.ROUNDED))
+
+    table = Table(box=box.SIMPLE_HEAVY)
+    table.add_column("Endpoint", style="bold cyan", no_wrap=True)
+    table.add_column("TR ID", no_wrap=True)
+    table.add_column("Status", justify="right")
+    table.add_column("Requested at")
+    table.add_column("Elapsed ms", justify="right")
+    table.add_column("Error")
+    for row in rows:
+        table.add_row(
+            str(row["endpoint"]),
+            str(row["tr_id"] or ""),
+            "" if row["status_code"] is None else str(row["status_code"]),
+            str(row["requested_at"]),
+            "" if row["elapsed_ms"] is None else str(row["elapsed_ms"]),
+            str(row["error"] or ""),
+        )
+    console.print(table)
 
 
 def _print_symbols_download_result(results: list) -> None:
