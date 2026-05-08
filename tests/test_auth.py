@@ -107,6 +107,7 @@ def test_auth_test_command_issues_token_without_printing_secret(tmp_path, monkey
     assert result.exit_code == 0
     assert "Auth test" in result.output
     assert "issued" in result.output
+    assert "2026-05-08 10:00:00 KST" in result.output
     assert "issued-secret-token" not in result.output
     assert "app-key-secret" not in result.output
     assert "app-secret-secret" not in result.output
@@ -155,3 +156,130 @@ def test_auth_test_command_reuses_valid_cached_token(tmp_path, monkeypatch) -> N
     assert result.exit_code == 0
     assert "reused" in result.output
     assert "cached-secret-token" not in result.output
+
+
+def test_auth_status_reports_none_for_profile_without_token(tmp_path, monkeypatch) -> None:
+    config_path = tmp_path / "config.yaml"
+    add_profile(
+        ProfileCredentials(
+            profile_name="csq1404",
+            environment="real",
+            account_no="12345678",
+            app_key="app-key-secret",
+            app_secret="app-secret-secret",
+            owner="choe",
+            expires_at="2026-12-31",
+            profile_id="123e4567-e89b-12d3-a456-426614174000",
+        ),
+        config_path=config_path,
+    )
+    monkeypatch.setattr("kis_cli.core.token_cache.cache_dir", lambda: tmp_path / "cache")
+
+    result = runner.invoke(
+        app,
+        ["auth", "status", "--profile", "csq1404", "--path", str(config_path)],
+    )
+
+    assert result.exit_code == 0
+    assert "Auth status" in result.output
+    assert "csq1404" in result.output
+    assert "none" in result.output
+    assert "app-key-secret" not in result.output
+    assert "app-secret-secret" not in result.output
+
+
+def test_auth_status_reports_valid_and_expired_tokens_for_all_profiles(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    config_path = tmp_path / "config.yaml"
+    add_profile(
+        ProfileCredentials(
+            profile_name="valid",
+            environment="real",
+            account_no="11111111",
+            app_key="app-key-1",
+            app_secret="app-secret-1",
+            owner="choe",
+            expires_at="2026-12-31",
+            profile_id="aaaa4567-e89b-12d3-a456-426614174000",
+        ),
+        config_path=config_path,
+    )
+    add_profile(
+        ProfileCredentials(
+            profile_name="old",
+            environment="real",
+            account_no="22222222",
+            app_key="app-key-2",
+            app_secret="app-secret-2",
+            owner="choe",
+            expires_at="2026-12-31",
+            profile_id="bbbb4567-e89b-12d3-a456-426614174000",
+        ),
+        config_path=config_path,
+    )
+    monkeypatch.setattr("kis_cli.core.token_cache.cache_dir", lambda: tmp_path / "cache")
+    issued_at = datetime.now(UTC)
+    write_cached_token(
+        IssuedToken(
+            access_token="valid-secret-token",
+            token_type="Bearer",
+            issued_at=issued_at,
+            expires_at=issued_at + timedelta(hours=1),
+            raw={},
+        ),
+        profile_id="aaaa4567-e89b-12d3-a456-426614174000",
+        profile_name="valid",
+        environment="real",
+    )
+    write_cached_token(
+        IssuedToken(
+            access_token="expired-secret-token",
+            token_type="Bearer",
+            issued_at=issued_at - timedelta(hours=2),
+            expires_at=issued_at - timedelta(hours=1),
+            raw={},
+        ),
+        profile_id="bbbb4567-e89b-12d3-a456-426614174000",
+        profile_name="old",
+        environment="real",
+    )
+
+    result = runner.invoke(
+        app,
+        ["auth", "status", "--all", "--path", str(config_path)],
+    )
+
+    assert result.exit_code == 0
+    assert "valid" in result.output
+    assert "old" in result.output
+    assert "expired" in result.output
+    assert "KST" in result.output
+    assert "valid-secret-token" not in result.output
+    assert "expired-secret-token" not in result.output
+
+
+def test_auth_status_rejects_profile_and_all_together(tmp_path) -> None:
+    config_path = tmp_path / "config.yaml"
+    add_profile(
+        ProfileCredentials(
+            profile_name="csq1404",
+            environment="real",
+            account_no="12345678",
+            app_key="app-key-secret",
+            app_secret="app-secret-secret",
+            owner="choe",
+            expires_at="2026-12-31",
+            profile_id="123e4567-e89b-12d3-a456-426614174000",
+        ),
+        config_path=config_path,
+    )
+
+    result = runner.invoke(
+        app,
+        ["auth", "status", "--profile", "csq1404", "--all", "--path", str(config_path)],
+    )
+
+    assert result.exit_code != 0
+    assert "pass either --profile or --all" in result.output
