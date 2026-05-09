@@ -101,6 +101,41 @@ def test_query_ohlcv_command_outputs_json(tmp_path) -> None:
     ]
 
 
+def test_query_ohlcv_command_table_includes_change_metrics(tmp_path) -> None:
+    db_path = tmp_path / "test-warehouse.duckdb"
+    init_database(db_path)
+    with connect(db_path) as connection:
+        insert_ohlcv_bar(
+            connection,
+            market="KOSPI",
+            symbol="005930",
+            interval="1d",
+            timestamp="2026-05-07",
+            open=70000.0,
+            high=71000.0,
+            low=69000.0,
+            close=70500.0,
+            volume=1234,
+            change=500.0,
+            change_rate=0.71,
+            amount=87000000.0,
+        )
+
+    result = runner.invoke(
+        app,
+        ["query", "ohlcv", "--symbol", "005930", "--db-path", str(db_path)],
+        env={"COLUMNS": "200"},
+    )
+
+    assert result.exit_code == 0
+    assert "Change" in result.output
+    assert "Change Rate" in result.output
+    assert "Amount" in result.output
+    assert "500.0" in result.output
+    assert "0.71" in result.output
+    assert "87000000.0" in result.output
+
+
 def test_query_ohlcv_command_all_returns_every_matching_row(tmp_path) -> None:
     db_path = tmp_path / "test-warehouse.duckdb"
     init_database(db_path)
