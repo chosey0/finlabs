@@ -355,19 +355,23 @@ uv run kiscli query ohlcv --symbol AAPL --export ./exports/aapl.json
 CSV/JSON 컬럼:
 
 ```text
-market,symbol,interval,timestamp,open,high,low,close,volume
+market,symbol,interval,timestamp,open,high,low,close,volume,change,change_rate,amount
 ```
+
+`change`, `change_rate`, `amount`는 KIS 응답에 값이 없는 경우 비어 있을 수 있습니다. table 출력도 같은 값들을 `Change`, `Change Rate`, `Amount` 컬럼으로 표시합니다.
 
 ## 패키지 구조
 
 ```text
 kis_cli/
-├── cli/       # Typer CLI, Rich 출력, JSON/CSV export
+├── cli/       # Typer 루트 앱, 명령별 모듈, Rich 출력, JSON/CSV export
 ├── config/    # 설정 파일, 프로필, 시크릿 참조 해석
 ├── core/      # KIS REST 인증/클라이언트/현재가/OHLCV/심볼 파서
 ├── services/  # CLI 유즈케이스 조립
 └── storage/   # 앱 SQLite DB, DuckDB warehouse, repository, 저장소 점검
 ```
+
+`kis_cli/cli/app.py`는 루트 Typer 앱 조립만 담당합니다. 새 CLI 명령은 `kis_cli/cli/<command>.py`에 명령 그룹별로 추가하고, 실제 작업은 `services/`, `core/`, `storage/`, `config/`로 위임합니다.
 
 각 패키지 폴더에는 더 자세한 설명이 있습니다.
 
@@ -398,6 +402,12 @@ uv run pytest
 uv run pytest tests/test_chart.py
 uv run pytest tests/test_query.py
 uv run pytest tests/test_storage.py
+```
+
+Lint:
+
+```bash
+uv run ruff check .
 ```
 
 패키지 빌드:
