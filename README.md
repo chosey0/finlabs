@@ -2,7 +2,7 @@
 
 `kis-cli`는 Korea Investment & Securities Open API를 사용해 국내/해외 주식 시장 데이터를 수집하고 로컬 DuckDB warehouse에 저장하는 Python CLI 프로젝트입니다. CLI 명령은 `kiscli`로 제공됩니다.
 
-현재 구현 범위는 설정 관리, REST 인증 확인, 심볼 마스터 다운로드/검색, 현재가 조회, OHLCV 이력 수집/저장, 저장 데이터 조회/내보내기, 로컬 저장소 점검입니다.
+현재 구현 범위는 설정 관리, REST 인증 확인, 심볼 마스터 다운로드/검색, OHLCV 이력 수집/저장, 저장 데이터 조회/내보내기, 로컬 저장소 점검입니다.
 
 이 프로젝트는 시장 데이터 수집용 CLI입니다. UI, 웹 대시보드, 차트 렌더링, 자동매매, 주문 실행, 전략/백테스트 기능은 포함하지 않습니다.
 
@@ -12,7 +12,6 @@
 - KIS REST access token 발급/캐시/검증
 - KOSPI, KOSDAQ, 해외 시장 심볼 마스터 다운로드와 warehouse upsert
 - 저장된 심볼 검색, query 유사도 기반 정렬, realtime symbol 출력
-- 국내/해외 REST 현재가 조회
 - 국내/해외 OHLCV 이력 수집
 - `--save` 사용 시 `ohlcv_bars`에 시가/고가/저가/종가/거래량/대비/등락률/거래대금을 중복 방지 저장
 - 저장된 일봉 OHLCV 조회, table/json/csv 출력, csv/json export
@@ -250,24 +249,6 @@ KOSPI, KOSDAQ, NASDAQ, NYSE, AMEX,
 SHANGHAI, SHANGHAI_INDEX, SHENZHEN, SHENZHEN_INDEX,
 TOKYO, HONGKONG, HANOI, HOCHIMINH
 ```
-
-## 현재가 조회
-
-국내 현재가:
-
-```bash
-uv run kiscli price current --profile csq1404 --market KOSPI --symbol 005930
-```
-
-해외 현재가:
-
-```bash
-uv run kiscli price current --profile csq1404 --market NASDAQ --symbol AAPL
-```
-
-출력 항목은 시장, 심볼, 이름, 현재가, 통화, 전일 대비, 등락률, 시가, 고가, 저가, 거래량입니다.
-
-현재가 조회 중 KIS가 토큰 만료/인증 오류를 반환하면 토큰을 새로 발급하고 1회만 재시도합니다.
 
 ## OHLCV 수집
 

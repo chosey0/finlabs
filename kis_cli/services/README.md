@@ -51,13 +51,6 @@ from kis_cli.services.price import get_current_price
 3. `KisClient` 생성
 4. `core.price.inquire_current_price()` 호출
 
-CLI 예:
-
-```bash
-kiscli price current --profile csq1404 --market KOSPI --symbol 005930
-kiscli price current --profile csq1404 --market NASDAQ --symbol AAPL
-```
-
 ## 차트/OHLCV 서비스
 
 `chart.py`는 국내/해외 OHLCV 이력 수집과 선택 저장을 담당합니다.

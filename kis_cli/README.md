@@ -1,6 +1,6 @@
 # kis_cli 패키지 개요
 
-`kis_cli`는 Korea Investment & Securities Open API 기반의 시장 데이터 수집 CLI 패키지입니다. CLI 명령은 `kiscli`로 제공되며, 현재 구현 범위는 설정 관리, 인증 확인, 심볼 마스터 다운로드/검색, 현재가 조회, OHLCV 이력 수집/저장, 저장 데이터 조회/내보내기, 로컬 저장소 점검입니다.
+`kis_cli`는 Korea Investment & Securities Open API 기반의 시장 데이터 수집 CLI 패키지입니다. CLI 명령은 `kiscli`로 제공되며, 현재 구현 범위는 설정 관리, 인증 확인, 심볼 마스터 다운로드/검색, OHLCV 이력 수집/저장, 저장 데이터 조회/내보내기, 로컬 저장소 점검입니다.
 
 ## 패키지 구성
 
@@ -29,8 +29,6 @@ kiscli logs api
 kiscli symbols download --market KOSPI
 kiscli symbols download --all
 kiscli symbols search --query apple
-
-kiscli price current --profile real --market NASDAQ --symbol AAPL
 
 kiscli chart daily --profile real --symbol 005930 --start 2026-04-01 --end 2026-05-07 --save
 kiscli chart history --profile real --symbol 005930 --period W --start 2025-01-01 --end 2026-05-07 --save

@@ -88,13 +88,6 @@ KIS 응답의 `rt_cd`가 `0`이 아니면 `KisApiError`를 발생시킵니다. �
 - TR ID: `HHDFS00000300`
 - 주요 파라미터: `EXCD`, `SYMB`
 
-CLI 예:
-
-```bash
-kiscli price current --profile csq1404 --market KOSPI --symbol 005930
-kiscli price current --profile csq1404 --market NASDAQ --symbol AAPL
-```
-
 정규화 결과는 `CurrentPrice`로 반환됩니다.
 
 ## OHLCV 이력 조회

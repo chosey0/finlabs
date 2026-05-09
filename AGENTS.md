@@ -96,7 +96,6 @@ kiscli auth test
 kiscli db init
 kiscli symbols download --market NASDAQ
 kiscli symbols search --query apple
-kiscli price current --symbol AAPL --market NASDAQ
 kiscli chart daily --symbol AAPL --start 2025-01-01 --end 2025-12-31 --save
 kiscli query ohlcv --symbol AAPL --interval 1d --limit 10
 ```
@@ -299,7 +298,6 @@ Manual verification is still recommended for API integration commands, especiall
 
 ```bash
 kiscli auth test
-kiscli price current --symbol AAPL --market NASDAQ
 kiscli chart daily --symbol AAPL --start 2025-01-01 --end 2025-12-31
 ```
 

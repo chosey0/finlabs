@@ -16,7 +16,6 @@ kis_cli/cli/
 ├── auth.py      # kiscli auth
 ├── db.py        # kiscli db
 ├── symbols.py   # kiscli symbols
-├── price.py     # kiscli price
 ├── chart.py     # kiscli chart
 ├── query.py     # kiscli query
 └── logs.py      # kiscli logs
@@ -136,17 +135,6 @@ kiscli symbols search --query apple --market NASDAQ
 ```
 
 검색 결과는 query와 더 유사한 순서로 정렬됩니다. `Symbol` 오른쪽에는 실시간 구독 등에 사용할 수 있는 `Realtime symbol`도 출력됩니다.
-
-## price 명령
-
-KIS REST 현재가를 조회합니다.
-
-```bash
-kiscli price current --profile csq1404 --market KOSPI --symbol 005930
-kiscli price current --profile csq1404 --market NASDAQ --symbol AAPL
-```
-
-출력 항목은 시장, 심볼, 이름, 현재가, 통화, 전일 대비, 등락률, 시가, 고가, 저가, 거래량입니다.
 
 ## chart 명령
 
