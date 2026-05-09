@@ -41,15 +41,10 @@ kiscli --help
 
 ## 빠른 시작
 
-1. 설정 파일을 초기화합니다.
+1. 설정 파일과 프로필을 준비합니다.
 
 ```bash
 uv run kiscli config init
-```
-
-1. KIS API 프로필을 추가합니다.
-
-```bash
 uv run kiscli config add
 ```
 
@@ -62,8 +57,8 @@ uv run kiscli config validate --profile csq1404
 1. REST 인증을 확인합니다.
 
 ```bash
-uv run kiscli auth test --profile csq1404
 uv run kiscli auth status --profile csq1404
+uv run kiscli auth test --profile csq1404
 ```
 
 1. DB를 초기화합니다.
@@ -89,6 +84,13 @@ uv run kiscli chart daily --profile csq1404 --symbol 005930 --start 2026-04-01 -
 
 ```bash
 uv run kiscli query ohlcv --symbol 005930
+```
+
+1. 작업 이력이나 API 오류를 확인합니다.
+
+```bash
+uv run kiscli logs runs --limit 20
+uv run kiscli logs api --limit 20
 ```
 
 ## 설정과 로컬 파일
@@ -273,7 +275,9 @@ uv run kiscli chart monthly --profile csq1404 --symbol 005930 --start 2025-01-01
 uv run kiscli chart yearly --profile csq1404 --symbol 005930 --start 2020-01-01 --end 2026-05-07 --save
 ```
 
-범용 history 명령:
+고급/범용 history 명령:
+
+`daily`, `weekly`, `monthly`, `yearly` 대신 `--period`를 직접 지정하고 싶을 때 사용합니다. 일반적인 사용 흐름에서는 위 기간 단위 명령을 권장합니다.
 
 ```bash
 uv run kiscli chart history --profile csq1404 --symbol 005930 --period D --start 2026-04-01 --end 2026-05-07 --save

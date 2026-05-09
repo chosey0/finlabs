@@ -140,18 +140,20 @@ kiscli symbols search --query apple --market NASDAQ
 
 KIS REST OHLCV 이력을 수집합니다. `--save`를 주면 DuckDB warehouse의 `ohlcv_bars`에 시가/고가/저가/종가/거래량과 대비/등락률/거래대금을 중복 방지 insert로 저장합니다.
 
-```bash
-kiscli chart history --profile csq1404 --symbol 005930 --period D --start 2026-04-01 --end 2026-05-07 --save
-kiscli chart history --profile csq1404 --symbol 005930 --period W --start 2025-01-01 --end 2026-05-07 --save
-```
-
-편의 명령도 제공합니다.
+기본 사용은 기간 단위 명령을 권장합니다.
 
 ```bash
 kiscli chart daily --profile csq1404 --symbol AAPL --start 2026-04-01 --end 2026-05-07 --save
 kiscli chart weekly --profile csq1404 --symbol 005930 --start 2025-01-01 --end 2026-05-07
 kiscli chart monthly --profile csq1404 --symbol 005930 --start 2025-01-01 --end 2026-05-07
 kiscli chart yearly --profile csq1404 --symbol 005930 --start 2020-01-01 --end 2026-05-07
+```
+
+`history`는 `--period`를 직접 지정하는 고급/범용 명령입니다.
+
+```bash
+kiscli chart history --profile csq1404 --symbol 005930 --period D --start 2026-04-01 --end 2026-05-07 --save
+kiscli chart history --profile csq1404 --symbol 005930 --period W --start 2025-01-01 --end 2026-05-07 --save
 ```
 
 `chart` 명령은 `symbols` 테이블에서 `--symbol`의 market을 해석합니다. 먼저 `kiscli symbols download`로 대상 시장의 심볼을 저장해두세요. `--end`를 생략하면 오늘 날짜까지 조회합니다.
