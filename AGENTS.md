@@ -108,7 +108,9 @@ Do not document commands as available unless they are implemented or clearly mar
 Use `typer` as the CLI framework.
 
 - Define the root app in `kis_cli/cli/app.py`.
-- Group subcommands with Typer sub-apps such as `config`, `auth`, `db`, `symbols`, `price`, `chart`, `stream`, and `query`.
+- Keep `kis_cli/cli/app.py` limited to root Typer app assembly and sub-app registration.
+- Group subcommands with Typer sub-apps such as `config`, `auth`, `db`, `symbols`, `price`, `chart`, `logs`, `stream`, and `query`.
+- Put command implementations in the matching `kis_cli/cli/<group>.py` module. Do not add command functions directly to `app.py`.
 - Keep command functions thin; delegate behavior to `services/`, `config/`, `core/`, and `storage/`.
 - Prefer typed options and explicit help text.
 - Convert expected user errors into `typer.BadParameter` or `typer.Exit` with clear messages.
@@ -313,7 +315,7 @@ When adding a command, manually verify at least:
 ### Add a CLI Command
 
 1. Define the command contract clearly: command name, arguments, options, output format, and failure behavior.
-2. Place command definitions under `kis_cli/cli/`.
+2. Place command definitions under the matching `kis_cli/cli/<group>.py` module.
 3. Keep CLI files thin; delegate business logic to `services/`.
 4. Use `core/` only for direct KIS REST API behavior such as auth, endpoints, headers, clients, and parsers.
 5. Use `storage/` for database reads, writes, schema creation, and duplicate-prevention logic.
