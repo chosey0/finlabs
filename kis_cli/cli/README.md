@@ -4,6 +4,26 @@
 
 CLI 계층은 입력값 검증, 사용자 친화적 에러 변환, Rich 기반 출력, JSON/CSV 출력 및 파일 내보내기만 담당합니다. 인증, API 호출, 저장, 조회 같은 실제 작업은 `services/`, `core/`, `storage/`로 위임합니다.
 
+## 모듈 구조
+
+`app.py`는 루트 Typer 앱과 하위 앱 등록만 담당합니다. 명령 구현은 명령 그룹별 모듈에 둡니다.
+
+```text
+kis_cli/cli/
+├── app.py       # 루트 Typer 앱 조립
+├── common.py    # 공통 Console, 출력 포맷, CSV export helper
+├── config.py    # kiscli config
+├── auth.py      # kiscli auth
+├── db.py        # kiscli db
+├── symbols.py   # kiscli symbols
+├── price.py     # kiscli price
+├── chart.py     # kiscli chart
+├── query.py     # kiscli query
+└── logs.py      # kiscli logs
+```
+
+새 명령을 추가할 때는 `app.py`에 command 함수를 직접 두지 않습니다. 기존 명령 그룹이면 해당 모듈에 추가하고, 새 그룹이면 새 `<group>.py`에서 `Typer` sub-app을 만든 뒤 `app.py`에 등록합니다. CLI 함수는 얇게 유지하고 비즈니스 로직은 서비스/코어/저장소 계층으로 위임합니다.
+
 ## config 명령
 
 설정 파일과 프로필을 관리합니다.
@@ -169,6 +189,12 @@ kiscli query ohlcv --symbol AAPL --all
 kiscli query ohlcv --symbol AAPL --format table
 kiscli query ohlcv --symbol AAPL --format json
 kiscli query ohlcv --symbol AAPL --format csv
+```
+
+table 출력은 `Change`, `Change Rate`, `Amount` 컬럼을 포함합니다. JSON/CSV 출력과 export는 다음 컬럼을 사용합니다.
+
+```text
+market,symbol,interval,timestamp,open,high,low,close,volume,change,change_rate,amount
 ```
 
 내보내기:
