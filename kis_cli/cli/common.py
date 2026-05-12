@@ -14,6 +14,42 @@ from kis_cli.config.profiles import ENV_FILE_NAME, upsert_env_value
 from kis_cli.config.resolver import read_env_file
 from kis_cli.storage import SUPABASE_DSN_ENV
 
+
+def _rich_console_width() -> int | None:
+    raw = os.environ.get("COLUMNS", "").strip()
+    if not raw:
+        return None
+    try:
+        width = int(raw)
+    except ValueError:
+        return None
+    return width if width > 0 else None
+
+
+def _rich_console_height() -> int | None:
+    raw = os.environ.get("LINES", "").strip()
+    if not raw:
+        return None
+    try:
+        height = int(raw)
+    except ValueError:
+        return None
+    return height if height > 0 else None
+
+
+def cli_console() -> Console:
+    """Rich console for CLI output; honors COLUMNS/LINES at call time.
+
+    Rich only fixes dimensions when *both* width and height are set; otherwise
+    it falls back to the detected terminal size (often 80 columns under pytest).
+    """
+    width = _rich_console_width()
+    if width is None:
+        return Console()
+    height = _rich_console_height() or 25
+    return Console(width=width, height=height)
+
+
 console = Console()
 CANCEL_EXIT_CODE = 130
 
@@ -59,6 +95,38 @@ def write_ohlcv_csv(rows, file) -> None:
         "volume",
         "change",
         "change_rate",
+        "amount",
+    ]
+    writer = csv.DictWriter(file, fieldnames=fieldnames, extrasaction="ignore")
+    writer.writeheader()
+    writer.writerows(rows)
+
+
+def export_overseas_minute_rows(rows: list[dict[str, object]], path: Path, export_format: str) -> None:
+    export_path = path.expanduser()
+    export_path.parent.mkdir(parents=True, exist_ok=True)
+    if export_format == "json":
+        export_path.write_text(json.dumps(rows, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        return
+    with export_path.open("w", encoding="utf-8", newline="") as file:
+        write_overseas_minute_csv(rows, file)
+
+
+def write_overseas_minute_csv(rows, file) -> None:
+    fieldnames = [
+        "market",
+        "symbol",
+        "interval_minutes",
+        "local_business_date",
+        "local_date",
+        "local_time",
+        "korea_date",
+        "korea_time",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
         "amount",
     ]
     writer = csv.DictWriter(file, fieldnames=fieldnames, extrasaction="ignore")
