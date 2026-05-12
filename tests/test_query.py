@@ -6,9 +6,9 @@ import json
 from typer.testing import CliRunner
 
 from kis_cli.cli.app import app
-from kis_cli.services.query import query_stored_daily_ohlcv
+from kis_cli.services.query import query_stored_daily_ohlcv, query_stored_overseas_minutes
 from kis_cli.storage import connect, init_database
-from kis_cli.storage.repositories import insert_ohlcv_bar
+from kis_cli.storage.repositories import insert_ohlcv_bar, insert_overseas_minute_bars
 
 runner = CliRunner()
 
@@ -236,5 +236,124 @@ def test_query_ohlcv_command_exports_csv(tmp_path) -> None:
             "change": "5.0",
             "change_rate": "5.0",
             "amount": "105000.0",
+        }
+    ]
+
+
+def _minute_bar(
+    *,
+    local_date: str,
+    local_time: str,
+    close: float,
+    volume: int = 100,
+    interval_minutes: int = 1,
+) -> dict[str, object]:
+    return {
+        "market": "NASDAQ",
+        "symbol": "AAPL",
+        "interval_minutes": interval_minutes,
+        "local_business_date": local_date,
+        "local_date": local_date,
+        "local_time": local_time,
+        "korea_date": local_date,
+        "korea_time": local_time,
+        "open": 100.0,
+        "high": 110.0,
+        "low": 99.0,
+        "close": close,
+        "volume": volume,
+        "amount": 10000.0,
+    }
+
+
+def test_query_stored_overseas_minutes_orders_newest_first(tmp_path) -> None:
+    db_path = tmp_path / "test-warehouse.duckdb"
+    init_database(db_path)
+    with connect(db_path) as connection:
+        insert_overseas_minute_bars(
+            connection,
+            [
+                _minute_bar(local_date="2026-05-07", local_time="09:35:00", close=101.0),
+                _minute_bar(local_date="2026-05-07", local_time="09:40:00", close=102.0),
+                _minute_bar(local_date="2026-05-08", local_time="09:30:00", close=103.0),
+            ],
+        )
+
+    result = query_stored_overseas_minutes(symbol="aapl", limit=10, db_path=db_path)
+
+    assert result.symbol == "AAPL"
+    assert [row["close"] for row in result.rows] == [103.0, 102.0, 101.0]
+
+
+def test_query_minutes_command_outputs_json(tmp_path) -> None:
+    db_path = tmp_path / "test-warehouse.duckdb"
+    init_database(db_path)
+    with connect(db_path) as connection:
+        insert_overseas_minute_bars(
+            connection,
+            [_minute_bar(local_date="2026-05-07", local_time="15:30:00", close=105.5)],
+        )
+
+    result = runner.invoke(
+        app,
+        ["query", "minutes", "--symbol", "AAPL", "--format", "json", "--db-path", str(db_path)],
+    )
+
+    assert result.exit_code == 0
+    rows = json.loads(result.output)
+    assert len(rows) == 1
+    assert rows[0]["market"] == "NASDAQ"
+    assert rows[0]["symbol"] == "AAPL"
+    assert rows[0]["interval_minutes"] == 1
+    assert rows[0]["local_date"] == "2026-05-07"
+    assert rows[0]["local_time"] == "15:30:00"
+    assert rows[0]["close"] == 105.5
+
+
+def test_query_minutes_command_exports_csv(tmp_path) -> None:
+    db_path = tmp_path / "test-warehouse.duckdb"
+    export_path = tmp_path / "exports" / "aapl-min.csv"
+    init_database(db_path)
+    with connect(db_path) as connection:
+        insert_overseas_minute_bars(
+            connection,
+            [_minute_bar(local_date="2026-05-07", local_time="15:30:00", close=105.5)],
+        )
+
+    result = runner.invoke(
+        app,
+        [
+            "query",
+            "minutes",
+            "--symbol",
+            "AAPL",
+            "--export",
+            str(export_path),
+            "--db-path",
+            str(db_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Overseas minute bars exported" in result.output
+    with export_path.open(encoding="utf-8", newline="") as file:
+        rows = list(csv.DictReader(file))
+
+    assert rows == [
+        {
+            "market": "NASDAQ",
+            "symbol": "AAPL",
+            "interval_minutes": "1",
+            "local_business_date": "2026-05-07",
+            "local_date": "2026-05-07",
+            "local_time": "15:30:00",
+            "korea_date": "2026-05-07",
+            "korea_time": "15:30:00",
+            "open": "100.0",
+            "high": "110.0",
+            "low": "99.0",
+            "close": "105.5",
+            "volume": "100",
+            "amount": "10000.0",
         }
     ]
