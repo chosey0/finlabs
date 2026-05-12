@@ -487,6 +487,60 @@ def test_chart_daily_command_prints_summary(monkeypatch, tmp_path: Path) -> None
     assert "Stored" in result.output
 
 
+def test_chart_daily_supabase_prompts_for_missing_dsn(monkeypatch, tmp_path: Path) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_collect_ohlcv_history(**kwargs):
+        captured.update(kwargs)
+        return __import__("kis_cli.services.chart").services.chart.ChartHistoryResult(
+            db_path=None,
+            market="NASDAQ",
+            symbol="AAPL",
+            interval="1d",
+            fetched=1,
+            stored=1,
+            bars=[
+                OhlcvBar(
+                    market="NASDAQ",
+                    symbol="AAPL",
+                    interval="1d",
+                    timestamp="2026-05-07",
+                    open=Decimal("100"),
+                    high=Decimal("110"),
+                    low=Decimal("90"),
+                    close=Decimal("107"),
+                    volume=1000,
+                )
+            ],
+            store="supabase",
+        )
+
+    monkeypatch.delenv("KISCLI_SUPABASE_DB_DSN", raising=False)
+    monkeypatch.setattr("kis_cli.cli.chart.collect_ohlcv_history", fake_collect_ohlcv_history)
+
+    result = runner.invoke(
+        app,
+        [
+            "chart",
+            "daily",
+            "--symbol",
+            "AAPL",
+            "--start",
+            "2026-05-01",
+            "--save",
+            "--store",
+            "supabase",
+        ],
+        input="postgresql://prompted\n",
+    )
+
+    assert result.exit_code == 0
+    assert captured["store"] == "supabase"
+    assert captured["supabase_dsn"] == "postgresql://prompted"
+    assert "Supabase PostgreSQL DSN" in result.output
+    assert "postgresql://prompted" not in result.output
+
+
 def _domestic_row(date: str, close: str) -> dict[str, str]:
     return {
         "stck_bsop_date": date,

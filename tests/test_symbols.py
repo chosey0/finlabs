@@ -156,8 +156,10 @@ def test_symbols_download_all_uses_progressbar(tmp_path, monkeypatch) -> None:
     db_path = tmp_path / "symbols.duckdb"
     calls: list[str] = []
 
-    def fake_download_and_store_symbols(*, market: str, db_path):
+    def fake_download_and_store_symbols(*, market: str, db_path, store: str, supabase_dsn: str | None):
         calls.append(market)
+        assert store == "duckdb"
+        assert supabase_dsn is None
         return SymbolDownloadResult(
             db_path=db_path,
             market=market,
@@ -180,6 +182,43 @@ def test_symbols_download_all_uses_progressbar(tmp_path, monkeypatch) -> None:
     assert calls == ["KOSPI", "NASDAQ"]
     assert "Downloading symbol masters" in result.output
     assert "Symbols downloaded" in result.output
+
+
+def test_symbols_download_supabase_prompts_for_missing_dsn(monkeypatch) -> None:
+    captured: dict[str, str | None] = {}
+
+    def fake_download_and_store_symbols(*, market: str, db_path, store: str, supabase_dsn: str | None):
+        captured["market"] = market
+        captured["store"] = store
+        captured["supabase_dsn"] = supabase_dsn
+        return SymbolDownloadResult(
+            db_path=None,
+            market=market,
+            downloaded=1,
+            stored=1,
+            store=store,
+        )
+
+    monkeypatch.delenv("KISCLI_SUPABASE_DB_DSN", raising=False)
+    monkeypatch.setattr(
+        "kis_cli.cli.symbols.download_and_store_symbols",
+        fake_download_and_store_symbols,
+    )
+
+    result = runner.invoke(
+        app,
+        ["symbols", "download", "--market", "NASDAQ", "--store", "supabase"],
+        input="postgresql://prompted\n",
+    )
+
+    assert result.exit_code == 0
+    assert captured == {
+        "market": "NASDAQ",
+        "store": "supabase",
+        "supabase_dsn": "postgresql://prompted",
+    }
+    assert "Supabase PostgreSQL DSN" in result.output
+    assert "postgresql://prompted" not in result.output
 
 
 def _fixed_width_row(

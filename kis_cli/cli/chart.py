@@ -7,7 +7,7 @@ import typer
 from rich import box
 from rich.panel import Panel
 
-from kis_cli.cli.common import console, result_table
+from kis_cli.cli.common import console, prompt_supabase_dsn_if_missing, result_table
 from kis_cli.core.auth import KisAuthError
 from kis_cli.core.client import KisApiError
 from kis_cli.services.chart import ChartHistoryResult, collect_ohlcv_history
@@ -47,8 +47,12 @@ def chart_history(
     ] = None,
     save: Annotated[
         bool,
-        typer.Option("--save", help="Persist bars into the local warehouse ohlcv_bars table."),
+        typer.Option("--save", help="Persist bars into the selected ohlcv_bars table."),
     ] = False,
+    store: Annotated[
+        str,
+        typer.Option("--store", help="Storage backend to write when --save is used: duckdb or supabase."),
+    ] = "duckdb",
     adjusted: Annotated[
         bool,
         typer.Option("--adjusted/--raw-price", help="Use adjusted prices for domestic history."),
@@ -68,6 +72,7 @@ def chart_history(
         path=path,
         db_path=db_path,
         save=save,
+        store=store,
         adjusted=adjusted,
         max_pages=max_pages,
     )
@@ -82,6 +87,10 @@ def chart_daily(
     path: Annotated[Path | None, typer.Option("--path")] = None,
     db_path: Annotated[Path | None, typer.Option("--db-path")] = None,
     save: Annotated[bool, typer.Option("--save")] = False,
+    store: Annotated[
+        str,
+        typer.Option("--store", help="Storage backend to write when --save is used: duckdb or supabase."),
+    ] = "duckdb",
     adjusted: Annotated[bool, typer.Option("--adjusted/--raw-price")] = True,
     max_pages: Annotated[int, typer.Option("--max-pages", min=1, max=1000)] = 100,
 ) -> None:
@@ -95,6 +104,7 @@ def chart_daily(
         path=path,
         db_path=db_path,
         save=save,
+        store=store,
         adjusted=adjusted,
         max_pages=max_pages,
     )
@@ -109,6 +119,10 @@ def chart_weekly(
     path: Annotated[Path | None, typer.Option("--path")] = None,
     db_path: Annotated[Path | None, typer.Option("--db-path")] = None,
     save: Annotated[bool, typer.Option("--save")] = False,
+    store: Annotated[
+        str,
+        typer.Option("--store", help="Storage backend to write when --save is used: duckdb or supabase."),
+    ] = "duckdb",
     adjusted: Annotated[bool, typer.Option("--adjusted/--raw-price")] = True,
     max_pages: Annotated[int, typer.Option("--max-pages", min=1, max=1000)] = 100,
 ) -> None:
@@ -122,6 +136,7 @@ def chart_weekly(
         path=path,
         db_path=db_path,
         save=save,
+        store=store,
         adjusted=adjusted,
         max_pages=max_pages,
     )
@@ -136,6 +151,10 @@ def chart_monthly(
     path: Annotated[Path | None, typer.Option("--path")] = None,
     db_path: Annotated[Path | None, typer.Option("--db-path")] = None,
     save: Annotated[bool, typer.Option("--save")] = False,
+    store: Annotated[
+        str,
+        typer.Option("--store", help="Storage backend to write when --save is used: duckdb or supabase."),
+    ] = "duckdb",
     adjusted: Annotated[bool, typer.Option("--adjusted/--raw-price")] = True,
     max_pages: Annotated[int, typer.Option("--max-pages", min=1, max=1000)] = 100,
 ) -> None:
@@ -149,6 +168,7 @@ def chart_monthly(
         path=path,
         db_path=db_path,
         save=save,
+        store=store,
         adjusted=adjusted,
         max_pages=max_pages,
     )
@@ -163,6 +183,10 @@ def chart_yearly(
     path: Annotated[Path | None, typer.Option("--path")] = None,
     db_path: Annotated[Path | None, typer.Option("--db-path")] = None,
     save: Annotated[bool, typer.Option("--save")] = False,
+    store: Annotated[
+        str,
+        typer.Option("--store", help="Storage backend to write when --save is used: duckdb or supabase."),
+    ] = "duckdb",
     adjusted: Annotated[bool, typer.Option("--adjusted/--raw-price")] = True,
     max_pages: Annotated[int, typer.Option("--max-pages", min=1, max=1000)] = 100,
 ) -> None:
@@ -176,6 +200,7 @@ def chart_yearly(
         path=path,
         db_path=db_path,
         save=save,
+        store=store,
         adjusted=adjusted,
         max_pages=max_pages,
     )
@@ -191,9 +216,14 @@ def _run_chart_history(
     path: Path | None,
     db_path: Path | None,
     save: bool,
+    store: str,
     adjusted: bool,
     max_pages: int,
 ) -> None:
+    normalized_store = _normalize_store(store)
+    if save and normalized_store == "supabase" and db_path is not None:
+        raise typer.BadParameter("--db-path is only valid with --store duckdb")
+    supabase_dsn = prompt_supabase_dsn_if_missing() if save and normalized_store == "supabase" else None
     try:
         with console.status("Collecting OHLCV history..."):
             result = collect_ohlcv_history(
@@ -205,6 +235,8 @@ def _run_chart_history(
                 config_path=path,
                 db_path=db_path,
                 save=save,
+                store=normalized_store,
+                supabase_dsn=supabase_dsn,
                 adjusted=adjusted,
                 max_pages=max_pages,
             )
@@ -221,8 +253,16 @@ def _print_chart_history_result(result: ChartHistoryResult) -> None:
     table.add_row("Interval", result.interval)
     table.add_row("Fetched", str(result.fetched))
     table.add_row("Stored", str(result.stored))
+    table.add_row("Store", result.store)
     table.add_row("Database", str(result.db_path) if result.db_path else "-")
     if result.bars:
         table.add_row("First", result.bars[0].timestamp)
         table.add_row("Last", result.bars[-1].timestamp)
     console.print(Panel(table, title="OHLCV history", border_style="green", box=box.ROUNDED))
+
+
+def _normalize_store(value: str) -> str:
+    normalized = value.strip().lower()
+    if normalized not in {"duckdb", "supabase"}:
+        raise typer.BadParameter("store must be one of: duckdb, supabase")
+    return normalized

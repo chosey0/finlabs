@@ -8,30 +8,49 @@ from rich import box
 from rich.panel import Panel
 from rich.table import Table
 
-from kis_cli.cli.common import console, result_table
+from kis_cli.cli.common import console, prompt_supabase_dsn_if_missing, result_table
 from kis_cli.storage import (
     DatabaseCountsResult,
     DatabaseInitResult,
     DatabaseSchemaResult,
+    SupabaseDatabaseInitResult,
     init_database,
+    init_supabase_database,
     inspect_database_counts,
     inspect_database_schema,
 )
 
-db_app = typer.Typer(help="Manage kis-cli local storage.", no_args_is_help=True)
+db_app = typer.Typer(help="Manage kis-cli storage.", no_args_is_help=True)
 
 
 @db_app.command("init")
 def db_init(
+    store: Annotated[
+        str,
+        typer.Option("--store", help="Storage backend to initialize: duckdb or supabase."),
+    ] = "duckdb",
     path: Annotated[
         Path | None,
         typer.Option("--path", help="Create or update a DuckDB warehouse at a custom path."),
     ] = None,
 ) -> None:
-    """Create the local app database and DuckDB warehouse schemas."""
+    """Create local DuckDB or Supabase/PostgreSQL schemas."""
+    normalized_store = _normalize_store(store)
+    if normalized_store == "supabase":
+        if path is not None:
+            raise typer.BadParameter("--path is only valid with --store duckdb")
+        dsn = prompt_supabase_dsn_if_missing()
+        try:
+            with console.status("Initializing Supabase/PostgreSQL schema..."):
+                supabase_result = init_supabase_database(dsn=dsn)
+        except (RuntimeError, ValueError) as exc:
+            raise typer.BadParameter(str(exc)) from exc
+        _print_supabase_database_init_result(supabase_result)
+        return
+
     with console.status("Initializing local storage..."):
-        result = init_database(path)
-    _print_database_init_result(result)
+        duckdb_result = init_database(path)
+    _print_database_init_result(duckdb_result)
 
 
 @db_app.command("schema")
@@ -75,6 +94,21 @@ def _print_database_init_result(result: DatabaseInitResult) -> None:
         Panel(
             table,
             title="Database initialized",
+            border_style="green",
+            box=box.ROUNDED,
+        )
+    )
+
+
+def _print_supabase_database_init_result(result: SupabaseDatabaseInitResult) -> None:
+    table = result_table()
+    table.add_row("Store", "supabase")
+    table.add_row("DSN environment", result.dsn_env)
+    table.add_row("Tables", ", ".join(result.tables))
+    console.print(
+        Panel(
+            table,
+            title="Supabase schema initialized",
             border_style="green",
             box=box.ROUNDED,
         )
@@ -136,3 +170,10 @@ def _print_database_counts_result(result: DatabaseCountsResult) -> None:
             box=box.ROUNDED,
         )
     )
+
+
+def _normalize_store(value: str) -> str:
+    normalized = value.strip().lower()
+    if normalized not in {"duckdb", "supabase"}:
+        raise typer.BadParameter("store must be one of: duckdb, supabase")
+    return normalized

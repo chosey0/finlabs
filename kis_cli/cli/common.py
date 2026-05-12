@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 from pathlib import Path
 
 import typer
 from rich.console import Console
 from rich.table import Table
+
+from kis_cli.storage import SUPABASE_DSN_ENV
 
 console = Console()
 CANCEL_EXIT_CODE = 130
@@ -71,3 +74,15 @@ def result_table() -> Table:
     table.add_column("Field", style="bold cyan", no_wrap=True)
     table.add_column("Value", overflow="fold")
     return table
+
+
+def prompt_supabase_dsn_if_missing() -> str | None:
+    if os.environ.get(SUPABASE_DSN_ENV):
+        return None
+    dsn = typer.prompt(
+        f"{SUPABASE_DSN_ENV} is not set. Supabase PostgreSQL DSN",
+        hide_input=True,
+    )
+    if not dsn.strip():
+        raise typer.BadParameter("Supabase PostgreSQL DSN must not be empty")
+    return dsn.strip()

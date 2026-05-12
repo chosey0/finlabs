@@ -15,30 +15,50 @@ from kis_cli.storage.warehouse import (
     default_warehouse_file,
     init_warehouse,
 )
+from kis_cli.storage.supabase_schema import (
+    SUPABASE_TABLE_NAMES,
+    supabase_schema_sql,
+)
+from kis_cli.storage.supabase import (
+    SUPABASE_DSN_ENV,
+    SupabaseDatabaseInitResult,
+    connect_supabase,
+    init_supabase_database,
+    insert_supabase_ohlcv_bars,
+    upsert_supabase_symbols,
+)
 
 TABLE_NAMES = WAREHOUSE_TABLE_NAMES
 __all__ = [
     "APP_TABLE_NAMES",
+    "SUPABASE_TABLE_NAMES",
+    "SUPABASE_DSN_ENV",
     "WAREHOUSE_TABLE_NAMES",
     "DatabaseCountsResult",
     "DatabaseInitResult",
     "DatabaseSchemaResult",
     "DatabaseTable",
+    "SupabaseDatabaseInitResult",
     "TableColumn",
     "TableCount",
     "TableIndex",
     "TABLE_NAMES",
     "connect",
     "connect_app",
+    "connect_supabase",
     "connect_warehouse",
     "default_app_database_file",
     "default_database_file",
     "default_warehouse_file",
     "init_app_database",
     "init_database",
+    "init_supabase_database",
     "init_warehouse",
+    "insert_supabase_ohlcv_bars",
     "inspect_database_counts",
     "inspect_database_schema",
+    "supabase_schema_sql",
+    "upsert_supabase_symbols",
 ]
 
 

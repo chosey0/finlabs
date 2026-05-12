@@ -8,7 +8,7 @@ from rich import box
 from rich.panel import Panel
 from rich.table import Table
 
-from kis_cli.cli.common import console
+from kis_cli.cli.common import console, prompt_supabase_dsn_if_missing
 from kis_cli.core.symbol_master import ALL_SYMBOL_MARKETS
 from kis_cli.services.symbols import download_and_store_symbols, search_stored_symbols
 
@@ -29,12 +29,20 @@ def symbols_download(
         Path | None,
         typer.Option("--db-path", help="Use a custom DuckDB warehouse path."),
     ] = None,
+    store: Annotated[
+        str,
+        typer.Option("--store", help="Storage backend to write: duckdb or supabase."),
+    ] = "duckdb",
 ) -> None:
     """Download KIS symbol master files and upsert them into the warehouse."""
     if all_markets and market:
         raise typer.BadParameter("pass either --market or --all, not both")
     if not all_markets and not market:
         raise typer.BadParameter("pass --market or --all")
+    normalized_store = _normalize_store(store)
+    if normalized_store == "supabase" and db_path is not None:
+        raise typer.BadParameter("--db-path is only valid with --store duckdb")
+    supabase_dsn = prompt_supabase_dsn_if_missing() if normalized_store == "supabase" else None
 
     markets = ALL_SYMBOL_MARKETS if all_markets else (market or "",)
     results = []
@@ -42,11 +50,25 @@ def symbols_download(
         if all_markets:
             with typer.progressbar(markets, label="Downloading symbol masters") as progress:
                 for item in progress:
-                    results.append(download_and_store_symbols(market=item, db_path=db_path))
+                    results.append(
+                        download_and_store_symbols(
+                            market=item,
+                            db_path=db_path,
+                            store=normalized_store,
+                            supabase_dsn=supabase_dsn,
+                        )
+                    )
         else:
             for item in markets:
                 with console.status(f"Downloading symbol master: {item}..."):
-                    results.append(download_and_store_symbols(market=item, db_path=db_path))
+                    results.append(
+                        download_and_store_symbols(
+                            market=item,
+                            db_path=db_path,
+                            store=normalized_store,
+                            supabase_dsn=supabase_dsn,
+                        )
+                    )
     except ValueError as exc:
         raise typer.BadParameter(str(exc)) from exc
     except OSError as exc:
@@ -96,13 +118,15 @@ def _print_symbols_download_result(results: list) -> None:
     table.add_column("Market", style="bold cyan")
     table.add_column("Downloaded", justify="right")
     table.add_column("Stored", justify="right")
+    table.add_column("Store")
     table.add_column("Database")
     for result in results:
         table.add_row(
             result.market,
             str(result.downloaded),
             str(result.stored),
-            str(result.db_path),
+            result.store,
+            str(result.db_path) if result.db_path else "-",
         )
     console.print(
         Panel(
@@ -134,3 +158,10 @@ def _print_symbols_search_result(rows) -> None:
             row["security_type"] or "",
         )
     console.print(table)
+
+
+def _normalize_store(value: str) -> str:
+    normalized = value.strip().lower()
+    if normalized not in {"duckdb", "supabase"}:
+        raise typer.BadParameter("store must be one of: duckdb, supabase")
+    return normalized
