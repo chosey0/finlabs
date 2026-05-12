@@ -10,7 +10,12 @@ from rich.panel import Panel
 from kis_cli.cli.common import console, prompt_supabase_dsn_if_missing, result_table
 from kis_cli.core.auth import KisAuthError
 from kis_cli.core.client import KisApiError
-from kis_cli.services.chart import ChartHistoryResult, collect_ohlcv_history
+from kis_cli.services.chart import (
+    ChartHistoryResult,
+    OverseasMinuteResult,
+    collect_ohlcv_history,
+    collect_overseas_minutes,
+)
 
 chart_app = typer.Typer(help="Collect REST OHLCV history.", no_args_is_help=True)
 
@@ -206,6 +211,50 @@ def chart_yearly(
     )
 
 
+@chart_app.command("minutes")
+def chart_minutes(
+    symbol: Annotated[str, typer.Option("--symbol", help="Overseas stock symbol to collect.")],
+    start: Annotated[
+        str,
+        typer.Option("--start", help="Start local exchange datetime, for example '2024-10-14 14:01:00'."),
+    ],
+    interval_minutes: Annotated[
+        int,
+        typer.Option("--interval-minutes", min=1, help="Minute interval, for example 1 or 5."),
+    ] = 1,
+    count: Annotated[
+        int,
+        typer.Option("--count", min=1, max=120, help="Records per request. KIS maximum is 120."),
+    ] = 120,
+    profile: Annotated[str | None, typer.Option("--profile")] = None,
+    path: Annotated[Path | None, typer.Option("--path")] = None,
+    db_path: Annotated[Path | None, typer.Option("--db-path")] = None,
+    save: Annotated[bool, typer.Option("--save")] = False,
+    include_previous: Annotated[
+        bool,
+        typer.Option("--include-previous/--today-only", help="Include previous trading day for continuation."),
+    ] = True,
+) -> None:
+    """Collect overseas stock minute bars."""
+    try:
+        with console.status("Collecting overseas minute bars..."):
+            result = collect_overseas_minutes(
+                symbol=symbol,
+                start=start,
+                interval_minutes=interval_minutes,
+                count=count,
+                profile=profile,
+                config_path=path,
+                db_path=db_path,
+                save=save,
+                include_previous=include_previous,
+            )
+    except (FileNotFoundError, ValueError, KisAuthError, KisApiError) as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+    _print_overseas_minute_result(result)
+
+
 def _run_chart_history(
     *,
     symbol: str,
@@ -259,6 +308,27 @@ def _print_chart_history_result(result: ChartHistoryResult) -> None:
         table.add_row("First", result.bars[0].timestamp)
         table.add_row("Last", result.bars[-1].timestamp)
     console.print(Panel(table, title="OHLCV history", border_style="green", box=box.ROUNDED))
+
+
+def _print_overseas_minute_result(result: OverseasMinuteResult) -> None:
+    table = result_table()
+    table.add_row("Market", result.market)
+    table.add_row("Symbol", result.symbol)
+    table.add_row("Interval", f"{result.interval_minutes}m")
+    table.add_row("Fetched", str(result.fetched))
+    table.add_row("Stored", str(result.stored))
+    table.add_row("Database", str(result.db_path) if result.db_path else "-")
+    if result.bars:
+        table.add_row("First local", f"{result.bars[0].local_date} {result.bars[0].local_time}")
+        table.add_row("Last local", f"{result.bars[-1].local_date} {result.bars[-1].local_time}")
+    console.print(
+        Panel(
+            table,
+            title="Overseas minute bars",
+            border_style="green",
+            box=box.ROUNDED,
+        )
+    )
 
 
 def _normalize_store(value: str) -> str:

@@ -13,9 +13,11 @@ from kis_cli.core.chart import (
     fetch_ohlcv_history,
     fetch_domestic_ohlcv_history,
     fetch_overseas_ohlcv_history,
+    fetch_overseas_stock_minute_bars,
     fetch_overseas_stock_period_history,
     parse_domestic_ohlcv_bar,
     parse_overseas_ohlcv_bar,
+    parse_overseas_minute_bar,
 )
 from kis_cli.services.chart import collect_ohlcv_history
 from kis_cli.storage import connect, init_database
@@ -112,6 +114,79 @@ def test_parse_overseas_ohlcv_bar() -> None:
     assert bar.change == Decimal("3.5")
     assert bar.change_rate == Decimal("1.72")
     assert bar.amount == Decimal("414000")
+
+
+def test_parse_overseas_minute_bar() -> None:
+    bar = parse_overseas_minute_bar(
+        market="NASDAQ",
+        symbol="NVDA",
+        interval_minutes=5,
+        row=_overseas_minute_row("20241014", "140600"),
+    )
+
+    assert bar.market == "NASDAQ"
+    assert bar.symbol == "NVDA"
+    assert bar.interval_minutes == 5
+    assert bar.local_business_date == "2024-10-14"
+    assert bar.local_date == "2024-10-14"
+    assert bar.local_time == "14:06:00"
+    assert bar.korea_date == "2024-10-15"
+    assert bar.korea_time == "03:06:00"
+    assert bar.open == Decimal("130")
+    assert bar.high == Decimal("131")
+    assert bar.low == Decimal("129")
+    assert bar.close == Decimal("130.5")
+    assert bar.volume == 1000
+    assert bar.amount == Decimal("130500")
+
+
+def test_overseas_stock_minute_history_uses_previous_last_bar_keyb() -> None:
+    class MinuteClient:
+        def __init__(self) -> None:
+            self.calls = []
+
+        def get(self, path: str, *, tr_id: str, params: dict[str, str], tr_cont: str = ""):
+            self.calls.append((path, tr_id, params, tr_cont))
+            if params["KEYB"] == "":
+                return {
+                    "rt_cd": "0",
+                    "output1": {"next": "1"},
+                    "output2": [
+                        _overseas_minute_row("20241014", "140600"),
+                        _overseas_minute_row("20241014", "140100"),
+                    ],
+                }
+            return {
+                "rt_cd": "0",
+                "output1": {"next": "0"},
+                "output2": [_overseas_minute_row("20241014", "135600")],
+            }
+
+    client = MinuteClient()
+
+    bars = fetch_overseas_stock_minute_bars(
+        client,
+        market="NASDAQ",
+        symbol="NVDA",
+        start="2024-10-14 13:56:00",
+        interval_minutes=5,
+        count=120,
+        include_previous=True,
+    )
+
+    assert client.calls[0][0] == "/uapi/overseas-price/v1/quotations/inquire-time-itemchartprice"
+    assert client.calls[0][1] == "HHDFS76950200"
+    assert client.calls[0][2]["KEYB"] == ""
+    assert client.calls[0][2]["NEXT"] == ""
+    assert client.calls[0][2]["NMIN"] == "5"
+    assert client.calls[0][2]["PINC"] == "1"
+    assert client.calls[1][2]["KEYB"] == "20241014135600"
+    assert client.calls[1][2]["NEXT"] == "1"
+    assert [f"{bar.local_date} {bar.local_time}" for bar in bars] == [
+        "2024-10-14 13:56:00",
+        "2024-10-14 14:01:00",
+        "2024-10-14 14:06:00",
+    ]
 
 
 def test_domestic_history_continues_by_moving_end_date() -> None:
@@ -487,6 +562,47 @@ def test_chart_daily_command_prints_summary(monkeypatch, tmp_path: Path) -> None
     assert "Stored" in result.output
 
 
+def test_chart_minutes_command_uses_required_start_without_max_pages(monkeypatch, tmp_path: Path) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_collect_overseas_minutes(**kwargs):
+        captured.update(kwargs)
+        return __import__("kis_cli.services.chart").services.chart.OverseasMinuteResult(
+            db_path=tmp_path / "chart.db",
+            market="NASDAQ",
+            symbol="NVDA",
+            interval_minutes=5,
+            fetched=1,
+            stored=1,
+            bars=[],
+        )
+
+    monkeypatch.setattr("kis_cli.cli.chart.collect_overseas_minutes", fake_collect_overseas_minutes)
+
+    result = runner.invoke(
+        app,
+        [
+            "chart",
+            "minutes",
+            "--symbol",
+            "NVDA",
+            "--start",
+            "2024-10-14 14:01:00",
+            "--interval-minutes",
+            "5",
+            "--save",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert captured["symbol"] == "NVDA"
+    assert captured["start"] == "2024-10-14 14:01:00"
+    assert captured["interval_minutes"] == 5
+    assert "max_pages" not in captured
+    assert "Overseas minute bars" in result.output
+    assert "Fetched" in result.output
+
+
 def test_chart_daily_supabase_prompts_for_missing_dsn(monkeypatch, tmp_path: Path) -> None:
     captured: dict[str, object] = {}
 
@@ -580,4 +696,20 @@ def _overseas_chartprice_row(date: str, close: str) -> dict[str, str]:
         "acml_vol": "3000",
         "ovrs_nmix_prdy_vrss": "7",
         "prdy_ctrt": "2.33",
+    }
+
+
+def _overseas_minute_row(date: str, time: str) -> dict[str, str]:
+    return {
+        "tymd": date,
+        "xymd": date,
+        "xhms": time,
+        "kymd": "20241015",
+        "khms": "030600",
+        "open": "130",
+        "high": "131",
+        "low": "129",
+        "last": "130.5",
+        "evol": "1000",
+        "eamt": "130500",
     }

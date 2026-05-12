@@ -6,7 +6,15 @@ from pathlib import Path
 
 import duckdb
 
-from kis_cli.core.chart import OhlcvBar, bar_to_db_values, fetch_ohlcv_history, normalize_period
+from kis_cli.core.chart import (
+    OhlcvBar,
+    OverseasMinuteBar,
+    bar_to_db_values,
+    fetch_ohlcv_history,
+    fetch_overseas_stock_minute_bars,
+    minute_bar_to_db_values,
+    normalize_period,
+)
 from kis_cli.services.auth import call_with_token_refresh_retry
 from kis_cli.storage import (
     connect,
@@ -18,7 +26,7 @@ from kis_cli.storage import (
     insert_supabase_ohlcv_bars,
 )
 from kis_cli.storage.app_repositories import finish_ingest_run, record_api_log, start_ingest_run
-from kis_cli.storage.repositories import find_symbol_markets, insert_ohlcv_bars
+from kis_cli.storage.repositories import find_symbol_markets, insert_ohlcv_bars, insert_overseas_minute_bars
 
 
 @dataclass(frozen=True)
@@ -31,6 +39,17 @@ class ChartHistoryResult:
     stored: int
     bars: list[OhlcvBar]
     store: str = "duckdb"
+
+
+@dataclass(frozen=True)
+class OverseasMinuteResult:
+    db_path: Path | None
+    market: str
+    symbol: str
+    interval_minutes: int
+    fetched: int
+    stored: int
+    bars: list[OverseasMinuteBar]
 
 
 def collect_ohlcv_history(
@@ -130,6 +149,90 @@ def collect_ohlcv_history(
         stored=stored,
         bars=bars,
         store=normalized_store,
+    )
+
+
+def collect_overseas_minutes(
+    *,
+    symbol: str,
+    start: str,
+    interval_minutes: int = 1,
+    count: int = 120,
+    profile: str | None = None,
+    config_path: Path | None = None,
+    db_path: Path | None = None,
+    save: bool = False,
+    include_previous: bool = True,
+) -> OverseasMinuteResult:
+    normalized_symbol = symbol.strip().upper()
+    if not normalized_symbol:
+        raise ValueError("symbol must not be empty")
+    resolved_market = resolve_symbol_market(normalized_symbol, db_path=db_path)
+    init_result = init_database(db_path) if save else None
+    initialized_path = init_result.path if init_result else None
+    run_id: int | None = None
+    if init_result:
+        run_id = start_ingest_run(
+            init_result.app_path,
+            kind=f"overseas_minute:{interval_minutes}m",
+            market=resolved_market,
+            symbol=normalized_symbol,
+        )
+
+    try:
+        bars = call_with_token_refresh_retry(
+            lambda client: fetch_overseas_stock_minute_bars(
+                client,
+                market=resolved_market,
+                symbol=normalized_symbol,
+                start=start,
+                interval_minutes=interval_minutes,
+                count=count,
+                include_previous=include_previous,
+            ),
+            profile=profile,
+            config_path=config_path,
+        )
+        stored = 0
+        if init_result:
+            values = [minute_bar_to_db_values(bar) for bar in bars]
+            with connect(init_result.path) as connection:
+                stored = insert_overseas_minute_bars(connection, values)
+            finish_ingest_run(
+                init_result.app_path,
+                run_id,
+                status="success",
+                rows_written=stored,
+            )
+            record_api_log(
+                init_result.app_path,
+                endpoint=f"overseas_minute:{resolved_market}:{interval_minutes}m",
+                status_code=200,
+            )
+    except Exception as exc:
+        if init_result and run_id is not None:
+            message = str(exc)
+            finish_ingest_run(
+                init_result.app_path,
+                run_id,
+                status="failed",
+                error=message,
+            )
+            record_api_log(
+                init_result.app_path,
+                endpoint=f"overseas_minute:{resolved_market}:{interval_minutes}m",
+                error=message,
+            )
+        raise
+
+    return OverseasMinuteResult(
+        db_path=initialized_path,
+        market=bars[0].market if bars else resolved_market,
+        symbol=bars[0].symbol if bars else normalized_symbol,
+        interval_minutes=interval_minutes,
+        fetched=len(bars),
+        stored=stored,
+        bars=bars,
     )
 
 

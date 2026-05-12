@@ -184,6 +184,38 @@ def _write_ohlcv_staging_csv(rows: Sequence[dict[str, object]]) -> Path:
         return Path(file.name)
 
 
+def _write_overseas_minute_staging_csv(rows: Sequence[dict[str, object]]) -> Path:
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        newline="",
+        prefix="kis-cli-overseas-minute-",
+        suffix=".csv",
+        delete=False,
+    ) as file:
+        writer = csv.writer(file)
+        for row in rows:
+            writer.writerow(
+                [
+                    row["market"],
+                    row["symbol"],
+                    row["interval_minutes"],
+                    row["local_business_date"],
+                    row["local_date"],
+                    row["local_time"],
+                    row["korea_date"],
+                    row["korea_time"],
+                    row["open"],
+                    row["high"],
+                    row["low"],
+                    row["close"],
+                    row["volume"],
+                    row["amount"],
+                ]
+            )
+        return Path(file.name)
+
+
 def search_symbols(
     connection,
     *,
@@ -378,6 +410,113 @@ def insert_ohlcv_bars(
                         AND target.symbol = source.symbol
                         AND target.interval = source.interval
                         AND target.timestamp = source.timestamp
+                )
+            """
+        )
+        connection.execute("COMMIT")
+    except Exception:
+        if transaction_started:
+            connection.execute("ROLLBACK")
+        raise
+    finally:
+        connection.execute(f'DROP TABLE IF EXISTS "{temp_table}"')
+        csv_path.unlink(missing_ok=True)
+    return int(inserted)
+
+
+def insert_overseas_minute_bars(
+    connection,
+    records: Iterable[dict[str, object]],
+) -> int:
+    rows = list(records)
+    if not rows:
+        return 0
+    stored_at = now_kst_iso()
+    temp_table = f"tmp_overseas_minute_bars_{uuid4().hex}"
+    connection.execute(
+        f"""
+        CREATE TEMP TABLE "{temp_table}" (
+            market VARCHAR NOT NULL,
+            symbol VARCHAR NOT NULL,
+            interval_minutes BIGINT NOT NULL,
+            local_business_date VARCHAR NOT NULL,
+            local_date VARCHAR NOT NULL,
+            local_time VARCHAR NOT NULL,
+            korea_date VARCHAR NOT NULL,
+            korea_time VARCHAR NOT NULL,
+            open DOUBLE NOT NULL,
+            high DOUBLE NOT NULL,
+            low DOUBLE NOT NULL,
+            close DOUBLE NOT NULL,
+            volume BIGINT NOT NULL,
+            amount DOUBLE NOT NULL
+        )
+        """
+    )
+    csv_path = _write_overseas_minute_staging_csv(rows)
+    transaction_started = False
+    try:
+        connection.execute(
+            f"""
+            COPY "{temp_table}"
+            FROM {_quote_literal(str(csv_path))}
+            (FORMAT CSV, HEADER false)
+            """
+        )
+        connection.execute("BEGIN TRANSACTION")
+        transaction_started = True
+        inserted = connection.execute(
+            f"""
+            SELECT COUNT(*)
+            FROM (
+                SELECT *,
+                    row_number() OVER (
+                        PARTITION BY market, symbol, interval_minutes, local_date, local_time
+                        ORDER BY local_date DESC, local_time DESC
+                    ) AS row_number
+                FROM "{temp_table}"
+            ) source
+            WHERE row_number = 1
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM overseas_minute_bars target
+                    WHERE target.market = source.market
+                        AND target.symbol = source.symbol
+                        AND target.interval_minutes = source.interval_minutes
+                        AND target.local_date = source.local_date
+                        AND target.local_time = source.local_time
+                )
+            """
+        ).fetchone()[0]
+        connection.execute(
+            f"""
+            INSERT INTO overseas_minute_bars (
+                market, symbol, interval_minutes, local_business_date, local_date,
+                local_time, korea_date, korea_time, open, high, low, close, volume,
+                amount, created_at
+            )
+            SELECT
+                market, symbol, interval_minutes, local_business_date, local_date,
+                local_time, korea_date, korea_time, open, high, low, close, volume,
+                amount,
+                {_quote_literal(stored_at)}
+            FROM (
+                SELECT *,
+                    row_number() OVER (
+                        PARTITION BY market, symbol, interval_minutes, local_date, local_time
+                        ORDER BY local_date DESC, local_time DESC
+                    ) AS row_number
+                FROM "{temp_table}"
+            ) source
+            WHERE row_number = 1
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM overseas_minute_bars target
+                    WHERE target.market = source.market
+                        AND target.symbol = source.symbol
+                        AND target.interval_minutes = source.interval_minutes
+                        AND target.local_date = source.local_date
+                        AND target.local_time = source.local_time
                 )
             """
         )

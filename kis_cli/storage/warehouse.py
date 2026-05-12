@@ -7,7 +7,7 @@ import duckdb
 
 from kis_cli.config.paths import data_dir
 
-WAREHOUSE_TABLE_NAMES = ("symbols", "ohlcv_bars", "realtime_ticks")
+WAREHOUSE_TABLE_NAMES = ("symbols", "ohlcv_bars", "overseas_minute_bars", "realtime_ticks")
 
 
 @dataclass(frozen=True)
@@ -85,6 +85,30 @@ def create_warehouse_schema(connection) -> None:
     connection.execute("ALTER TABLE ohlcv_bars ADD COLUMN IF NOT EXISTS change DOUBLE")
     connection.execute("ALTER TABLE ohlcv_bars ADD COLUMN IF NOT EXISTS change_rate DOUBLE")
     connection.execute("ALTER TABLE ohlcv_bars ADD COLUMN IF NOT EXISTS amount DOUBLE")
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS overseas_minute_bars (
+            market VARCHAR NOT NULL,
+            symbol VARCHAR NOT NULL,
+            interval_minutes BIGINT NOT NULL,
+            local_business_date VARCHAR NOT NULL,
+            local_date VARCHAR NOT NULL,
+            local_time VARCHAR NOT NULL,
+            korea_date VARCHAR NOT NULL,
+            korea_time VARCHAR NOT NULL,
+            open DOUBLE NOT NULL,
+            high DOUBLE NOT NULL,
+            low DOUBLE NOT NULL,
+            close DOUBLE NOT NULL,
+            volume BIGINT NOT NULL,
+            amount DOUBLE NOT NULL,
+            created_at VARCHAR NOT NULL DEFAULT '',
+            UNIQUE (
+                market, symbol, interval_minutes, local_date, local_time
+            )
+        )
+        """
+    )
     connection.execute(
         """
         CREATE TABLE IF NOT EXISTS realtime_ticks (

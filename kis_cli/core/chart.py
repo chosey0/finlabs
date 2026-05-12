@@ -15,6 +15,9 @@ OVERSEAS_CHART_TR_ID = "FHKST03030100"
 OVERSEAS_STOCK_DAILYPRICE_PATH = "/uapi/overseas-price/v1/quotations/dailyprice"
 OVERSEAS_STOCK_DAILYPRICE_TR_ID = "HHDFS76240000"
 OVERSEAS_STOCK_DAILYPRICE_PAGE_SIZE = 100
+OVERSEAS_STOCK_MINUTE_PATH = "/uapi/overseas-price/v1/quotations/inquire-time-itemchartprice"
+OVERSEAS_STOCK_MINUTE_TR_ID = "HHDFS76950200"
+OVERSEAS_STOCK_MINUTE_PAGE_SIZE = 120
 PERIOD_TO_INTERVAL = {"D": "1d", "W": "1w", "M": "1mo", "Y": "1y"}
 PERIOD_TO_OVERSEAS_DAILYPRICE_GUBN = {"D": "0", "W": "1", "M": "2"}
 OVERSEAS_STOCK_PERIOD_MARKETS = {
@@ -42,6 +45,25 @@ class OhlcvBar:
     change: Decimal | None = None
     change_rate: Decimal | None = None
     amount: Decimal | None = None
+    raw: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class OverseasMinuteBar:
+    market: str
+    symbol: str
+    interval_minutes: int
+    local_business_date: str
+    local_date: str
+    local_time: str
+    korea_date: str
+    korea_time: str
+    open: Decimal
+    high: Decimal
+    low: Decimal
+    close: Decimal
+    volume: int
+    amount: Decimal
     raw: dict[str, Any] = field(default_factory=dict)
 
 
@@ -236,6 +258,77 @@ def fetch_overseas_stock_period_history(
     return _sorted_bars(bars.values())
 
 
+def fetch_overseas_stock_minute_bars(
+    client: KisClient,
+    *,
+    market: str,
+    symbol: str,
+    start: str,
+    interval_minutes: int = 1,
+    count: int = OVERSEAS_STOCK_MINUTE_PAGE_SIZE,
+    include_previous: bool = True,
+) -> list[OverseasMinuteBar]:
+    normalized_market = normalize_market(market)
+    if normalized_market not in OVERSEAS_STOCK_PERIOD_MARKETS:
+        raise ValueError("overseas minute bars support overseas stock markets only")
+    normalized_symbol = symbol.strip().upper()
+    if not normalized_symbol:
+        raise ValueError("symbol must not be empty")
+    if interval_minutes < 1:
+        raise ValueError("interval minutes must be at least 1")
+    if not 1 <= count <= OVERSEAS_STOCK_MINUTE_PAGE_SIZE:
+        raise ValueError("count must be between 1 and 120")
+    start_at = parse_minute_datetime(start)
+    profile = getattr(client, "profile", None)
+    if getattr(profile, "environment", "real") == "mock":
+        raise ValueError("overseas minute bars do not support mock environment")
+
+    bars: dict[tuple[str, str], OverseasMinuteBar] = {}
+    next_value = ""
+    keyb = ""
+    seen_keybs: set[str] = set()
+    while True:
+        payload = client.get(
+            OVERSEAS_STOCK_MINUTE_PATH,
+            tr_id=OVERSEAS_STOCK_MINUTE_TR_ID,
+            params={
+                "AUTH": "",
+                "EXCD": OVERSEAS_MARKET_CODES[normalized_market].upper(),
+                "SYMB": normalized_symbol,
+                "NMIN": str(interval_minutes),
+                "PINC": "1" if include_previous else "0",
+                "NEXT": next_value,
+                "NREC": str(count),
+                "FILL": "",
+                "KEYB": keyb,
+            },
+        )
+        rows = _output_rows(payload)
+        parsed = [
+            parse_overseas_minute_bar(
+                market=normalized_market,
+                symbol=normalized_symbol,
+                interval_minutes=interval_minutes,
+                row=row,
+            )
+            for row in rows
+        ]
+        for bar in parsed:
+            if _minute_bar_datetime(bar) >= start_at:
+                bars[(bar.local_date, bar.local_time)] = bar
+        if parsed and min(_minute_bar_datetime(bar) for bar in parsed) <= start_at:
+            break
+        if not _has_more_minute_data(payload) or not parsed:
+            break
+        keyb = _next_minute_keyb(parsed[-1], interval_minutes)
+        if keyb in seen_keybs:
+            break
+        seen_keybs.add(keyb)
+        next_value = "1"
+
+    return sorted(bars.values(), key=lambda bar: (bar.local_date, bar.local_time))
+
+
 def fetch_overseas_ohlcv_history(
     client: KisClient,
     *,
@@ -324,11 +417,55 @@ def parse_overseas_ohlcv_bar(
     )
 
 
+def parse_overseas_minute_bar(
+    *,
+    market: str,
+    symbol: str,
+    interval_minutes: int,
+    row: dict[str, Any],
+) -> OverseasMinuteBar:
+    return OverseasMinuteBar(
+        market=market,
+        symbol=symbol,
+        interval_minutes=interval_minutes,
+        local_business_date=_date_value(row, "tymd"),
+        local_date=_date_value(row, "xymd"),
+        local_time=_time_value(row, "xhms"),
+        korea_date=_date_value(row, "kymd"),
+        korea_time=_time_value(row, "khms"),
+        open=_required_decimal(row, "open"),
+        high=_required_decimal(row, "high"),
+        low=_required_decimal(row, "low"),
+        close=_required_decimal(row, "last"),
+        volume=_required_int(row, "evol"),
+        amount=_required_decimal(row, "eamt"),
+        raw=row,
+    )
+
+
 def parse_date(value: str) -> date:
     text = value.strip()
     if len(text) == 8 and text.isdigit():
         return datetime.strptime(text, "%Y%m%d").date()
     return date.fromisoformat(text)
+
+
+def parse_minute_datetime(value: str) -> datetime:
+    text = value.strip().replace("T", " ")
+    if not text:
+        raise ValueError("start must not be empty")
+    formats = (
+        "%Y%m%d%H%M%S",
+        "%Y%m%d%H%M",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+    )
+    for datetime_format in formats:
+        try:
+            return datetime.strptime(text, datetime_format)
+        except ValueError:
+            continue
+    raise ValueError("start must be a datetime like YYYY-MM-DD HH:MM[:SS] or YYYYMMDDHHMMSS")
 
 
 def format_date(value: date) -> str:
@@ -349,6 +486,25 @@ def bar_to_db_values(bar: OhlcvBar) -> dict[str, object]:
         "change": float(bar.change) if bar.change is not None else None,
         "change_rate": float(bar.change_rate) if bar.change_rate is not None else None,
         "amount": float(bar.amount) if bar.amount is not None else None,
+    }
+
+
+def minute_bar_to_db_values(bar: OverseasMinuteBar) -> dict[str, object]:
+    return {
+        "market": bar.market,
+        "symbol": bar.symbol,
+        "interval_minutes": bar.interval_minutes,
+        "local_business_date": bar.local_business_date,
+        "local_date": bar.local_date,
+        "local_time": bar.local_time,
+        "korea_date": bar.korea_date,
+        "korea_time": bar.korea_time,
+        "open": float(bar.open),
+        "high": float(bar.high),
+        "low": float(bar.low),
+        "close": float(bar.close),
+        "volume": bar.volume,
+        "amount": float(bar.amount),
     }
 
 
@@ -377,6 +533,24 @@ def _next_keyb(payload: dict[str, Any]) -> str:
     return ""
 
 
+def _has_more_minute_data(payload: dict[str, Any]) -> bool:
+    output1 = payload.get("output1")
+    if not isinstance(output1, dict):
+        return False
+    return str(output1.get("next") or "").strip() == "1"
+
+
+def _next_minute_keyb(bar: OverseasMinuteBar, interval_minutes: int) -> str:
+    return (_minute_bar_datetime(bar) - timedelta(minutes=interval_minutes)).strftime("%Y%m%d%H%M%S")
+
+
+def _minute_bar_datetime(bar: OverseasMinuteBar) -> datetime:
+    return datetime.strptime(
+        f"{bar.local_date.replace('-', '')}{bar.local_time.replace(':', '')}",
+        "%Y%m%d%H%M%S",
+    )
+
+
 def _overseas_condition_code(market: str, symbol: str) -> str:
     if market in OVERSEAS_CHART_CONDITION_CODES:
         return OVERSEAS_CHART_CONDITION_CODES[market]
@@ -391,6 +565,17 @@ def _date_value(row: dict[str, Any], *keys: str) -> str:
         if value:
             return parse_date(value).isoformat()
     raise ValueError(f"missing date field; expected one of: {', '.join(keys)}")
+
+
+def _time_value(row: dict[str, Any], *keys: str) -> str:
+    for key in keys:
+        value = str(row.get(key) or "").strip()
+        if not value:
+            continue
+        digits = value.zfill(6)
+        if len(digits) == 6 and digits.isdigit():
+            return f"{digits[0:2]}:{digits[2:4]}:{digits[4:6]}"
+    raise ValueError(f"missing time field; expected one of: {', '.join(keys)}")
 
 
 def _required_decimal(row: dict[str, Any], *keys: str) -> Decimal:
