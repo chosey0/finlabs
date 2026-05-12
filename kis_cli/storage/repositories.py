@@ -583,6 +583,52 @@ def query_daily_ohlcv_bars(
     return _dict_rows(connection.execute(sql, params))
 
 
+def query_overseas_minute_bars(
+    connection,
+    *,
+    symbol: str,
+    interval_minutes: int | None = None,
+    start_bound: tuple[str, str] | None = None,
+    end_bound: tuple[str, str] | None = None,
+    limit: int | None = 20,
+) -> Sequence[dict[str, object]]:
+    """Bounds are a (kind, value) pair: kind is date or ts; value is YYYY-MM-DD or YYYY-MM-DD HH:MM:SS."""
+    where = "lower(symbol) = lower(?)"
+    params: list[object] = [symbol]
+    if interval_minutes is not None:
+        where += " AND interval_minutes = ?"
+        params.append(interval_minutes)
+    ts_expr = "strptime(local_date || ' ' || local_time, '%Y-%m-%d %H:%M:%S')"
+    if start_bound is not None:
+        kind, value = start_bound
+        if kind == "date":
+            where += " AND local_date >= ?"
+            params.append(value)
+        else:
+            where += f" AND {ts_expr} >= strptime(?, '%Y-%m-%d %H:%M:%S')"
+            params.append(value)
+    if end_bound is not None:
+        kind, value = end_bound
+        if kind == "date":
+            where += " AND local_date <= ?"
+            params.append(value)
+        else:
+            where += f" AND {ts_expr} <= strptime(?, '%Y-%m-%d %H:%M:%S')"
+            params.append(value)
+
+    sql = f"""
+        SELECT market, symbol, interval_minutes, local_business_date, local_date, local_time,
+            korea_date, korea_time, open, high, low, close, volume, amount
+        FROM overseas_minute_bars
+        WHERE {where}
+        ORDER BY local_date DESC, local_time DESC
+    """
+    if limit is not None:
+        sql += " LIMIT ?"
+        params.append(limit)
+    return _dict_rows(connection.execute(sql, params))
+
+
 def insert_realtime_tick(
     connection,
     *,
