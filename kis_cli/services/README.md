@@ -66,8 +66,8 @@ from kis_cli.services.chart import collect_ohlcv_history
 1. 프로필 해석
 2. REST 토큰 확보
 3. KIS OHLCV 이력 조회
-4. `--save`가 있으면 DuckDB warehouse 초기화 후 `ohlcv_bars`에 OHLCV, 대비, 등락률, 거래대금을 저장
-5. 저장은 DuckDB bulk insert와 DB UNIQUE 제약 기반으로 중복을 방지
+4. `--save`가 있으면 선택한 저장소의 `ohlcv_bars`에 OHLCV, 대비, 등락률, 거래대금을 저장
+5. 저장은 DB 제약 기반으로 중복을 방지
 6. `--save` 실행 결과를 앱 DB의 `ingest_runs`, `api_logs`에 KST 시각으로 기록
 
 저장 interval:
@@ -83,13 +83,14 @@ CLI 예:
 
 ```bash
 kiscli chart daily --profile csq1404 --symbol 005930 --start 2026-04-01 --end 2026-05-07 --save
+kiscli chart daily --profile csq1404 --symbol AAPL --start 2026-04-01 --end 2026-05-07 --save --store supabase
 kiscli chart weekly --profile csq1404 --symbol 005930 --start 2025-01-01 --end 2026-05-07 --save
 kiscli chart history --profile csq1404 --symbol AAPL --period D --start 2026-04-01 --end 2026-05-07 --save
 ```
 
-`chart` 서비스는 `symbols` 테이블에서 `symbol`의 market을 해석합니다. `end`가 비어 있으면 오늘 날짜를 종료일로 사용합니다.
+`chart` 서비스는 로컬 DuckDB `symbols` 테이블에서 `symbol`의 market을 해석합니다. `end`가 비어 있으면 오늘 날짜를 종료일로 사용합니다.
 
-`price`와 `chart` 서비스는 REST 호출 중 토큰 만료/인증 오류가 발생하면 토큰을 강제 갱신하고 1회만 재시도합니다.
+`chart` 서비스는 REST 호출 중 토큰 만료/인증 오류가 발생하면 토큰을 강제 갱신하고 1회만 재시도합니다.
 
 ## 심볼 서비스
 
@@ -103,7 +104,7 @@ from kis_cli.services.symbols import download_and_store_symbols, search_stored_s
 
 동작:
 
-- `download_and_store_symbols()`: 시장 정규화, DB 초기화, 심볼 마스터 다운로드, 파싱 결과 upsert, 작업 로그 기록
+- `download_and_store_symbols()`: 시장 정규화, 저장소 초기화, 심볼 마스터 다운로드, 파싱 결과 upsert, 작업 로그 기록
 - `search_stored_symbols()`: 저장된 심볼을 symbol/한글명/영문명 기준으로 검색
 
 CLI 예:
@@ -111,6 +112,7 @@ CLI 예:
 ```bash
 kiscli symbols download --market KOSPI
 kiscli symbols download --market NASDAQ --db-path ./warehouse.duckdb
+kiscli symbols download --market NASDAQ --store supabase
 kiscli symbols search --query apple
 kiscli symbols search --query 삼성 --limit 10
 ```

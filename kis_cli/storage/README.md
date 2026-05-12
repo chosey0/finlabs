@@ -1,6 +1,6 @@
 # storage 패키지
 
-`kis_cli.storage`는 앱 메타데이터용 SQLite DB와 시장 데이터용 DuckDB warehouse를 분리한 저장 계층입니다. DB 연결, 스키마 생성, 중복 방지, deterministic query, DB 구조/레코드 수 확인을 담당합니다.
+`kis_cli.storage`는 앱 메타데이터용 SQLite DB, 로컬 시장 데이터용 DuckDB, 원격 canonical store용 Supabase/PostgreSQL 스키마를 분리한 저장 계층입니다. DB 연결, 스키마 생성, 중복 방지, deterministic query, DB 구조/레코드 수 확인을 담당합니다.
 
 ## 기본 DB 경로
 
@@ -19,6 +19,16 @@ kiscli symbols download --market NASDAQ --db-path ./warehouse.duckdb
 kiscli query ohlcv --symbol AAPL --db-path ./warehouse.duckdb
 ```
 
+Supabase/PostgreSQL canonical store는 파일 경로 대신 DSN 환경변수를 사용합니다.
+DSN은 Supabase Dashboard의 Connection Method 중 **Transaction pooler** connection string을 사용합니다.
+
+```bash
+export KISCLI_SUPABASE_DB_DSN='postgresql://USER:PASSWORD@HOST:6543/postgres'
+kiscli db init --store supabase
+kiscli symbols download --market NASDAQ --store supabase
+kiscli chart daily --profile csq1404 --symbol AAPL --start 2026-04-01 --end 2026-05-07 --save --store supabase
+```
+
 ## DB 초기화
 
 `init_database()`는 부모 디렉터리를 만들고 스키마를 생성합니다.
@@ -26,6 +36,7 @@ kiscli query ohlcv --symbol AAPL --db-path ./warehouse.duckdb
 ```bash
 kiscli db init
 kiscli db init --path ./warehouse.duckdb
+kiscli db init --store supabase
 ```
 
 DuckDB warehouse 테이블:
@@ -41,9 +52,37 @@ SQLite app DB 테이블:
 
 `symbols download`와 `chart ... --save`는 `ingest_runs`에 시작/종료 상태와 저장 건수를 기록하고, 관련 요청 결과는 `api_logs`에 기록합니다. 저장되는 시각 값은 KST ISO 형식입니다.
 
+## 저장소 역할
+
+권장 역할은 다음과 같습니다.
+
+```text
+SQLite app DB          # kiscli 내부 실행 상태와 로컬 작업/API 로그
+Supabase/PostgreSQL    # symbols, ohlcv_bars 원천 시장 데이터 canonical store
+DuckDB                 # 로컬 분석 mart, feature engineering, 학습용 snapshot/export
+```
+
+Supabase/PostgreSQL 연결정보는 config 파일에 직접 저장하지 않고 `KISCLI_SUPABASE_DB_DSN` 환경변수로 주입합니다. DSN은 Supabase Dashboard의 Connection Method 중 **Transaction pooler** connection string을 사용합니다. 1차 Supabase 저장 대상은 `symbols`, `ohlcv_bars`입니다. WebSocket 실시간 데이터용 `realtime_ticks`는 아직 Supabase 범위에 포함하지 않습니다.
+CLI에서 `--store supabase`를 실행할 때 환경변수가 없으면 DSN을 비공개 입력으로 요청하고, 입력값은 해당 명령 실행에만 사용합니다.
+URL 형태의 DSN은 연결 직전에 username/password를 URL encoding하므로 password에 `!@#$` 같은 특수문자가 포함되어도 그대로 입력할 수 있습니다.
+
 ## 스키마
 
-`warehouse.py`는 시장 데이터용 DuckDB 스키마를 정의하고, `app_db.py`는 앱 내부 상태용 SQLite 스키마를 정의합니다.
+`warehouse.py`는 시장 데이터용 DuckDB 스키마를 정의하고, `supabase_schema.py`는 Supabase/PostgreSQL canonical store 스키마를 정의합니다. `supabase.py`는 PostgreSQL DSN 연결, schema init, `symbols` upsert, `ohlcv_bars` 중복 방지 insert를 담당합니다. `app_db.py`는 앱 내부 상태용 SQLite 스키마를 정의합니다.
+
+Supabase/PostgreSQL canonical store 테이블:
+
+- `symbols`
+- `ohlcv_bars`
+
+Supabase/PostgreSQL에서는 날짜/시각 타입을 명확히 사용합니다.
+
+- `symbols.listed_date`: `DATE`
+- `symbols.downloaded_at`: `TIMESTAMPTZ`
+- `ohlcv_bars.trade_date`: `DATE`
+- `ohlcv_bars.fetched_at`: `TIMESTAMPTZ`
+
+DuckDB의 `ohlcv_bars.timestamp`는 Supabase/PostgreSQL에서 `trade_date`로 대응합니다.
 
 ### symbols
 
@@ -78,6 +117,8 @@ SQLite app DB 테이블:
 UNIQUE (market, symbol)
 ```
 
+Supabase/PostgreSQL에서는 `PRIMARY KEY (market, symbol)`을 사용합니다.
+
 ### ohlcv_bars
 
 OHLCV 저장 테이블입니다. 기본 OHLCV 값과 KIS 응답의 대비, 등락률, 거래대금을 함께 저장합니다.
@@ -102,6 +143,8 @@ OHLCV 저장 테이블입니다. 기본 OHLCV 값과 KIS 응답의 대비, 등�
 ```sql
 UNIQUE (market, symbol, interval, timestamp)
 ```
+
+Supabase/PostgreSQL에서는 `PRIMARY KEY (market, symbol, interval, trade_date)`를 사용합니다.
 
 ### realtime_ticks
 
@@ -160,6 +203,7 @@ query_daily_ohlcv_bars(connection, symbol="AAPL", start="2026-04-01", end="2026-
 
 `query_daily_ohlcv_bars()`는 `interval='1d'`만 조회합니다. 결과는 최신 날짜가 먼저 나오도록 정렬합니다.
 `insert_ohlcv_bars()`는 임시 CSV와 DuckDB `COPY`를 사용해 bulk insert를 수행하고, 이미 존재하는 `(market, symbol, interval, timestamp)` 행은 건너뜁니다.
+`insert_supabase_ohlcv_bars()`는 Supabase/PostgreSQL의 `(market, symbol, interval, trade_date)` primary key에 대해 `ON CONFLICT DO NOTHING`으로 중복을 방지합니다.
 
 실시간 tick:
 
@@ -232,5 +276,5 @@ kiscli query ohlcv --symbol AAPL --export ./exports/aapl.json
 CSV/JSON 컬럼은 다음 순서를 사용합니다.
 
 ```text
-market,symbol,interval,timestamp,open,high,low,close,volume
+market,symbol,interval,timestamp,open,high,low,close,volume,change,change_rate,amount
 ```

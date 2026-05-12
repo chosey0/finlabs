@@ -72,12 +72,16 @@ kiscli auth clear --all
 
 ## db 명령
 
-앱 SQLite DB와 시장 데이터용 DuckDB warehouse를 초기화하고, warehouse 구조와 레코드 수를 확인합니다.
+앱 SQLite DB와 시장 데이터용 DuckDB warehouse를 초기화하고, warehouse 구조와 레코드 수를 확인합니다. Supabase/PostgreSQL canonical store는 `--store supabase`로 스키마를 초기화합니다.
 
 ```bash
 kiscli db init
 kiscli db init --path ./warehouse.duckdb
+kiscli db init --store supabase
 ```
+
+`--store supabase`는 `KISCLI_SUPABASE_DB_DSN` 환경변수에서 PostgreSQL DSN을 읽고 `symbols`, `ohlcv_bars` 테이블과 조회용 인덱스를 생성합니다. DSN은 Supabase Dashboard의 Connection Method 중 **Transaction pooler** connection string을 사용합니다. 이 명령은 `--path`와 함께 사용할 수 없습니다.
+환경변수가 없으면 CLI가 DSN을 비공개 입력으로 요청하고, 입력값은 해당 명령 실행에만 사용합니다.
 
 ```bash
 kiscli db schema
@@ -118,7 +122,7 @@ kiscli logs api --path ./app.db
 
 ## symbols 명령
 
-KIS 심볼 마스터 파일을 다운로드해 DuckDB warehouse에 저장하고, 저장된 심볼을 검색합니다.
+KIS 심볼 마스터 파일을 다운로드해 DuckDB warehouse 또는 Supabase/PostgreSQL에 저장하고, 저장된 심볼을 검색합니다.
 
 ```bash
 kiscli symbols download --market KOSPI
@@ -126,6 +130,7 @@ kiscli symbols download --market KOSDAQ
 kiscli symbols download --market NASDAQ
 kiscli symbols download --all
 kiscli symbols download --market NASDAQ --db-path ./warehouse.duckdb
+kiscli symbols download --market NASDAQ --store supabase
 ```
 
 ```bash
@@ -134,16 +139,18 @@ kiscli symbols search --query 삼성 --limit 10
 kiscli symbols search --query apple --market NASDAQ
 ```
 
-검색 결과는 query와 더 유사한 순서로 정렬됩니다. `Symbol` 오른쪽에는 실시간 구독 등에 사용할 수 있는 `Realtime symbol`도 출력됩니다.
+검색 결과는 query와 더 유사한 순서로 정렬됩니다. `Symbol` 오른쪽에는 실시간 구독 등에 사용할 수 있는 `Realtime symbol`도 출력됩니다. `--store supabase`는 `KISCLI_SUPABASE_DB_DSN`으로 연결한 Supabase/PostgreSQL `symbols` 테이블에 upsert합니다.
+환경변수가 없으면 DSN을 비공개 입력으로 요청합니다.
 
 ## chart 명령
 
-KIS REST OHLCV 이력을 수집합니다. `--save`를 주면 DuckDB warehouse의 `ohlcv_bars`에 시가/고가/저가/종가/거래량과 대비/등락률/거래대금을 중복 방지 insert로 저장합니다.
+KIS REST OHLCV 이력을 수집합니다. `--save`를 주면 DuckDB warehouse 또는 Supabase/PostgreSQL의 `ohlcv_bars`에 시가/고가/저가/종가/거래량과 대비/등락률/거래대금을 중복 방지 insert로 저장합니다.
 
 기본 사용은 기간 단위 명령을 권장합니다.
 
 ```bash
 kiscli chart daily --profile csq1404 --symbol AAPL --start 2026-04-01 --end 2026-05-07 --save
+kiscli chart daily --profile csq1404 --symbol AAPL --start 2026-04-01 --end 2026-05-07 --save --store supabase
 kiscli chart weekly --profile csq1404 --symbol 005930 --start 2025-01-01 --end 2026-05-07
 kiscli chart monthly --profile csq1404 --symbol 005930 --start 2025-01-01 --end 2026-05-07
 kiscli chart yearly --profile csq1404 --symbol 005930 --start 2020-01-01 --end 2026-05-07
@@ -156,7 +163,8 @@ kiscli chart history --profile csq1404 --symbol 005930 --period D --start 2026-0
 kiscli chart history --profile csq1404 --symbol 005930 --period W --start 2025-01-01 --end 2026-05-07 --save
 ```
 
-`chart` 명령은 `symbols` 테이블에서 `--symbol`의 market을 해석합니다. 먼저 `kiscli symbols download`로 대상 시장의 심볼을 저장해두세요. `--end`를 생략하면 오늘 날짜까지 조회합니다.
+`chart` 명령은 로컬 DuckDB `symbols` 테이블에서 `--symbol`의 market을 해석합니다. 먼저 `kiscli symbols download`로 대상 시장의 심볼을 저장해두세요. `--save --store supabase`는 Supabase/PostgreSQL `ohlcv_bars` 테이블에 저장합니다. `--end`를 생략하면 오늘 날짜까지 조회합니다.
+환경변수가 없으면 DSN을 비공개 입력으로 요청합니다.
 
 국내 OHLCV는 응답 제한에 맞춰 가장 오래된 수집일 이전 구간을 이어 조회합니다. 해외 개별주식의 일/주/월 OHLCV는 `[해외주식] 해외주식 기간별시세` API(`/dailyprice`)를 사용합니다. 1회 최대 100건을 기준으로, 응답에 다음 `KEYB`가 있으면 같은 `BYMD`에서 다음 묶음을 이어 조회하고, `KEYB`가 없더라도 100건이 꽉 찬 응답이면 가장 오래된 응답일 이전으로 `BYMD`를 이동해 이어 조회합니다. 해외 개별주식 연봉(`Y`)은 지원하지 않습니다.
 

@@ -1,6 +1,6 @@
 # kis-cli
 
-`kis-cli`는 Korea Investment & Securities Open API를 사용해 국내/해외 주식 시장 데이터를 수집하고 로컬 DuckDB warehouse에 저장하는 Python CLI 프로젝트입니다. CLI 명령은 `kiscli`로 제공됩니다.
+`kis-cli`는 Korea Investment & Securities Open API를 사용해 국내/해외 주식 시장 데이터를 수집하고 저장하는 Python CLI 프로젝트입니다. CLI 명령은 `kiscli`로 제공됩니다.
 
 현재 구현 범위는 설정 관리, REST 인증 확인, 심볼 마스터 다운로드/검색, OHLCV 이력 수집/저장, 저장 데이터 조회/내보내기, 로컬 저장소 점검입니다.
 
@@ -17,6 +17,7 @@
 - 저장된 일봉 OHLCV 조회, table/json/csv 출력, csv/json export
 - 심볼/OHLCV 저장 작업 로그를 앱 SQLite DB에 기록
 - 앱용 SQLite DB와 시장 데이터용 DuckDB warehouse 초기화/점검
+- Supabase/PostgreSQL canonical store용 `symbols`, `ohlcv_bars` 스키마 제공
 
 ## 설치
 
@@ -24,6 +25,12 @@
 
 ```bash
 uv sync
+```
+
+Supabase/PostgreSQL 스키마 초기화까지 사용할 경우:
+
+```bash
+uv sync --extra postgres
 ```
 
 CLI 실행:
@@ -37,6 +44,12 @@ uv run kiscli --help
 ```bash
 python -m pip install -e .
 kiscli --help
+```
+
+Supabase/PostgreSQL 지원을 포함해 설치하려면:
+
+```bash
+python -m pip install -e ".[postgres]"
 ```
 
 ## 빠른 시작
@@ -67,17 +80,29 @@ uv run kiscli auth test --profile csq1404
 uv run kiscli db init
 ```
 
+Supabase/PostgreSQL canonical store를 초기화하려면 Supabase Dashboard의 Connection Method 중 **Transaction pooler** connection string을 DSN으로 사용합니다. 해당 값을 환경변수로 주입한 뒤 `--store supabase`를 실행합니다.
+
+```bash
+export KISCLI_SUPABASE_DB_DSN='postgresql://USER:PASSWORD@HOST:6543/postgres'
+uv run kiscli db init --store supabase
+```
+
+환경변수가 없으면 CLI가 DSN을 비공개 입력으로 요청하고, 입력값은 config 파일에 저장하지 않고 해당 명령 실행에만 사용합니다.
+URL 형태의 DSN에서 password에 `!@#$` 같은 특수문자가 포함되어 있으면 CLI가 연결 직전에 username/password 부분을 URL encoding합니다.
+
 1. 심볼 마스터를 다운로드합니다.
 
 ```bash
 uv run kiscli symbols download --market KOSPI
 uv run kiscli symbols download --market NASDAQ
+uv run kiscli symbols download --market NASDAQ --store supabase
 ```
 
 1. OHLCV를 수집하고 저장합니다.
 
 ```bash
 uv run kiscli chart daily --profile csq1404 --symbol 005930 --start 2026-04-01 --end 2026-05-07 --save
+uv run kiscli chart daily --profile csq1404 --symbol 005930 --start 2026-04-01 --end 2026-05-07 --save --store supabase
 ```
 
 1. 저장된 일봉 데이터를 조회합니다.
@@ -104,6 +129,18 @@ Cache:  ~/.cache/kis-cli/
 Data:   ~/.local/share/kis-cli/
 App DB: ~/.local/share/kis-cli/app.db
 Warehouse: ~/.local/share/kis-cli/warehouse.duckdb
+```
+
+## 저장소 역할
+
+현재 로컬 실행 상태와 작업 로그는 SQLite app DB에 저장합니다. 시장 데이터는 DuckDB warehouse에 저장하며, Supabase/PostgreSQL은 원천 시장 데이터를 여러 환경에서 공유하기 위한 canonical store로 확장 중입니다.
+
+권장 역할 분리는 다음과 같습니다.
+
+```text
+SQLite app DB          # kiscli 내부 실행 상태와 로컬 작업/API 로그
+Supabase/PostgreSQL    # symbols, ohlcv_bars 원천 시장 데이터
+DuckDB                 # 로컬 분석 mart, feature engineering, 학습용 snapshot/export
 ```
 
 API 키, API 시크릿, 계좌번호, 토큰은 패키지 소스 안에 저장하지 않습니다. CLI 출력에서도 민감 값은 마스킹합니다.
@@ -163,6 +200,16 @@ uv run kiscli auth clear --profile csq1404
 uv run kiscli db init
 uv run kiscli db init --path ./warehouse.duckdb
 ```
+
+Supabase/PostgreSQL canonical store 초기화:
+
+```bash
+export KISCLI_SUPABASE_DB_DSN='postgresql://USER:PASSWORD@HOST:6543/postgres'
+uv run kiscli db init --store supabase
+```
+
+`--store supabase`는 `symbols`, `ohlcv_bars` 테이블과 조회용 인덱스를 생성합니다. 연결 문자열은 Supabase Dashboard의 Connection Method 중 **Transaction pooler** connection string을 사용하고, config 파일에 저장하지 않고 `KISCLI_SUPABASE_DB_DSN` 환경변수에서 읽습니다.
+환경변수가 없으면 CLI가 DSN을 비공개 입력으로 요청합니다.
 
 DB 구조 확인:
 
@@ -225,8 +272,12 @@ uv run kiscli logs api --endpoint ohlcv
 uv run kiscli symbols download --market KOSPI
 uv run kiscli symbols download --market KOSDAQ
 uv run kiscli symbols download --market NASDAQ
+uv run kiscli symbols download --market NASDAQ --store supabase
 uv run kiscli symbols download --all
 ```
+
+`--store duckdb`가 기본값입니다. `--store supabase`를 사용하면 `KISCLI_SUPABASE_DB_DSN`으로 연결한 Supabase/PostgreSQL의 `symbols` 테이블에 upsert합니다. `--db-path`는 DuckDB 전용 옵션입니다.
+환경변수가 없으면 DSN을 비공개 입력으로 요청합니다.
 
 커스텀 DB 경로:
 
@@ -265,7 +316,11 @@ uv run kiscli chart daily --profile csq1404 --symbol 005930 --start 2026-04-01 -
 ```bash
 uv run kiscli chart daily --profile csq1404 --symbol 005930 --start 2026-04-01 --end 2026-05-07 --save
 uv run kiscli chart daily --profile csq1404 --symbol AAPL --start 2026-04-01 --end 2026-05-07 --save
+uv run kiscli chart daily --profile csq1404 --symbol AAPL --start 2026-04-01 --end 2026-05-07 --save --store supabase
 ```
+
+`--save --store supabase`는 Supabase/PostgreSQL의 `ohlcv_bars` 테이블에 중복 방지 insert를 수행합니다. 현재 `chart` 명령의 market 해석은 로컬 DuckDB `symbols` 테이블을 사용하므로, 먼저 대상 심볼을 로컬에도 다운로드해두어야 합니다.
+환경변수가 없으면 DSN을 비공개 입력으로 요청합니다.
 
 기간 단위 명령:
 
