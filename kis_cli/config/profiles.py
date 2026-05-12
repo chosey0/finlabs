@@ -323,6 +323,23 @@ def _upsert_env_values(
     _chmod_owner_read_write(path)
 
 
+def upsert_env_value(path: Path, key: str, value: str) -> None:
+    existing: dict[str, str] = {}
+    if path.exists():
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if not line.strip() or line.lstrip().startswith("#") or "=" not in line:
+                continue
+            existing_key, existing_value = line.split("=", 1)
+            existing[existing_key] = existing_value
+
+    existing[key] = _quote_env_value(value)
+    os.environ[key] = value
+    content = "\n".join(f"{name}={stored}" for name, stored in sorted(existing.items())) + "\n"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    _chmod_owner_read_write(path)
+
+
 def _remove_env_values(path: Path, *, prefix: str) -> None:
     if not path.exists():
         return

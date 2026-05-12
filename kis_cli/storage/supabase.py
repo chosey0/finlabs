@@ -75,7 +75,7 @@ def _connect(dsn: str, *, connect_factory: Callable[[str], object] | None = None
         ) from exc
 
     try:
-        return psycopg.connect(dsn)
+        return psycopg.connect(dsn, prepare_threshold=None)
     except psycopg.Error as exc:
         details = _sanitize_connection_error(str(exc))
         suffix = f" Details: {details}" if details else ""
@@ -161,8 +161,11 @@ def upsert_supabase_symbols(connection, records) -> int:
         )
         for row in rows
     ]
-    _executemany(connection, statement, parameters)
-    _commit(connection)
+    try:
+        _executemany(connection, statement, parameters)
+        _commit(connection)
+    except Exception as exc:
+        raise ValueError(_supabase_write_error_message(exc)) from exc
     return len(rows)
 
 
@@ -182,29 +185,32 @@ def insert_supabase_ohlcv_bars(connection, records) -> int:
         ON CONFLICT (market, symbol, interval, trade_date) DO NOTHING
     """
     inserted = 0
-    for row in _deduplicate_ohlcv_rows(rows):
-        cursor = connection.execute(
-            statement,
-            (
-                row["market"],
-                row["symbol"],
-                row["interval"],
-                row["timestamp"],
-                row["open"],
-                row["high"],
-                row["low"],
-                row["close"],
-                row["volume"],
-                row.get("change"),
-                row.get("change_rate"),
-                row.get("amount"),
-                fetched_at,
-                fetched_at,
-                fetched_at,
-            ),
-        )
-        inserted += max(int(getattr(cursor, "rowcount", 0)), 0)
-    _commit(connection)
+    try:
+        for row in _deduplicate_ohlcv_rows(rows):
+            cursor = connection.execute(
+                statement,
+                (
+                    row["market"],
+                    row["symbol"],
+                    row["interval"],
+                    row["timestamp"],
+                    row["open"],
+                    row["high"],
+                    row["low"],
+                    row["close"],
+                    row["volume"],
+                    row.get("change"),
+                    row.get("change_rate"),
+                    row.get("amount"),
+                    fetched_at,
+                    fetched_at,
+                    fetched_at,
+                ),
+            )
+            inserted += max(int(getattr(cursor, "rowcount", 0)), 0)
+        _commit(connection)
+    except Exception as exc:
+        raise ValueError(_supabase_write_error_message(exc)) from exc
     return inserted
 
 
@@ -250,3 +256,13 @@ def _sanitize_connection_error(message: str) -> str:
         flags=re.IGNORECASE,
     )
     return masked.strip()
+
+
+def _supabase_write_error_message(exc: Exception) -> str:
+    details = _sanitize_connection_error(str(exc))
+    suffix = f" Details: {details}" if details else ""
+    return (
+        "failed to write to Supabase/PostgreSQL. "
+        "If you use Supabase Transaction pooler, prepared statements are disabled automatically."
+        f"{suffix}"
+    )

@@ -62,8 +62,8 @@ Supabase/PostgreSQL    # symbols, ohlcv_bars 원천 시장 데이터 canonical s
 DuckDB                 # 로컬 분석 mart, feature engineering, 학습용 snapshot/export
 ```
 
-Supabase/PostgreSQL 연결정보는 config 파일에 직접 저장하지 않고 `KISCLI_SUPABASE_DB_DSN` 환경변수로 주입합니다. DSN은 Supabase Dashboard의 Connection Method 중 **Transaction pooler** connection string을 사용합니다. 1차 Supabase 저장 대상은 `symbols`, `ohlcv_bars`입니다. WebSocket 실시간 데이터용 `realtime_ticks`는 아직 Supabase 범위에 포함하지 않습니다.
-CLI에서 `--store supabase`를 실행할 때 환경변수가 없으면 DSN을 비공개 입력으로 요청하고, 입력값은 해당 명령 실행에만 사용합니다.
+Supabase/PostgreSQL 연결정보는 `KISCLI_SUPABASE_DB_DSN` 환경변수 또는 사용자 config 디렉터리의 `profiles.env`에서 읽습니다. DSN은 Supabase Dashboard의 Connection Method 중 **Transaction pooler** connection string을 사용합니다. 1차 Supabase 저장 대상은 `symbols`, `ohlcv_bars`입니다. WebSocket 실시간 데이터용 `realtime_ticks`는 아직 Supabase 범위에 포함하지 않습니다.
+CLI에서 `--store supabase`를 실행할 때 환경변수가 없으면 `profiles.env`에서 DSN을 찾고, 저장된 값도 없으면 비공개 입력으로 요청한 뒤 `profiles.env`에 저장해 이후 Supabase 명령에서 재사용합니다.
 URL 형태의 DSN은 연결 직전에 username/password를 URL encoding하므로 password에 `!@#$` 같은 특수문자가 포함되어도 그대로 입력할 수 있습니다.
 
 ## 스키마

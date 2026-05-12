@@ -81,7 +81,7 @@ kiscli db init --store supabase
 ```
 
 `--store supabase`는 `KISCLI_SUPABASE_DB_DSN` 환경변수에서 PostgreSQL DSN을 읽고 `symbols`, `ohlcv_bars` 테이블과 조회용 인덱스를 생성합니다. DSN은 Supabase Dashboard의 Connection Method 중 **Transaction pooler** connection string을 사용합니다. 이 명령은 `--path`와 함께 사용할 수 없습니다.
-환경변수가 없으면 CLI가 DSN을 비공개 입력으로 요청하고, 입력값은 해당 명령 실행에만 사용합니다.
+환경변수가 없으면 CLI가 `profiles.env`에서 DSN을 찾고, 저장된 값도 없으면 비공개 입력으로 요청한 뒤 `profiles.env`에 저장해 이후 Supabase 명령에서 재사용합니다.
 
 ```bash
 kiscli db schema
@@ -140,7 +140,7 @@ kiscli symbols search --query apple --market NASDAQ
 ```
 
 검색 결과는 query와 더 유사한 순서로 정렬됩니다. `Symbol` 오른쪽에는 실시간 구독 등에 사용할 수 있는 `Realtime symbol`도 출력됩니다. `--store supabase`는 `KISCLI_SUPABASE_DB_DSN`으로 연결한 Supabase/PostgreSQL `symbols` 테이블에 upsert합니다.
-환경변수가 없으면 DSN을 비공개 입력으로 요청합니다.
+환경변수가 없고 `profiles.env`에도 값이 없으면 DSN을 비공개 입력으로 요청한 뒤 저장합니다.
 
 ## chart 명령
 
@@ -164,7 +164,7 @@ kiscli chart history --profile csq1404 --symbol 005930 --period W --start 2025-0
 ```
 
 `chart` 명령은 로컬 DuckDB `symbols` 테이블에서 `--symbol`의 market을 해석합니다. 먼저 `kiscli symbols download`로 대상 시장의 심볼을 저장해두세요. `--save --store supabase`는 Supabase/PostgreSQL `ohlcv_bars` 테이블에 저장합니다. `--end`를 생략하면 오늘 날짜까지 조회합니다.
-환경변수가 없으면 DSN을 비공개 입력으로 요청합니다.
+환경변수가 없고 `profiles.env`에도 값이 없으면 DSN을 비공개 입력으로 요청한 뒤 저장합니다.
 
 국내 OHLCV는 응답 제한에 맞춰 가장 오래된 수집일 이전 구간을 이어 조회합니다. 해외 개별주식의 일/주/월 OHLCV는 `[해외주식] 해외주식 기간별시세` API(`/dailyprice`)를 사용합니다. 1회 최대 100건을 기준으로, 응답에 다음 `KEYB`가 있으면 같은 `BYMD`에서 다음 묶음을 이어 조회하고, `KEYB`가 없더라도 100건이 꽉 찬 응답이면 가장 오래된 응답일 이전으로 `BYMD`를 이동해 이어 조회합니다. 해외 개별주식 연봉(`Y`)은 지원하지 않습니다.
 

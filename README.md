@@ -87,7 +87,7 @@ export KISCLI_SUPABASE_DB_DSN='postgresql://USER:PASSWORD@HOST:6543/postgres'
 uv run kiscli db init --store supabase
 ```
 
-환경변수가 없으면 CLI가 DSN을 비공개 입력으로 요청하고, 입력값은 config 파일에 저장하지 않고 해당 명령 실행에만 사용합니다.
+환경변수가 없으면 CLI가 DSN을 비공개 입력으로 요청하고, 입력값은 사용자 config 디렉터리의 `profiles.env`에 저장해 이후 Supabase 명령에서 재사용합니다.
 URL 형태의 DSN에서 password에 `!@#$` 같은 특수문자가 포함되어 있으면 CLI가 연결 직전에 username/password 부분을 URL encoding합니다.
 
 1. 심볼 마스터를 다운로드합니다.
@@ -208,8 +208,8 @@ export KISCLI_SUPABASE_DB_DSN='postgresql://USER:PASSWORD@HOST:6543/postgres'
 uv run kiscli db init --store supabase
 ```
 
-`--store supabase`는 `symbols`, `ohlcv_bars` 테이블과 조회용 인덱스를 생성합니다. 연결 문자열은 Supabase Dashboard의 Connection Method 중 **Transaction pooler** connection string을 사용하고, config 파일에 저장하지 않고 `KISCLI_SUPABASE_DB_DSN` 환경변수에서 읽습니다.
-환경변수가 없으면 CLI가 DSN을 비공개 입력으로 요청합니다.
+`--store supabase`는 `symbols`, `ohlcv_bars` 테이블과 조회용 인덱스를 생성합니다. 연결 문자열은 Supabase Dashboard의 Connection Method 중 **Transaction pooler** connection string을 사용하고, `KISCLI_SUPABASE_DB_DSN` 환경변수 또는 `profiles.env`에서 읽습니다.
+환경변수가 없고 `profiles.env`에도 값이 없으면 CLI가 DSN을 비공개 입력으로 요청한 뒤 저장합니다.
 
 DB 구조 확인:
 
@@ -277,7 +277,7 @@ uv run kiscli symbols download --all
 ```
 
 `--store duckdb`가 기본값입니다. `--store supabase`를 사용하면 `KISCLI_SUPABASE_DB_DSN`으로 연결한 Supabase/PostgreSQL의 `symbols` 테이블에 upsert합니다. `--db-path`는 DuckDB 전용 옵션입니다.
-환경변수가 없으면 DSN을 비공개 입력으로 요청합니다.
+환경변수가 없고 `profiles.env`에도 값이 없으면 DSN을 비공개 입력으로 요청한 뒤 저장합니다.
 
 커스텀 DB 경로:
 
@@ -320,7 +320,7 @@ uv run kiscli chart daily --profile csq1404 --symbol AAPL --start 2026-04-01 --e
 ```
 
 `--save --store supabase`는 Supabase/PostgreSQL의 `ohlcv_bars` 테이블에 중복 방지 insert를 수행합니다. 현재 `chart` 명령의 market 해석은 로컬 DuckDB `symbols` 테이블을 사용하므로, 먼저 대상 심볼을 로컬에도 다운로드해두어야 합니다.
-환경변수가 없으면 DSN을 비공개 입력으로 요청합니다.
+환경변수가 없고 `profiles.env`에도 값이 없으면 DSN을 비공개 입력으로 요청한 뒤 저장합니다.
 
 기간 단위 명령:
 

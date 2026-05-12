@@ -184,7 +184,7 @@ def test_symbols_download_all_uses_progressbar(tmp_path, monkeypatch) -> None:
     assert "Symbols downloaded" in result.output
 
 
-def test_symbols_download_supabase_prompts_for_missing_dsn(monkeypatch) -> None:
+def test_symbols_download_supabase_prompts_for_missing_dsn(tmp_path, monkeypatch) -> None:
     captured: dict[str, str | None] = {}
 
     def fake_download_and_store_symbols(*, market: str, db_path, store: str, supabase_dsn: str | None):
@@ -200,6 +200,7 @@ def test_symbols_download_supabase_prompts_for_missing_dsn(monkeypatch) -> None:
         )
 
     monkeypatch.delenv("KISCLI_SUPABASE_DB_DSN", raising=False)
+    monkeypatch.setattr("kis_cli.cli.common.default_config_file", lambda: tmp_path / "config.yaml")
     monkeypatch.setattr(
         "kis_cli.cli.symbols.download_and_store_symbols",
         fake_download_and_store_symbols,

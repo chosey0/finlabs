@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 from types import SimpleNamespace
 
@@ -54,8 +55,9 @@ def test_init_supabase_database_wraps_invalid_dsn(monkeypatch) -> None:
     class FakePsycopgError(Exception):
         pass
 
-    def fake_connect(dsn: str):
+    def fake_connect(dsn: str, **kwargs):
         assert dsn == "Invalid DSN"
+        assert kwargs == {"prepare_threshold": None}
         raise FakePsycopgError("missing '=' after 'Invalid' in connection info string")
 
     monkeypatch.setitem(
@@ -72,7 +74,8 @@ def test_init_supabase_database_includes_sanitized_connection_details(monkeypatc
     class FakePsycopgError(Exception):
         pass
 
-    def fake_connect(dsn: str):
+    def fake_connect(dsn: str, **kwargs):
+        assert kwargs == {"prepare_threshold": None}
         raise FakePsycopgError(f"could not connect with {dsn} password=secret")
 
     monkeypatch.setitem(
@@ -194,7 +197,7 @@ def test_db_init_supabase_command_reports_schema(monkeypatch) -> None:
     assert "symbols, ohlcv_bars" in result.output
 
 
-def test_db_init_supabase_prompts_for_missing_dsn(monkeypatch) -> None:
+def test_db_init_supabase_prompts_for_missing_dsn(tmp_path, monkeypatch) -> None:
     captured: dict[str, str | None] = {}
 
     def fake_init_supabase_database(*, dsn=None):
@@ -205,6 +208,7 @@ def test_db_init_supabase_prompts_for_missing_dsn(monkeypatch) -> None:
         )
 
     monkeypatch.delenv("KISCLI_SUPABASE_DB_DSN", raising=False)
+    monkeypatch.setattr("kis_cli.cli.common.default_config_file", lambda: tmp_path / "config.yaml")
     monkeypatch.setattr("kis_cli.cli.db.init_supabase_database", fake_init_supabase_database)
 
     result = runner.invoke(
@@ -217,6 +221,43 @@ def test_db_init_supabase_prompts_for_missing_dsn(monkeypatch) -> None:
     assert captured["dsn"] == "postgresql://prompted"
     assert "Supabase PostgreSQL DSN" in result.output
     assert "postgresql://prompted" not in result.output
+
+
+def test_db_init_supabase_reuses_prompted_dsn_from_profiles_env(tmp_path, monkeypatch) -> None:
+    captured: list[str | None] = []
+
+    def fake_init_supabase_database(*, dsn=None):
+        captured.append(dsn)
+        return SupabaseDatabaseInitResult(
+            dsn_env="KISCLI_SUPABASE_DB_DSN",
+            tables=("symbols", "ohlcv_bars"),
+        )
+
+    monkeypatch.delenv("KISCLI_SUPABASE_DB_DSN", raising=False)
+    monkeypatch.setattr("kis_cli.cli.common.default_config_file", lambda: tmp_path / "config.yaml")
+    monkeypatch.setattr("kis_cli.cli.db.init_supabase_database", fake_init_supabase_database)
+
+    first = runner.invoke(
+        app,
+        ["db", "init", "--store", "supabase"],
+        input="postgresql://postgres:Army4914!@#$@db.example.supabase.co:6543/postgres\n",
+    )
+
+    assert first.exit_code == 0
+    env = (tmp_path / "profiles.env").read_text(encoding="utf-8")
+    assert 'KISCLI_SUPABASE_DB_DSN="postgresql://postgres:Army4914!@#$@db.example.supabase.co:6543/postgres"' in env
+    assert captured == ["postgresql://postgres:Army4914!@#$@db.example.supabase.co:6543/postgres"]
+
+    monkeypatch.delenv("KISCLI_SUPABASE_DB_DSN", raising=False)
+    second = runner.invoke(app, ["db", "init", "--store", "supabase"])
+
+    assert second.exit_code == 0
+    assert "Supabase PostgreSQL DSN" not in second.output
+    assert captured == [
+        "postgresql://postgres:Army4914!@#$@db.example.supabase.co:6543/postgres",
+        None,
+    ]
+    assert "KISCLI_SUPABASE_DB_DSN" in os.environ
 
 
 def test_db_init_supabase_rejects_path() -> None:
@@ -280,6 +321,51 @@ def test_upsert_supabase_symbols_executes_conflict_update() -> None:
     assert "ON CONFLICT (market, symbol) DO UPDATE" in executed[0][0]
     assert executed[0][1][0:2] == ("NASDAQ", "AAPL")
     assert executed[-1] == ("COMMIT", None)
+
+
+def test_upsert_supabase_symbols_wraps_write_errors() -> None:
+    class FakeCursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def executemany(self, statement: str, parameters: list[tuple[object, ...]]) -> None:
+            raise RuntimeError('prepared statement "_pg3_0" already exists')
+
+    class FakeConnection:
+        def cursor(self):
+            return FakeCursor()
+
+    with pytest.raises(ValueError, match="failed to write to Supabase/PostgreSQL") as exc_info:
+        upsert_supabase_symbols(
+            FakeConnection(),
+            [
+                {
+                    "market": "NASDAQ",
+                    "symbol": "AAPL",
+                    "standard_code": None,
+                    "realtime_symbol": "DNASAAPL",
+                    "korean_name": "애플",
+                    "english_name": "Apple Inc.",
+                    "security_type": "stock",
+                    "currency": "USD",
+                    "exchange_id": "NAS",
+                    "exchange_code": "NAS",
+                    "exchange_name": "NASDAQ",
+                    "country_code": "US",
+                    "listed_date": None,
+                    "base_price": None,
+                    "lot_size": None,
+                    "raw_source": "nasmst.cod",
+                    "raw": '{"symbol": "AAPL"}',
+                    "downloaded_at": "2026-05-07T00:00:00+09:00",
+                }
+            ],
+        )
+
+    assert "prepared statements are disabled automatically" in str(exc_info.value)
 
 
 def test_insert_supabase_ohlcv_bars_uses_trade_date_conflict_key() -> None:

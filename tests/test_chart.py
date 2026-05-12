@@ -513,9 +513,10 @@ def test_chart_daily_supabase_prompts_for_missing_dsn(monkeypatch, tmp_path: Pat
                 )
             ],
             store="supabase",
-        )
+    )
 
     monkeypatch.delenv("KISCLI_SUPABASE_DB_DSN", raising=False)
+    monkeypatch.setattr("kis_cli.cli.common.default_config_file", lambda: tmp_path / "config.yaml")
     monkeypatch.setattr("kis_cli.cli.chart.collect_ohlcv_history", fake_collect_ohlcv_history)
 
     result = runner.invoke(

@@ -9,6 +9,9 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from kis_cli.config.paths import default_config_file
+from kis_cli.config.profiles import ENV_FILE_NAME, upsert_env_value
+from kis_cli.config.resolver import read_env_file
 from kis_cli.storage import SUPABASE_DSN_ENV
 
 console = Console()
@@ -79,10 +82,17 @@ def result_table() -> Table:
 def prompt_supabase_dsn_if_missing() -> str | None:
     if os.environ.get(SUPABASE_DSN_ENV):
         return None
+    env_path = default_config_file().parent / ENV_FILE_NAME
+    env_values = read_env_file(env_path)
+    if env_values.get(SUPABASE_DSN_ENV):
+        os.environ[SUPABASE_DSN_ENV] = env_values[SUPABASE_DSN_ENV]
+        return None
     dsn = typer.prompt(
         f"{SUPABASE_DSN_ENV} is not set. Supabase PostgreSQL DSN",
         hide_input=True,
     )
     if not dsn.strip():
         raise typer.BadParameter("Supabase PostgreSQL DSN must not be empty")
-    return dsn.strip()
+    cleaned = dsn.strip()
+    upsert_env_value(env_path, SUPABASE_DSN_ENV, cleaned)
+    return cleaned
