@@ -6,16 +6,10 @@ from pathlib import Path
 
 import duckdb
 
-from kis_cli.core.chart import (
-    OhlcvBar,
-    OverseasMinuteBar,
-    bar_to_db_values,
-    fetch_ohlcv_history,
-    fetch_overseas_stock_minute_bars,
-    minute_bar_to_db_values,
-    normalize_period,
-)
-from kis_cli.services.auth import call_with_token_refresh_retry
+from kis import KisClient, OhlcvBar, OVERSEAS_MARKET_CODES, OverseasMinuteBar
+from kis.parsers import parse_date
+
+from kis_cli.services.auth import call_with_sdk_client
 from kis_cli.storage import (
     connect,
     connect_supabase,
@@ -26,6 +20,7 @@ from kis_cli.storage import (
     insert_supabase_ohlcv_bars,
 )
 from kis_cli.storage.app_repositories import finish_ingest_run, record_api_log, start_ingest_run
+from kis_cli.storage.mappers import bar_to_db_values, minute_bar_to_db_values
 from kis_cli.storage.repositories import find_symbol_markets, insert_ohlcv_bars, insert_overseas_minute_bars
 
 
@@ -90,8 +85,8 @@ def collect_ohlcv_history(
         )
 
     try:
-        bars = call_with_token_refresh_retry(
-            lambda client: fetch_ohlcv_history(
+        bars = call_with_sdk_client(
+            lambda client: _fetch_ohlcv_history_async(
                 client,
                 market=resolved_market,
                 symbol=normalized_symbol,
@@ -180,8 +175,8 @@ def collect_overseas_minutes(
         )
 
     try:
-        bars = call_with_token_refresh_retry(
-            lambda client: fetch_overseas_stock_minute_bars(
+        bars = call_with_sdk_client(
+            lambda client: _fetch_overseas_minutes_async(
                 client,
                 market=resolved_market,
                 symbol=normalized_symbol,
@@ -259,6 +254,79 @@ def resolve_symbol_market(symbol: str, *, db_path: Path | None = None) -> str:
 
 def _period_to_interval(period: str) -> str:
     return {"D": "1d", "W": "1w", "M": "1mo", "Y": "1y"}[normalize_period(period)]
+
+
+def normalize_period(period: str) -> str:
+    normalized = period.strip().upper()
+    if normalized not in {"D", "W", "M", "Y"}:
+        raise ValueError("period must be one of: D, W, M, Y")
+    return normalized
+
+
+async def _fetch_ohlcv_history_async(
+    client: KisClient,
+    *,
+    market: str,
+    symbol: str,
+    start: str,
+    end: str,
+    period: str,
+    adjusted: bool,
+    max_pages: int,
+) -> list[OhlcvBar]:
+    normalized_period = normalize_period(period)
+    if parse_date(start) > parse_date(end):
+        raise ValueError("start must be on or before end")
+    if market in {"KOSPI", "KOSDAQ"}:
+        method = {
+            "D": client.domestic.chart.daily,
+            "W": client.domestic.chart.weekly,
+            "M": client.domestic.chart.monthly,
+            "Y": client.domestic.chart.yearly,
+        }[normalized_period]
+        return await method(
+            symbol,
+            start=start,
+            end=end,
+            market=market,
+            adjusted=adjusted,
+            max_pages=max_pages,
+        )
+    if normalized_period == "Y":
+        raise ValueError("overseas stock period price supports only D, W, or M")
+    return await client.overseas.chart.daily(
+        symbol,
+        exchange=OVERSEAS_MARKET_CODES[market].upper(),  # type: ignore[arg-type]
+        start=start,
+        end=end,
+        period=normalized_period,  # type: ignore[arg-type]
+        market=market,
+        adjusted=adjusted,
+        max_pages=max_pages,
+    )
+
+
+async def _fetch_overseas_minutes_async(
+    client: KisClient,
+    *,
+    market: str,
+    symbol: str,
+    start: str,
+    interval_minutes: int,
+    count: int,
+    include_previous: bool,
+) -> list[OverseasMinuteBar]:
+    if market not in OVERSEAS_MARKET_CODES:
+        raise ValueError("overseas minute bars support overseas stock markets only")
+    return await client.overseas.chart.minute(
+        symbol,
+        exchange=OVERSEAS_MARKET_CODES[market].upper(),  # type: ignore[arg-type]
+        start=start,
+        interval_minutes=interval_minutes,
+        count=count,
+        include_previous=include_previous,
+        market=market,
+    )
 
 
 def _normalize_store(value: str) -> str:

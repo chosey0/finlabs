@@ -3,7 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from kis_cli.core.symbol_master import download_symbol_master, normalize_market, record_to_db_values
+from kis import download_symbol_master, normalize_market
+
 from kis_cli.storage import (
     connect,
     connect_supabase,
@@ -13,7 +14,9 @@ from kis_cli.storage import (
     upsert_supabase_symbols,
 )
 from kis_cli.storage.app_repositories import finish_ingest_run, record_api_log, start_ingest_run
+from kis_cli.storage.mappers import record_to_db_values
 from kis_cli.storage.repositories import search_symbols, upsert_symbols
+from kis_cli.utils.time import now_kst_iso
 
 
 @dataclass(frozen=True)
@@ -45,7 +48,7 @@ def download_and_store_symbols(
         market=normalized,
     )
     try:
-        records = download_symbol_master(normalized)
+        records = download_symbol_master(normalized, downloaded_at=now_kst_iso())
         values = [record_to_db_values(record) for record in records]
         if normalized_store == "supabase":
             with connect_supabase(dsn=supabase_dsn) as connection:

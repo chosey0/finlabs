@@ -7,9 +7,9 @@ import typer
 from rich import box
 from rich.panel import Panel
 
+from kis import KisApiError, KisAuthError
+
 from kis_cli.cli.common import console, prompt_supabase_dsn_if_missing, result_table
-from kis_cli.core.auth import KisAuthError
-from kis_cli.core.client import KisApiError
 from kis_cli.services.chart import (
     ChartHistoryResult,
     OverseasMinuteResult,

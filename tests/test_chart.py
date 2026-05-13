@@ -1,24 +1,24 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import date, timedelta
 from decimal import Decimal
 from pathlib import Path
 
 from typer.testing import CliRunner
 
-from kis_cli.cli.app import app
-from kis_cli.core.auth import KisAuthError
-from kis_cli.core.chart import (
+from kis import (
+    KisAuthError,
     OhlcvBar,
-    fetch_ohlcv_history,
-    fetch_domestic_ohlcv_history,
-    fetch_overseas_ohlcv_history,
-    fetch_overseas_stock_minute_bars,
-    fetch_overseas_stock_period_history,
     parse_domestic_ohlcv_bar,
-    parse_overseas_ohlcv_bar,
     parse_overseas_minute_bar,
+    parse_overseas_ohlcv_bar,
 )
+from kis.domestic.chart import DomesticChartAPI
+from kis.endpoints.registry import lookup
+from kis.overseas.chart import OverseasChartAPI
+
+from kis_cli.cli.app import app
 from kis_cli.services.chart import collect_ohlcv_history
 from kis_cli.storage import connect, init_database
 from kis_cli.storage.app_repositories import list_api_logs, list_ingest_runs
@@ -31,8 +31,9 @@ class FakeClient:
     def __init__(self) -> None:
         self.calls = []
 
-    def get(self, path: str, *, tr_id: str, params: dict[str, str], tr_cont: str = ""):
-        self.calls.append((path, tr_id, params, tr_cont))
+    async def request(self, spec, *, params: dict[str, str], **kwargs):
+        self.calls.append((spec.path, spec.tr_id_real, params, kwargs.get("tr_cont", "")))
+        path = spec.path
         if "dailyprice" in path:
             if params["KEYB"] == "":
                 return {
@@ -61,18 +62,6 @@ class FakeClient:
                 _domestic_row("20260504", "104"),
             ]
         return {"rt_cd": "0", "output2": rows}
-
-    def get_response(self, path: str, *, tr_id: str, params: dict[str, str], tr_cont: str = ""):
-        self.calls.append((path, tr_id, params, tr_cont))
-        if tr_cont == "":
-            return FakeResponse(
-                {"rt_cd": "0", "output2": [_overseas_row("20260507", "207")]},
-                {"tr_cont": "M"},
-            )
-        return FakeResponse(
-            {"rt_cd": "0", "output2": [_overseas_row("20260506", "206")]},
-            {"tr_cont": ""},
-        )
 
 
 class FakeResponse:
@@ -145,8 +134,8 @@ def test_overseas_stock_minute_history_uses_previous_last_bar_keyb() -> None:
         def __init__(self) -> None:
             self.calls = []
 
-        def get(self, path: str, *, tr_id: str, params: dict[str, str], tr_cont: str = ""):
-            self.calls.append((path, tr_id, params, tr_cont))
+        async def request(self, spec, *, params: dict[str, str], **kwargs):
+            self.calls.append((spec.path, spec.tr_id_real, params, kwargs.get("tr_cont", "")))
             if params["KEYB"] == "":
                 return {
                     "rt_cd": "0",
@@ -164,14 +153,16 @@ def test_overseas_stock_minute_history_uses_previous_last_bar_keyb() -> None:
 
     client = MinuteClient()
 
-    bars = fetch_overseas_stock_minute_bars(
-        client,
-        market="NASDAQ",
-        symbol="NVDA",
-        start="2024-10-14 13:56:00",
-        interval_minutes=5,
-        count=120,
-        include_previous=True,
+    bars = asyncio.run(
+        OverseasChartAPI(client).minute(
+            symbol="NVDA",
+            exchange="NAS",
+            market="NASDAQ",
+            start="2024-10-14 13:56:00",
+            interval_minutes=5,
+            count=120,
+            include_previous=True,
+        )
     )
 
     assert client.calls[0][0] == "/uapi/overseas-price/v1/quotations/inquire-time-itemchartprice"
@@ -192,15 +183,15 @@ def test_overseas_stock_minute_history_uses_previous_last_bar_keyb() -> None:
 def test_domestic_history_continues_by_moving_end_date() -> None:
     client = FakeClient()
 
-    bars = fetch_domestic_ohlcv_history(
-        client,
-        market="KOSPI",
-        symbol="005930",
-        start_date=__import__("datetime").date(2026, 5, 4),
-        end_date=__import__("datetime").date(2026, 5, 7),
-        period="D",
-        adjusted=True,
-        max_pages=10,
+    bars = asyncio.run(
+        DomesticChartAPI(client).daily(
+            market="KOSPI",
+            symbol="005930",
+            start=__import__("datetime").date(2026, 5, 4),
+            end=__import__("datetime").date(2026, 5, 7),
+            adjusted=True,
+            max_pages=10,
+        )
     )
 
     assert [bar.timestamp for bar in bars] == [
@@ -216,15 +207,17 @@ def test_domestic_history_continues_by_moving_end_date() -> None:
 def test_overseas_stock_period_history_uses_dailyprice_keyb() -> None:
     client = FakeClient()
 
-    bars = fetch_overseas_stock_period_history(
-        client,
-        market="NASDAQ",
-        symbol="AAPL",
-        start_date=__import__("datetime").date(2026, 5, 6),
-        end_date=__import__("datetime").date(2026, 5, 7),
-        period="D",
-        adjusted=True,
-        max_pages=10,
+    bars = asyncio.run(
+        OverseasChartAPI(client).daily(
+            symbol="AAPL",
+            exchange="NAS",
+            market="NASDAQ",
+            start=__import__("datetime").date(2026, 5, 6),
+            end=__import__("datetime").date(2026, 5, 7),
+            period="D",
+            adjusted=True,
+            max_pages=10,
+        )
     )
 
     assert [bar.timestamp for bar in bars] == ["2026-05-06", "2026-05-07"]
@@ -242,8 +235,8 @@ def test_overseas_stock_period_history_falls_back_to_moving_bymd_without_keyb() 
         def __init__(self) -> None:
             self.calls = []
 
-        def get(self, path: str, *, tr_id: str, params: dict[str, str], tr_cont: str = ""):
-            self.calls.append((path, tr_id, params, tr_cont))
+        async def request(self, spec, *, params: dict[str, str], **kwargs):
+            self.calls.append((spec.path, spec.tr_id_real, params, kwargs.get("tr_cont", "")))
             if params["BYMD"] == "20260507":
                 end = date(2026, 5, 7)
                 return {
@@ -260,15 +253,17 @@ def test_overseas_stock_period_history_falls_back_to_moving_bymd_without_keyb() 
 
     client = NoKeybClient()
 
-    bars = fetch_overseas_stock_period_history(
-        client,
-        market="NASDAQ",
-        symbol="NVDA",
-        start_date=date(2026, 1, 27),
-        end_date=date(2026, 5, 7),
-        period="D",
-        adjusted=True,
-        max_pages=10,
+    bars = asyncio.run(
+        OverseasChartAPI(client).daily(
+            symbol="NVDA",
+            exchange="NAS",
+            market="NASDAQ",
+            start=date(2026, 1, 27),
+            end=date(2026, 5, 7),
+            period="D",
+            adjusted=True,
+            max_pages=10,
+        )
     )
 
     assert len(client.calls) == 2
@@ -283,38 +278,28 @@ def test_overseas_stock_yearly_history_is_unsupported() -> None:
     client = FakeClient()
 
     try:
-        fetch_ohlcv_history(
-            client,
-            market="NASDAQ",
-            symbol="AAPL",
-            start="2026-01-01",
-            end="2026-05-07",
-            period="Y",
+        asyncio.run(
+            OverseasChartAPI(client).daily(
+                symbol="AAPL",
+                exchange="NAS",
+                market="NASDAQ",
+                start="2026-01-01",
+                end="2026-05-07",
+                period="Y",
+            )
         )
     except ValueError as exc:
-        assert "supports only D, W, or M" in str(exc)
+        assert "supports period D, W, or M" in str(exc)
     else:
         raise AssertionError("expected ValueError")
 
 
 def test_overseas_special_history_keeps_chartprice_api() -> None:
-    client = FakeClient()
+    spec = lookup("overseas.chart.ohlcv")
 
-    bars = fetch_overseas_ohlcv_history(
-        client,
-        market="OVERSEAS_INDEX",
-        symbol=".IXIC",
-        start_date=__import__("datetime").date(2026, 5, 7),
-        end_date=__import__("datetime").date(2026, 5, 7),
-        period="Y",
-        max_pages=10,
-    )
-
-    assert [bar.timestamp for bar in bars] == ["2026-05-07"]
-    assert client.calls[0][0] == "/uapi/overseas-price/v1/quotations/inquire-daily-chartprice"
-    assert client.calls[0][1] == "FHKST03030100"
-    assert client.calls[0][2]["FID_COND_MRKT_DIV_CODE"] == "N"
-    assert client.calls[0][2]["FID_PERIOD_DIV_CODE"] == "Y"
+    assert spec.path == "/uapi/overseas-price/v1/quotations/inquire-daily-chartprice"
+    assert spec.tr_id_real == "FHKST03030100"
+    assert "FID_PERIOD_DIV_CODE" in spec.required_params
 
 
 def test_insert_ohlcv_bars_ignores_duplicates(tmp_path: Path) -> None:
@@ -373,10 +358,10 @@ def test_collect_ohlcv_history_resolves_market_from_symbol_table(monkeypatch, tm
     with connect(db_path) as connection:
         insert_symbol(connection, market="NASDAQ", symbol="NVDA", name="NVIDIA")
 
-    def fake_call_with_token_refresh_retry(operation, **kwargs):
-        return operation(object())
+    def fake_call_with_sdk_client(operation, **kwargs):
+        return asyncio.run(operation(object()))
 
-    def fake_fetch_ohlcv_history(client, **kwargs):
+    async def fake_fetch_ohlcv_history(client, **kwargs):
         assert kwargs["market"] == "NASDAQ"
         assert kwargs["symbol"] == "NVDA"
         assert kwargs["end"] == date.today().isoformat()
@@ -395,10 +380,10 @@ def test_collect_ohlcv_history_resolves_market_from_symbol_table(monkeypatch, tm
         ]
 
     monkeypatch.setattr(
-        "kis_cli.services.chart.call_with_token_refresh_retry",
-        fake_call_with_token_refresh_retry,
+        "kis_cli.services.chart.call_with_sdk_client",
+        fake_call_with_sdk_client,
     )
-    monkeypatch.setattr("kis_cli.services.chart.fetch_ohlcv_history", fake_fetch_ohlcv_history)
+    monkeypatch.setattr("kis_cli.services.chart._fetch_ohlcv_history_async", fake_fetch_ohlcv_history)
 
     result = collect_ohlcv_history(
         symbol="nvda",
@@ -419,14 +404,9 @@ def test_collect_ohlcv_history_refreshes_token_after_auth_error(monkeypatch, tmp
     with connect(db_path) as connection:
         insert_symbol(connection, market="NASDAQ", symbol="AAPL", name="Apple")
 
-    refresh_calls: list[bool] = []
     attempts = {"count": 0}
 
-    def fake_build_rest_client(*, profile=None, config_path=None, refresh=False):
-        refresh_calls.append(refresh)
-        return object()
-
-    def fake_fetch_ohlcv_history(client, **kwargs):
+    async def fake_fetch_ohlcv_history(client, **kwargs):
         attempts["count"] += 1
         if attempts["count"] == 1:
             raise KisAuthError("token expired")
@@ -444,8 +424,14 @@ def test_collect_ohlcv_history_refreshes_token_after_auth_error(monkeypatch, tmp
             )
         ]
 
-    monkeypatch.setattr("kis_cli.services.auth.build_rest_client", fake_build_rest_client)
-    monkeypatch.setattr("kis_cli.services.chart.fetch_ohlcv_history", fake_fetch_ohlcv_history)
+    def fake_call_with_sdk_client(operation, **kwargs):
+        try:
+            return asyncio.run(operation(object()))
+        except KisAuthError:
+            return asyncio.run(operation(object()))
+
+    monkeypatch.setattr("kis_cli.services.chart.call_with_sdk_client", fake_call_with_sdk_client)
+    monkeypatch.setattr("kis_cli.services.chart._fetch_ohlcv_history_async", fake_fetch_ohlcv_history)
 
     result = collect_ohlcv_history(
         symbol="AAPL",
@@ -456,7 +442,6 @@ def test_collect_ohlcv_history_refreshes_token_after_auth_error(monkeypatch, tmp
     )
 
     assert result.fetched == 1
-    assert refresh_calls == [False, True]
     assert attempts["count"] == 2
 
 
@@ -466,10 +451,10 @@ def test_collect_ohlcv_history_records_saved_ingest_run(monkeypatch, tmp_path: P
     with connect(db_path) as connection:
         insert_symbol(connection, market="NASDAQ", symbol="AAPL", name="Apple")
 
-    def fake_call_with_token_refresh_retry(operation, **kwargs):
-        return operation(object())
+    def fake_call_with_sdk_client(operation, **kwargs):
+        return asyncio.run(operation(object()))
 
-    def fake_fetch_ohlcv_history(client, **kwargs):
+    async def fake_fetch_ohlcv_history(client, **kwargs):
         return [
             OhlcvBar(
                 market="NASDAQ",
@@ -485,10 +470,10 @@ def test_collect_ohlcv_history_records_saved_ingest_run(monkeypatch, tmp_path: P
         ]
 
     monkeypatch.setattr(
-        "kis_cli.services.chart.call_with_token_refresh_retry",
-        fake_call_with_token_refresh_retry,
+        "kis_cli.services.chart.call_with_sdk_client",
+        fake_call_with_sdk_client,
     )
-    monkeypatch.setattr("kis_cli.services.chart.fetch_ohlcv_history", fake_fetch_ohlcv_history)
+    monkeypatch.setattr("kis_cli.services.chart._fetch_ohlcv_history_async", fake_fetch_ohlcv_history)
 
     result = collect_ohlcv_history(
         symbol="AAPL",

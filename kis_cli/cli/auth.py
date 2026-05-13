@@ -8,8 +8,9 @@ from rich import box
 from rich.panel import Panel
 from rich.table import Table
 
+from kis import KisAuthError
+
 from kis_cli.cli.common import console, result_table
-from kis_cli.core.auth import KisAuthError
 from kis_cli.services.auth import (
     AuthClearResult,
     AuthStatusResult,

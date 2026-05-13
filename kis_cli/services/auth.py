@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Awaitable, Callable, TypeVar
 from zoneinfo import ZoneInfo
 
+from kis import Credentials, KisAuthError, KisClient, MemoryTokenCache, issue_access_token
+
 from kis_cli.config.paths import default_config_file
+from kis_cli.config.resolver import ResolvedProfile
 from kis_cli.config.resolver import read_config, resolve_profile
-from kis_cli.core.auth import KisAuthError, issue_access_token
-from kis_cli.core.client import KisClient
 from kis_cli.core.token_cache import (
     CachedToken,
     clear_cached_token,
@@ -20,6 +23,7 @@ from kis_cli.core.token_cache import (
 
 KST = ZoneInfo("Asia/Seoul")
 KST_LABEL = "KST"
+T = TypeVar("T")
 
 
 @dataclass(frozen=True)
@@ -83,33 +87,52 @@ def get_rest_token(
     return cached, "issued"
 
 
-def build_rest_client(
+def call_with_sdk_client(
+    operation: Callable[[KisClient], Awaitable[T]],
     *,
     profile: str | None = None,
     config_path: Path | None = None,
-    refresh: bool = False,
-) -> KisClient:
-    resolved = resolve_profile(profile=profile, config_path=config_path)
-    token, _ = get_rest_token(profile=profile, config_path=config_path, refresh=refresh)
-    return KisClient(profile=resolved, token=token)
-
-
-def call_with_token_refresh_retry(
-    operation,
-    *,
-    profile: str | None = None,
-    config_path: Path | None = None,
-):
-    client = build_rest_client(profile=profile, config_path=config_path)
-    try:
-        return operation(client)
-    except KisAuthError:
-        refreshed_client = build_rest_client(
+) -> T:
+    return asyncio.run(
+        _call_with_sdk_client_async(
+            operation,
             profile=profile,
             config_path=config_path,
-            refresh=True,
         )
-        return operation(refreshed_client)
+    )
+
+
+async def _call_with_sdk_client_async(
+    operation: Callable[[KisClient], Awaitable[T]],
+    *,
+    profile: str | None = None,
+    config_path: Path | None = None,
+) -> T:
+    resolved = resolve_profile(profile=profile, config_path=config_path)
+    try:
+        return await _run_with_sdk_client(operation, resolved)
+    except KisAuthError:
+        return await _run_with_sdk_client(operation, resolved)
+
+
+async def _run_with_sdk_client(
+    operation: Callable[[KisClient], Awaitable[T]],
+    resolved: ResolvedProfile,
+) -> T:
+    async with KisClient(
+        credentials=_credentials_from_profile(resolved),
+        environment=resolved.environment,  # type: ignore[arg-type]
+        token_cache=MemoryTokenCache(),
+    ) as client:
+        return await operation(client)
+
+
+def _credentials_from_profile(resolved: ResolvedProfile) -> Credentials:
+    return Credentials(
+        app_key=resolved.app_key,
+        app_secret=resolved.app_secret,
+        account_number=resolved.account_no,
+    )
 
 
 def test_auth(

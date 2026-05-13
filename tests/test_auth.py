@@ -4,9 +4,10 @@ from datetime import UTC, datetime, timedelta
 
 from typer.testing import CliRunner
 
+from kis import IssuedToken, KisAuthError, mask_sensitive_message, parse_token_response
+
 from kis_cli.cli.app import app
 from kis_cli.config.profiles import ProfileCredentials, add_profile
-from kis_cli.core.auth import IssuedToken, KisAuthError, mask_sensitive_message, parse_token_response
 from kis_cli.core.token_cache import read_cached_token, read_cached_token_result, write_cached_token
 
 runner = CliRunner()

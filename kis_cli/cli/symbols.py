@@ -8,8 +8,9 @@ from rich import box
 from rich.panel import Panel
 from rich.table import Table
 
+from kis import ALL_SYMBOL_MARKETS
+
 from kis_cli.cli.common import console, prompt_supabase_dsn_if_missing
-from kis_cli.core.symbol_master import ALL_SYMBOL_MARKETS
 from kis_cli.services.symbols import download_and_store_symbols, search_stored_symbols
 
 symbols_app = typer.Typer(help="Download and query symbol masters.", no_args_is_help=True)

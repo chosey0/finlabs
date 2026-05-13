@@ -5,17 +5,14 @@ from io import BytesIO
 
 from typer.testing import CliRunner
 
+from kis import SymbolRecord, parse_symbol_master
+from kis.symbols import KOSPI_PART2_COLUMNS, KOSPI_WIDTHS
+
 from kis_cli.cli.app import app
-from kis_cli.core.symbol_master import (
-    KOSPI_PART2_COLUMNS,
-    KOSPI_WIDTHS,
-    SymbolRecord,
-    parse_symbol_master,
-    record_to_db_values,
-)
 from kis_cli.services.symbols import SymbolDownloadResult
 from kis_cli.storage import connect
 from kis_cli.storage.app_repositories import list_api_logs, list_ingest_runs
+from kis_cli.storage.mappers import record_to_db_values
 
 runner = CliRunner()
 
@@ -106,7 +103,8 @@ def test_symbol_record_defaults_downloaded_at_to_kst() -> None:
 def test_symbols_download_command_upserts_downloaded_records(tmp_path, monkeypatch) -> None:
     db_path = tmp_path / "symbols.db"
 
-    def fake_download_symbol_master(market: str) -> list[SymbolRecord]:
+    def fake_download_symbol_master(market: str, *, downloaded_at: str) -> list[SymbolRecord]:
+        assert downloaded_at.endswith("+09:00")
         return [
             SymbolRecord(
                 market=market,

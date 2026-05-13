@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from pathlib import Path
 
-from kis_cli.core.auth import KisAuthError
-from kis_cli.core.price import (
+from kis import (
     CurrentPrice,
+    KisAuthError,
     parse_domestic_current_price,
     parse_overseas_current_price,
 )
-from kis_cli.services.price import get_current_price
+from kis_cli.config.resolver import ResolvedProfile
+from kis_cli.services.auth import call_with_sdk_client
 
 
 def test_parse_domestic_current_price_normalizes_common_fields() -> None:
@@ -64,21 +66,19 @@ def test_parse_overseas_current_price_normalizes_common_fields() -> None:
     assert price.volume == 987654
 
 
-def test_get_current_price_refreshes_token_once_after_auth_error(monkeypatch) -> None:
-    refresh_flags: list[bool] = []
+def test_call_with_sdk_client_refreshes_token_once_after_auth_error(monkeypatch) -> None:
     attempts = {"count": 0}
 
-    def fake_build_rest_client(*, profile=None, config_path=None, refresh=False):
-        refresh_flags.append(refresh)
-        return object()
-
-    def fake_inquire_current_price(client, *, market: str, symbol: str) -> CurrentPrice:
+    async def fake_run_with_sdk_client(operation, resolved):
         attempts["count"] += 1
         if attempts["count"] == 1:
             raise KisAuthError("token expired")
+        return await operation(object())
+
+    async def fake_operation(client) -> CurrentPrice:
         return CurrentPrice(
-            market=market,
-            symbol=symbol,
+            market="NASDAQ",
+            symbol="AAPL",
             name="Apple Inc.",
             price=Decimal("190.25"),
             currency="USD",
@@ -90,34 +90,49 @@ def test_get_current_price_refreshes_token_once_after_auth_error(monkeypatch) ->
             volume=None,
         )
 
-    monkeypatch.setattr("kis_cli.services.auth.build_rest_client", fake_build_rest_client)
-    monkeypatch.setattr("kis_cli.services.price.inquire_current_price", fake_inquire_current_price)
+    monkeypatch.setattr("kis_cli.services.auth.resolve_profile", _fake_resolve_profile)
+    monkeypatch.setattr("kis_cli.services.auth._run_with_sdk_client", fake_run_with_sdk_client)
 
-    result = get_current_price(symbol="AAPL", market="NASDAQ", profile="csq1404")
 
+    result = call_with_sdk_client(fake_operation, profile="csq1404")
     assert result.symbol == "AAPL"
-    assert refresh_flags == [False, True]
     assert attempts["count"] == 2
 
 
-def test_get_current_price_does_not_retry_more_than_once(monkeypatch) -> None:
-    refresh_flags: list[bool] = []
+def test_call_with_sdk_client_does_not_retry_more_than_once(monkeypatch) -> None:
+    attempts = {"count": 0}
 
-    def fake_build_rest_client(*, profile=None, config_path=None, refresh=False):
-        refresh_flags.append(refresh)
-        return object()
-
-    def always_fail(client, *, market: str, symbol: str) -> CurrentPrice:
+    async def always_fail_run(operation, resolved):
+        attempts["count"] += 1
         raise KisAuthError("token expired")
 
-    monkeypatch.setattr("kis_cli.services.auth.build_rest_client", fake_build_rest_client)
-    monkeypatch.setattr("kis_cli.services.price.inquire_current_price", always_fail)
+    async def fake_operation(client) -> CurrentPrice:
+        raise AssertionError("operation should not run")
+
+    monkeypatch.setattr("kis_cli.services.auth.resolve_profile", _fake_resolve_profile)
+    monkeypatch.setattr("kis_cli.services.auth._run_with_sdk_client", always_fail_run)
 
     try:
-        get_current_price(symbol="AAPL", market="NASDAQ", profile="csq1404")
+        call_with_sdk_client(fake_operation, profile="csq1404")
     except KisAuthError:
         pass
     else:
         raise AssertionError("expected KisAuthError")
 
-    assert refresh_flags == [False, True]
+    assert attempts["count"] == 2
+
+
+def _fake_resolve_profile(*, profile=None, config_path=None) -> ResolvedProfile:
+    return ResolvedProfile(
+        name=profile or "csq1404",
+        profile_id="profile-id",
+        environment="real",
+        expires_at="2026-12-31",
+        app_key="app-key",
+        app_secret="app-secret",
+        owner="choe",
+        account_no="12345678",
+        description="",
+        config_path=Path("config.yaml"),
+        env_path=Path("profiles.env"),
+    )

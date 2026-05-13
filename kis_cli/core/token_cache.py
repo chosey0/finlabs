@@ -9,7 +9,7 @@ from typing import Any
 
 from kis_cli.config.init import _chmod_owner_read_write
 from kis_cli.config.paths import cache_dir
-from kis_cli.core.auth import IssuedToken
+from kis import IssuedToken
 
 TOKEN_REFRESH_MARGIN = timedelta(minutes=5)
 

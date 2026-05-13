@@ -5,7 +5,8 @@ from datetime import date, datetime, time
 from pathlib import Path
 from typing import Literal
 
-from kis_cli.core.chart import parse_minute_datetime
+from kis import parse_minute_datetime
+
 from kis_cli.storage import connect
 from kis_cli.storage.repositories import query_daily_ohlcv_bars, query_overseas_minute_bars
 
