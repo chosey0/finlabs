@@ -1,10 +1,10 @@
 # kis_cli 패키지 개요
 
-`kis_cli`는 Korea Investment & Securities Open API 기반의 시장 데이터 수집 CLI 패키지입니다. CLI 명령은 `kiscli`로 제공되며, 현재 구현 범위는 설정 관리, 인증 확인, 심볼 마스터 다운로드/검색, OHLCV 이력 수집/저장, 저장 데이터 조회/내보내기, 로컬 저장소 점검입니다.
+`kis_cli`는 FinLabs의 Korea Investment & Securities Open API 기반 시장 데이터 수집 CLI 애플리케이션입니다. 로컬 개발에서는 `python -m kis_cli`로 실행하며, 현재 구현 범위는 설정 관리, 인증 확인, 심볼 마스터 다운로드/검색, OHLCV 이력 수집/저장, 저장 데이터 조회/내보내기, 로컬 저장소 점검입니다.
 
 ## 패키지 구성
 
-- `cli/`: Typer 기반 `kiscli` 명령 정의와 콘솔 출력/파일 export 처리
+- `cli/`: Typer 기반 CLI 명령 정의와 콘솔 출력/파일 export 처리
 - `config/`: 설정 파일 생성, 프로필 추가/수정/삭제, 환경변수/프로필 해석
 - `core/`: KIS REST 인증, REST 클라이언트, 현재가/OHLCV/심볼 마스터 파서
 - `services/`: CLI와 core/storage를 잇는 유즈케이스 계층
@@ -13,29 +13,29 @@
 ## 주요 CLI 기능
 
 ```bash
-kiscli config init
-kiscli config add
-kiscli config validate
-kiscli config update
-kiscli config delete
+python -m kis_cli config init
+python -m kis_cli config add
+python -m kis_cli config validate
+python -m kis_cli config update
+python -m kis_cli config delete
 
-kiscli auth test
-kiscli db init
-kiscli db schema
-kiscli db counts
-kiscli logs runs
-kiscli logs api
+python -m kis_cli auth test
+python -m kis_cli db init
+python -m kis_cli db schema
+python -m kis_cli db counts
+python -m kis_cli logs runs
+python -m kis_cli logs api
 
-kiscli symbols download --market KOSPI
-kiscli symbols download --all
-kiscli symbols search --query apple
+python -m kis_cli symbols download --market KOSPI
+python -m kis_cli symbols download --all
+python -m kis_cli symbols search --query apple
 
-kiscli chart daily --profile real --symbol 005930 --start 2026-04-01 --end 2026-05-07 --save
-kiscli chart history --profile real --symbol 005930 --period W --start 2025-01-01 --end 2026-05-07 --save
+python -m kis_cli chart daily --profile real --symbol 005930 --start 2026-04-01 --end 2026-05-07 --save
+python -m kis_cli chart history --profile real --symbol 005930 --period W --start 2025-01-01 --end 2026-05-07 --save
 
-kiscli query ohlcv --symbol AAPL
-kiscli query ohlcv --symbol AAPL --format json
-kiscli query ohlcv --symbol AAPL --export ./exports/aapl.csv
+python -m kis_cli query ohlcv --symbol AAPL
+python -m kis_cli query ohlcv --symbol AAPL --format json
+python -m kis_cli query ohlcv --symbol AAPL --export ./exports/aapl.csv
 ```
 
 ## 저장 위치

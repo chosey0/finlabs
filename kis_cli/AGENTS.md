@@ -4,7 +4,7 @@
 # kis_cli
 
 ## Purpose
-`kis_cli`는 `kiscli` 커맨드라인 인터페이스와 영속 계층을 담당하는 애플리케이션 패키지입니다. 순수 SDK 인 `kis/`를 소비하여 (1) 프로필/시크릿 관리, (2) DuckDB 웨어하우스 + SQLite `app.db` 저장, (3) Supabase/PostgreSQL 미러 (옵션), (4) Typer 기반 CLI를 제공합니다. KST 시간 스탬핑·파일 경로 결정·인제스트 로그 같은 운영성 책임은 모두 여기에 위치합니다.
+`kis_cli`는 FinLabs의 현재 KIS CLI와 영속 계층을 담당하는 애플리케이션 패키지입니다. 순수 SDK 인 `kis/`를 소비하여 (1) 프로필/시크릿 관리, (2) DuckDB 웨어하우스 + SQLite `app.db` 저장, (3) Supabase/PostgreSQL 미러 (옵션), (4) Typer 기반 CLI를 제공합니다. KST 시간 스탬핑·파일 경로 결정·인제스트 로그 같은 운영성 책임은 모두 여기에 위치합니다.
 
 ## Key Files
 
@@ -18,7 +18,7 @@
 | Directory | Purpose |
 |-----------|---------|
 | `cli/` | Typer 서브앱(`config`/`auth`/`db`/`symbols`/`chart`/`query`/`logs`)과 공용 console |
-| `config/` | 프로필 기반 설정 로딩 + `~/.config/kis-cli/` 경로 결정 |
+| `config/` | 프로필 기반 설정 로딩 + 현재 호환용 `~/.config/kis-cli/` 경로 결정 |
 | `core/` | 레거시 동기 REST 클라이언트와 파일 기반 토큰 캐시 (`CachedToken`) |
 | `services/` | CLI ↔ 저장소를 잇는 유스케이스 (인제스트, 인증, 차트 수집, 쿼리) |
 | `storage/` | DuckDB 웨어하우스, SQLite `app.db`, Supabase 어댑터 + repositories |
@@ -49,7 +49,7 @@
 ## Dependencies
 
 ### Internal
-- `kis/` — SDK (`KisClient`, `Credentials`, 모델, 파서, 심볼 다운로더)
+- `kis/` — 현재 FinLabs의 KIS SDK (`KisClient`, `Credentials`, 모델, 파서, 심볼 다운로더)
 
 ### External
 - `typer>=0.12.0` — CLI 프레임워크

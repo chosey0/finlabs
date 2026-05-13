@@ -1,10 +1,10 @@
-# kis-cli
+# FinLabs
 
-`kis-cli`는 Korea Investment & Securities Open API를 사용해 국내/해외 주식 시장 데이터를 수집하고 저장하는 Python CLI 프로젝트입니다. CLI 명령은 `kiscli`로 제공됩니다.
+FinLabs는 증권사 Open API 기반 데이터 수집·저장·분석 도구를 확장해 나가기 위한 로컬 개발 프로젝트입니다. 현재 구현은 Korea Investment & Securities Open API용 SDK(`kis`)와 CLI 애플리케이션(`kis_cli`)에 집중되어 있으며, 로컬 개발용으로 `python -m kis_cli`로 실행합니다.
 
 현재 구현 범위는 설정 관리, REST 인증 확인, 심볼 마스터 다운로드/검색, OHLCV 이력 수집/저장, 저장 데이터 조회/내보내기, 로컬 저장소 점검입니다.
 
-이 프로젝트는 시장 데이터 수집용 CLI입니다. UI, 웹 대시보드, 차트 렌더링, 자동매매, 주문 실행, 전략/백테스트 기능은 포함하지 않습니다.
+현재 구현 범위는 시장 데이터 수집용 CLI입니다. FinLabs는 향후 분석/대시보드 패키지로 확장할 수 있지만, 지금은 UI, 웹 대시보드, 차트 렌더링, 자동매매, 주문 실행, 전략/백테스트 기능을 포함하지 않습니다.
 
 ## 주요 기능
 
@@ -19,7 +19,7 @@
 - 앱용 SQLite DB와 시장 데이터용 DuckDB warehouse 초기화/점검
 - Supabase/PostgreSQL canonical store용 `symbols`, `ohlcv_bars` 스키마 제공
 
-## 설치
+## 로컬 개발 실행
 
 개발 환경에서는 `uv` 사용을 권장합니다.
 
@@ -36,55 +36,43 @@ uv sync --extra postgres
 CLI 실행:
 
 ```bash
-uv run kiscli --help
+uv run python -m kis_cli --help
 ```
 
-`uv`를 사용하지 않는 경우:
-
-```bash
-python -m pip install -e .
-kiscli --help
-```
-
-Supabase/PostgreSQL 지원을 포함해 설치하려면:
-
-```bash
-python -m pip install -e ".[postgres]"
-```
 
 ## 빠른 시작
 
 1. 설정 파일과 프로필을 준비합니다.
 
 ```bash
-uv run kiscli config init
-uv run kiscli config add
+uv run python -m kis_cli config init
+uv run python -m kis_cli config add
 ```
 
 1. 설정을 검증합니다.
 
 ```bash
-uv run kiscli config validate --profile csq1404
+uv run python -m kis_cli config validate --profile csq1404
 ```
 
 1. REST 인증을 확인합니다.
 
 ```bash
-uv run kiscli auth status --profile csq1404
-uv run kiscli auth test --profile csq1404
+uv run python -m kis_cli auth status --profile csq1404
+uv run python -m kis_cli auth test --profile csq1404
 ```
 
 1. DB를 초기화합니다.
 
 ```bash
-uv run kiscli db init
+uv run python -m kis_cli db init
 ```
 
 Supabase/PostgreSQL canonical store를 초기화하려면 Supabase Dashboard의 Connection Method 중 **Transaction pooler** connection string을 DSN으로 사용합니다. 해당 값을 환경변수로 주입한 뒤 `--store supabase`를 실행합니다.
 
 ```bash
 export KISCLI_SUPABASE_DB_DSN='postgresql://USER:PASSWORD@HOST:6543/postgres'
-uv run kiscli db init --store supabase
+uv run python -m kis_cli db init --store supabase
 ```
 
 환경변수가 없으면 CLI가 DSN을 비공개 입력으로 요청하고, 입력값은 사용자 config 디렉터리의 `profiles.env`에 저장해 이후 Supabase 명령에서 재사용합니다.
@@ -93,34 +81,34 @@ URL 형태의 DSN에서 password에 `!@#$` 같은 특수문자가 포함되어 �
 1. 심볼 마스터를 다운로드합니다.
 
 ```bash
-uv run kiscli symbols download --market KOSPI
-uv run kiscli symbols download --market NASDAQ
-uv run kiscli symbols download --market NASDAQ --store supabase
+uv run python -m kis_cli symbols download --market KOSPI
+uv run python -m kis_cli symbols download --market NASDAQ
+uv run python -m kis_cli symbols download --market NASDAQ --store supabase
 ```
 
 1. OHLCV를 수집하고 저장합니다.
 
 ```bash
-uv run kiscli chart daily --profile csq1404 --symbol 005930 --start 2026-04-01 --end 2026-05-07 --save
-uv run kiscli chart daily --profile csq1404 --symbol 005930 --start 2026-04-01 --end 2026-05-07 --save --store supabase
+uv run python -m kis_cli chart daily --profile csq1404 --symbol 005930 --start 2026-04-01 --end 2026-05-07 --save
+uv run python -m kis_cli chart daily --profile csq1404 --symbol 005930 --start 2026-04-01 --end 2026-05-07 --save --store supabase
 ```
 
 1. 저장된 일봉 데이터를 조회합니다.
 
 ```bash
-uv run kiscli query ohlcv --symbol 005930
+uv run python -m kis_cli query ohlcv --symbol 005930
 ```
 
 1. 작업 이력이나 API 오류를 확인합니다.
 
 ```bash
-uv run kiscli logs runs --limit 20
-uv run kiscli logs api --limit 20
+uv run python -m kis_cli logs runs --limit 20
+uv run python -m kis_cli logs api --limit 20
 ```
 
 ## 설정과 로컬 파일
 
-기본 경로는 OS별 사용자 디렉터리를 사용합니다.
+기본 경로는 OS별 사용자 디렉터리를 사용합니다. 현재 런타임 app name은 기존 CLI 호환을 위해 `kis-cli`를 유지합니다.
 
 ```text
 Config: ~/.config/kis-cli/config.yaml
@@ -138,7 +126,7 @@ Warehouse: ~/.local/share/kis-cli/warehouse.duckdb
 권장 역할 분리는 다음과 같습니다.
 
 ```text
-SQLite app DB          # kiscli 내부 실행 상태와 로컬 작업/API 로그
+SQLite app DB          # FinLabs CLI 내부 실행 상태와 로컬 작업/API 로그
 Supabase/PostgreSQL    # symbols, ohlcv_bars 원천 시장 데이터
 DuckDB                 # 로컬 분석 mart, feature engineering, 학습용 snapshot/export
 ```
@@ -151,19 +139,19 @@ API 키, API 시크릿, 계좌번호, 토큰은 패키지 소스 안에 저장�
 설정 파일 생성:
 
 ```bash
-uv run kiscli config init
-uv run kiscli config init --profile mock --environment mock
-uv run kiscli config init --path ./config.yaml --force
+uv run python -m kis_cli config init
+uv run python -m kis_cli config init --profile mock --environment mock
+uv run python -m kis_cli config init --path ./config.yaml --force
 ```
 
 프로필 관리:
 
 ```bash
-uv run kiscli config add
-uv run kiscli config validate
-uv run kiscli config validate --profile csq1404
-uv run kiscli config update --profile csq1404
-uv run kiscli config delete --profile csq1404 --yes
+uv run python -m kis_cli config add
+uv run python -m kis_cli config validate
+uv run python -m kis_cli config validate --profile csq1404
+uv run python -m kis_cli config update --profile csq1404
+uv run python -m kis_cli config delete --profile csq1404 --yes
 ```
 
 `config add`와 `config update`는 대화형 프롬프트로 프로필명, 환경, 계좌번호, APP key, Secret key, 소유자, 만료일을 입력받습니다.
@@ -173,11 +161,11 @@ uv run kiscli config delete --profile csq1404 --yes
 KIS REST access token을 발급하거나 유효한 캐시 토큰을 재사용합니다.
 
 ```bash
-uv run kiscli auth test --profile csq1404
-uv run kiscli auth test --profile csq1404 --refresh
-uv run kiscli auth status --profile csq1404
-uv run kiscli auth status --all
-uv run kiscli auth clear --profile csq1404
+uv run python -m kis_cli auth test --profile csq1404
+uv run python -m kis_cli auth test --profile csq1404 --refresh
+uv run python -m kis_cli auth status --profile csq1404
+uv run python -m kis_cli auth status --all
+uv run python -m kis_cli auth clear --profile csq1404
 ```
 
 `--refresh`를 사용하면 유효한 캐시가 있어도 새 토큰을 요청합니다.
@@ -197,15 +185,15 @@ uv run kiscli auth clear --profile csq1404
 로컬 저장소 초기화:
 
 ```bash
-uv run kiscli db init
-uv run kiscli db init --path ./warehouse.duckdb
+uv run python -m kis_cli db init
+uv run python -m kis_cli db init --path ./warehouse.duckdb
 ```
 
 Supabase/PostgreSQL canonical store 초기화:
 
 ```bash
 export KISCLI_SUPABASE_DB_DSN='postgresql://USER:PASSWORD@HOST:6543/postgres'
-uv run kiscli db init --store supabase
+uv run python -m kis_cli db init --store supabase
 ```
 
 `--store supabase`는 `symbols`, `ohlcv_bars` 테이블과 조회용 인덱스를 생성합니다. 연결 문자열은 Supabase Dashboard의 Connection Method 중 **Transaction pooler** connection string을 사용하고, `KISCLI_SUPABASE_DB_DSN` 환경변수 또는 `profiles.env`에서 읽습니다.
@@ -214,15 +202,15 @@ uv run kiscli db init --store supabase
 DB 구조 확인:
 
 ```bash
-uv run kiscli db schema
-uv run kiscli db schema --path ./warehouse.duckdb
+uv run python -m kis_cli db schema
+uv run python -m kis_cli db schema --path ./warehouse.duckdb
 ```
 
 테이블별 레코드 수 확인:
 
 ```bash
-uv run kiscli db counts
-uv run kiscli db counts --path ./warehouse.duckdb
+uv run python -m kis_cli db counts
+uv run python -m kis_cli db counts --path ./warehouse.duckdb
 ```
 
 현재 주요 테이블은 다음과 같습니다.
@@ -246,19 +234,19 @@ UNIQUE (market, symbol, exchange_ts, seq)
 최근 저장 작업 이력:
 
 ```bash
-uv run kiscli logs runs
-uv run kiscli logs runs --limit 50
-uv run kiscli logs runs --status failed
-uv run kiscli logs runs --kind symbols --market KOSPI
-uv run kiscli logs runs --symbol AAPL --since 2026-05-08
+uv run python -m kis_cli logs runs
+uv run python -m kis_cli logs runs --limit 50
+uv run python -m kis_cli logs runs --status failed
+uv run python -m kis_cli logs runs --kind symbols --market KOSPI
+uv run python -m kis_cli logs runs --symbol AAPL --since 2026-05-08
 ```
 
 최근 API/다운로드 기록:
 
 ```bash
-uv run kiscli logs api
-uv run kiscli logs api --limit 50
-uv run kiscli logs api --endpoint ohlcv
+uv run python -m kis_cli logs api
+uv run python -m kis_cli logs api --limit 50
+uv run python -m kis_cli logs api --endpoint ohlcv
 ```
 
 스크립트에서 사용하려면 `--format json` 또는 `--format csv`를 지정합니다.
@@ -269,11 +257,11 @@ uv run kiscli logs api --endpoint ohlcv
 심볼 마스터 다운로드:
 
 ```bash
-uv run kiscli symbols download --market KOSPI
-uv run kiscli symbols download --market KOSDAQ
-uv run kiscli symbols download --market NASDAQ
-uv run kiscli symbols download --market NASDAQ --store supabase
-uv run kiscli symbols download --all
+uv run python -m kis_cli symbols download --market KOSPI
+uv run python -m kis_cli symbols download --market KOSDAQ
+uv run python -m kis_cli symbols download --market NASDAQ
+uv run python -m kis_cli symbols download --market NASDAQ --store supabase
+uv run python -m kis_cli symbols download --all
 ```
 
 `--store duckdb`가 기본값입니다. `--store supabase`를 사용하면 `KISCLI_SUPABASE_DB_DSN`으로 연결한 Supabase/PostgreSQL의 `symbols` 테이블에 upsert합니다. `--db-path`는 DuckDB 전용 옵션입니다.
@@ -282,15 +270,15 @@ uv run kiscli symbols download --all
 커스텀 DB 경로:
 
 ```bash
-uv run kiscli symbols download --market NASDAQ --db-path ./warehouse.duckdb
+uv run python -m kis_cli symbols download --market NASDAQ --db-path ./warehouse.duckdb
 ```
 
 저장된 심볼 검색:
 
 ```bash
-uv run kiscli symbols search --query apple
-uv run kiscli symbols search --query 삼성 --limit 10
-uv run kiscli symbols search --query apple --market NASDAQ
+uv run python -m kis_cli symbols search --query apple
+uv run python -m kis_cli symbols search --query 삼성 --limit 10
+uv run python -m kis_cli symbols search --query apple --market NASDAQ
 ```
 
 검색 결과는 query와 더 유사한 순서로 정렬됩니다. 출력에는 `Market`, `Symbol`, `Realtime symbol`, `Korean name`, `English name`, `Currency`, `Type`이 포함됩니다.
@@ -308,15 +296,15 @@ TOKYO, HONGKONG, HANOI, HOCHIMINH
 일봉 수집:
 
 ```bash
-uv run kiscli chart daily --profile csq1404 --symbol 005930 --start 2026-04-01 --end 2026-05-07
+uv run python -m kis_cli chart daily --profile csq1404 --symbol 005930 --start 2026-04-01 --end 2026-05-07
 ```
 
 저장까지 수행:
 
 ```bash
-uv run kiscli chart daily --profile csq1404 --symbol 005930 --start 2026-04-01 --end 2026-05-07 --save
-uv run kiscli chart daily --profile csq1404 --symbol AAPL --start 2026-04-01 --end 2026-05-07 --save
-uv run kiscli chart daily --profile csq1404 --symbol AAPL --start 2026-04-01 --end 2026-05-07 --save --store supabase
+uv run python -m kis_cli chart daily --profile csq1404 --symbol 005930 --start 2026-04-01 --end 2026-05-07 --save
+uv run python -m kis_cli chart daily --profile csq1404 --symbol AAPL --start 2026-04-01 --end 2026-05-07 --save
+uv run python -m kis_cli chart daily --profile csq1404 --symbol AAPL --start 2026-04-01 --end 2026-05-07 --save --store supabase
 ```
 
 `--save --store supabase`는 Supabase/PostgreSQL의 `ohlcv_bars` 테이블에 중복 방지 insert를 수행합니다. 현재 `chart` 명령의 market 해석은 로컬 DuckDB `symbols` 테이블을 사용하므로, 먼저 대상 심볼을 로컬에도 다운로드해두어야 합니다.
@@ -325,9 +313,9 @@ uv run kiscli chart daily --profile csq1404 --symbol AAPL --start 2026-04-01 --e
 기간 단위 명령:
 
 ```bash
-uv run kiscli chart weekly --profile csq1404 --symbol 005930 --start 2025-01-01 --end 2026-05-07 --save
-uv run kiscli chart monthly --profile csq1404 --symbol 005930 --start 2025-01-01 --end 2026-05-07 --save
-uv run kiscli chart yearly --profile csq1404 --symbol 005930 --start 2020-01-01 --end 2026-05-07 --save
+uv run python -m kis_cli chart weekly --profile csq1404 --symbol 005930 --start 2025-01-01 --end 2026-05-07 --save
+uv run python -m kis_cli chart monthly --profile csq1404 --symbol 005930 --start 2025-01-01 --end 2026-05-07 --save
+uv run python -m kis_cli chart yearly --profile csq1404 --symbol 005930 --start 2020-01-01 --end 2026-05-07 --save
 ```
 
 고급/범용 history 명령:
@@ -335,8 +323,8 @@ uv run kiscli chart yearly --profile csq1404 --symbol 005930 --start 2020-01-01 
 `daily`, `weekly`, `monthly`, `yearly` 대신 `--period`를 직접 지정하고 싶을 때 사용합니다. 일반적인 사용 흐름에서는 위 기간 단위 명령을 권장합니다.
 
 ```bash
-uv run kiscli chart history --profile csq1404 --symbol 005930 --period D --start 2026-04-01 --end 2026-05-07 --save
-uv run kiscli chart history --profile csq1404 --symbol 005930 --period W --start 2025-01-01 --end 2026-05-07 --save
+uv run python -m kis_cli chart history --profile csq1404 --symbol 005930 --period D --start 2026-04-01 --end 2026-05-07 --save
+uv run python -m kis_cli chart history --profile csq1404 --symbol 005930 --period W --start 2025-01-01 --end 2026-05-07 --save
 ```
 
 period 매핑:
@@ -348,7 +336,7 @@ M -> 1mo
 Y -> 1y
 ```
 
-`chart` 명령은 `symbols` 테이블에서 `--symbol`의 market을 해석합니다. 먼저 `kiscli symbols download`로 대상 시장의 심볼을 저장해두세요. `--end`를 생략하면 오늘 날짜까지 조회합니다.
+`chart` 명령은 `symbols` 테이블에서 `--symbol`의 market을 해석합니다. 먼저 `symbols download`로 대상 시장의 심볼을 저장해두세요. `--end`를 생략하면 오늘 날짜까지 조회합니다.
 
 국내 OHLCV는 응답 제한에 맞춰 가장 오래된 수집일 기준으로 다음 구간을 이어 조회합니다. 해외 개별주식의 일/주/월 OHLCV는 `[해외주식] 해외주식 기간별시세` API(`/dailyprice`)를 사용합니다. 1회 최대 100건을 기준으로, 응답에 다음 `KEYB`가 있으면 같은 `BYMD`에서 다음 묶음을 이어 조회하고, `KEYB`가 없더라도 100건이 꽉 찬 응답이면 가장 오래된 응답일 이전으로 `BYMD`를 이동해 이어 조회합니다. 해외 개별주식 연봉(`Y`)은 지원하지 않습니다.
 
@@ -363,9 +351,9 @@ OHLCV 수집 중 KIS가 토큰 만료/인증 오류를 반환하면 토큰을 �
 기본 조회:
 
 ```bash
-uv run kiscli query ohlcv --symbol AAPL
-uv run kiscli query ohlcv --symbol 005930 --limit 30
-uv run kiscli query ohlcv --symbol AAPL --all
+uv run python -m kis_cli query ohlcv --symbol AAPL
+uv run python -m kis_cli query ohlcv --symbol 005930 --limit 30
+uv run python -m kis_cli query ohlcv --symbol AAPL --all
 ```
 
 기본 조회는 최신 20개 일봉을 반환합니다. `--all`을 사용하면 날짜 조건에 맞는 모든 일봉을 조회합니다. 조회 결과는 최신 날짜가 먼저 나옵니다.
@@ -373,23 +361,23 @@ uv run kiscli query ohlcv --symbol AAPL --all
 기간 조회:
 
 ```bash
-uv run kiscli query ohlcv --symbol AAPL --start 2026-04-01 --end 2026-05-07
-uv run kiscli query ohlcv --symbol 005930 --start 20260401 --end 20260507
+uv run python -m kis_cli query ohlcv --symbol AAPL --start 2026-04-01 --end 2026-05-07
+uv run python -m kis_cli query ohlcv --symbol 005930 --start 20260401 --end 20260507
 ```
 
 출력 형식:
 
 ```bash
-uv run kiscli query ohlcv --symbol AAPL --format table
-uv run kiscli query ohlcv --symbol AAPL --format json
-uv run kiscli query ohlcv --symbol AAPL --format csv
+uv run python -m kis_cli query ohlcv --symbol AAPL --format table
+uv run python -m kis_cli query ohlcv --symbol AAPL --format json
+uv run python -m kis_cli query ohlcv --symbol AAPL --format csv
 ```
 
 파일 내보내기:
 
 ```bash
-uv run kiscli query ohlcv --symbol AAPL --export ./exports/aapl.csv
-uv run kiscli query ohlcv --symbol AAPL --export ./exports/aapl.json
+uv run python -m kis_cli query ohlcv --symbol AAPL --export ./exports/aapl.csv
+uv run python -m kis_cli query ohlcv --symbol AAPL --export ./exports/aapl.json
 ```
 
 CSV/JSON 컬럼:
@@ -400,21 +388,28 @@ market,symbol,interval,timestamp,open,high,low,close,volume,change,change_rate,a
 
 `change`, `change_rate`, `amount`는 KIS 응답에 값이 없는 경우 비어 있을 수 있습니다. table 출력도 같은 값들을 `Change`, `Change Rate`, `Amount` 컬럼으로 표시합니다.
 
-## 패키지 구조
+## 프로젝트 구조
 
 ```text
+kis/
+├── client.py      # KIS SDK facade
+├── auth/          # OAuth token / WebSocket approval key
+├── endpoints/     # EndpointSpec registry
+├── parsers/       # REST / realtime payload parsers
+└── models/        # frozen dataclass models
+
 kis_cli/
 ├── cli/       # Typer 루트 앱, 명령별 모듈, Rich 출력, JSON/CSV export
 ├── config/    # 설정 파일, 프로필, 시크릿 참조 해석
-├── core/      # KIS REST 인증/클라이언트/현재가/OHLCV/심볼 파서
 ├── services/  # CLI 유즈케이스 조립
 └── storage/   # 앱 SQLite DB, DuckDB warehouse, repository, 저장소 점검
 ```
 
-`kis_cli/cli/app.py`는 루트 Typer 앱 조립만 담당합니다. 새 CLI 명령은 `kis_cli/cli/<command>.py`에 명령 그룹별로 추가하고, 실제 작업은 `services/`, `core/`, `storage/`, `config/`로 위임합니다.
+`kis/`는 순수 SDK, `kis_cli/`는 FinLabs의 현재 KIS CLI 애플리케이션입니다. `kis_cli/cli/app.py`는 루트 Typer 앱 조립만 담당합니다. 새 CLI 명령은 `kis_cli/cli/<command>.py`에 명령 그룹별로 추가하고, 실제 작업은 `services/`, `core/`, `storage/`, `config/`로 위임합니다.
 
-각 패키지 폴더에는 더 자세한 설명이 있습니다.
+각 주요 폴더에는 더 자세한 설명이 있습니다.
 
+- `kis/README.md`
 - `kis_cli/README.md`
 - `kis_cli/cli/README.md`
 - `kis_cli/config/README.md`
@@ -433,15 +428,15 @@ uv sync
 테스트:
 
 ```bash
-uv run pytest
+uv run python -m pytest
 ```
 
 특정 테스트:
 
 ```bash
-uv run pytest tests/test_chart.py
-uv run pytest tests/test_query.py
-uv run pytest tests/test_storage.py
+uv run python -m pytest tests/test_chart.py
+uv run python -m pytest tests/test_query.py
+uv run python -m pytest tests/test_storage.py
 ```
 
 Lint:
@@ -450,11 +445,6 @@ Lint:
 uv run ruff check .
 ```
 
-패키지 빌드:
-
-```bash
-uv run python -m build
-```
 
 ## 테스트 원칙
 

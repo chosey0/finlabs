@@ -2,34 +2,28 @@
 
 ## Project Summary
 
-`kis-cli` is a PyPI-ready, CLI-only Python package for collecting Korea Investment & Securities Open API market data.
+`FinLabs` is a local-first Python project for brokerage Open API SDKs, market data collection, and future analysis/dashboard tooling. The current implementation focuses on Korea Investment & Securities Open API data collection.
 
 Core goals:
 
-- Expose the `kiscli` command.
-- Authenticate with KIS REST APIs.
-- Download and normalize symbol masters.
+- Provide the current KIS CLI through `python -m kis_cli` during local development.
+- Authenticate with KIS REST APIs as the first broker integration.
+- Download and normalize KIS symbol masters.
 - Retrieve daily/weekly/monthly/yearly and minute OHLCV data.
 - Store market data in DuckDB and operational logs in SQLite.
 - Optionally mirror selected data to Supabase/PostgreSQL.
 - Preserve ordered ingestion, idempotency, and duplicate prevention.
 
-Do **not** add UI, dashboards, chart rendering, trading/order execution, strategies, backtesting, ML, news analysis, or non-KIS broker abstractions unless explicitly requested.
+Do **not** add UI, dashboards, chart rendering, trading/order execution, strategies, backtesting, ML, news analysis, or new broker adapters unless explicitly requested for a concrete feature.
 
 ## Repository Layout
 
 ```text
-kis_cli/
-  cli/       Typer command definitions
-  config/    settings, validation, user path resolution
-  core/      KIS REST clients, auth, endpoints, parsers, models
-  services/  use cases combining core/config/storage
-  storage/   DuckDB, SQLite, optional PostgreSQL/Supabase logic
-  utils/     shared helpers only; currently time helpers
-
-tests/       focused unit tests
-README.md    user-facing usage docs
-pyproject.toml packaging and dependencies
+kis/       KIS SDK: REST/WebSocket clients, endpoint specs, parsers, models
+kis_cli/   Current FinLabs KIS CLI application and storage workflows
+tests/     Focused unit tests
+README.md  User-facing usage docs
+pyproject.toml project metadata and dependencies
 ```
 
 Do not create `docs/`, `examples/`, `LICENSE`, or `CHANGELOG.md` unless explicitly requested.
@@ -41,15 +35,15 @@ Do not create `docs/`, `examples/`, `LICENSE`, or `CHANGELOG.md` unless explicit
 - Put database schema, reads, writes, and duplicate prevention in `storage/`.
 - Keep path resolution in `kis_cli/config/paths.py`, not `utils/`.
 - Use Typer for CLI commands; do not add raw `argparse` commands.
-- Keep the project KIS-specific.
+- Keep the current implementation KIS-specific until a concrete new broker adapter is requested.
 - Never store credentials, tokens, logs, database files, raw market dumps, or private configs in package source.
 
 ## CLI Contract
 
-The command name is always:
+Local CLI invocation is:
 
 ```bash
-kiscli
+python -m kis_cli
 ```
 
 Implemented sub-apps:
@@ -61,25 +55,25 @@ config  auth  db  symbols  chart  query  logs
 Implemented commands include:
 
 ```bash
-kiscli config init|add|update|delete|validate
-kiscli auth test|status|clear
-kiscli db init|schema|counts
-kiscli symbols download --market NASDAQ
-kiscli symbols search --query apple
-kiscli chart daily --symbol AAPL --start 2025-01-01 --end 2025-12-31 --save
-kiscli chart minutes --symbol AAPL --interval-minutes 1
-kiscli query ohlcv --symbol AAPL --limit 10
-kiscli query minutes --symbol AAPL --interval-minutes 1
-kiscli logs runs
-kiscli logs api
+python -m kis_cli config init|add|update|delete|validate
+python -m kis_cli auth test|status|clear
+python -m kis_cli db init|schema|counts
+python -m kis_cli symbols download --market NASDAQ
+python -m kis_cli symbols search --query apple
+python -m kis_cli chart daily --symbol AAPL --start 2025-01-01 --end 2025-12-31 --save
+python -m kis_cli chart minutes --symbol AAPL --interval-minutes 1
+python -m kis_cli query ohlcv --symbol AAPL --limit 10
+python -m kis_cli query minutes --symbol AAPL --interval-minutes 1
+python -m kis_cli logs runs
+python -m kis_cli logs api
 ```
 
 Planned only; do not document as available unless implemented:
 
 ```bash
-kiscli price current --symbol AAPL --market NASDAQ
-kiscli stream trades --symbol 005930 --market KRX
-kiscli stream quotes --symbol AAPL --market NAS
+python -m kis_cli price current --symbol AAPL --market NASDAQ
+python -m kis_cli stream trades --symbol 005930 --market KRX
+python -m kis_cli stream quotes --symbol AAPL --market NAS
 ```
 
 ## Storage Rules
@@ -126,6 +120,8 @@ Config: ~/.config/kis-cli/config.yaml
 Data:   ~/.local/share/kis-cli/
 Cache:  ~/.cache/kis-cli/
 Logs:   ~/.local/state/kis-cli/logs/
+
+These paths currently keep the legacy `kis-cli` app name for local data compatibility.
 ```
 
 Never commit secrets, account numbers, access/refresh tokens, local DB files, logs, raw market data, or private config files. Mask secrets in all CLI output and logs.
@@ -136,21 +132,11 @@ Prefer `uv`:
 
 ```bash
 uv sync
-uv run kiscli --help
-uv run pytest
+uv run python -m kis_cli --help
+uv run python -m pytest
 uv run ruff check .
-uv run python -m build
 ```
 
-Fallback without `uv`:
-
-```bash
-python -m pip install -e .
-python -m pytest
-python -m build
-```
-
-Do not use `pip install -e ".[dev]"` unless a `dev` extras group exists.
 
 ## Testing Rules
 
@@ -167,29 +153,16 @@ Do not call the real KIS API in unit tests.
 
 When adding a command, manually verify at least one success path and one failure path when practical.
 
-## Packaging Rules
+## Project Metadata Rules
 
-`pyproject.toml` must keep the CLI entry point:
+`pyproject.toml` is kept for dependency metadata only. Local CLI execution uses `python -m kis_cli`.
 
-```toml
-[project.scripts]
-kiscli = "kis_cli.cli.app:main"
-```
-
-Current optional dependency groups:
-
-```toml
-[project.optional-dependencies]
-postgres = ["psycopg[binary]>=3.2.0"]
-all      = ["psycopg[binary]>=3.2.0"]
-```
-
-When touching packaging, prefer moving `pytest` and `ruff` out of runtime dependencies into a future `dev` extras group.
+Do not add package build configuration, console-script entry points, or build artifacts unless packaging is explicitly requested again.
 
 ## Documentation Rules
 
 - Keep `README.md` practical: install, configure, initialize DB, core commands, examples, development commands.
-- Use `kiscli` in docs.
+- Use `python -m kis_cli` for local CLI examples in docs.
 - Only document implemented commands as available.
 - Clearly mark unfinished features as planned.
 - Do not include real secrets, account numbers, or private paths.
@@ -202,7 +175,7 @@ Use concise commit messages such as:
 feat: add config validation command
 fix: prevent duplicate OHLCV inserts
 test: add warehouse uniqueness tests
-docs: document kiscli db init
+docs: document db init
 ```
 
 Keep PRs focused. Include summary, tests/commands run, manual verification, and known limitations.

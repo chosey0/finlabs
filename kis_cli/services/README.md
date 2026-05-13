@@ -27,11 +27,11 @@ from kis_cli.services.auth import clear_auth_tokens, get_auth_statuses, get_rest
 CLI 예:
 
 ```bash
-kiscli auth test --profile csq1404
-kiscli auth test --profile csq1404 --refresh
-kiscli auth status --profile csq1404
-kiscli auth status --all
-kiscli auth clear --profile csq1404
+python -m kis_cli auth test --profile csq1404
+python -m kis_cli auth test --profile csq1404 --refresh
+python -m kis_cli auth status --profile csq1404
+python -m kis_cli auth status --all
+python -m kis_cli auth clear --profile csq1404
 ```
 
 ## 현재가 서비스
@@ -82,10 +82,10 @@ Y -> 1y
 CLI 예:
 
 ```bash
-kiscli chart daily --profile csq1404 --symbol 005930 --start 2026-04-01 --end 2026-05-07 --save
-kiscli chart daily --profile csq1404 --symbol AAPL --start 2026-04-01 --end 2026-05-07 --save --store supabase
-kiscli chart weekly --profile csq1404 --symbol 005930 --start 2025-01-01 --end 2026-05-07 --save
-kiscli chart history --profile csq1404 --symbol AAPL --period D --start 2026-04-01 --end 2026-05-07 --save
+python -m kis_cli chart daily --profile csq1404 --symbol 005930 --start 2026-04-01 --end 2026-05-07 --save
+python -m kis_cli chart daily --profile csq1404 --symbol AAPL --start 2026-04-01 --end 2026-05-07 --save --store supabase
+python -m kis_cli chart weekly --profile csq1404 --symbol 005930 --start 2025-01-01 --end 2026-05-07 --save
+python -m kis_cli chart history --profile csq1404 --symbol AAPL --period D --start 2026-04-01 --end 2026-05-07 --save
 ```
 
 `chart` 서비스는 로컬 DuckDB `symbols` 테이블에서 `symbol`의 market을 해석합니다. `end`가 비어 있으면 오늘 날짜를 종료일로 사용합니다.
@@ -110,11 +110,11 @@ from kis_cli.services.symbols import download_and_store_symbols, search_stored_s
 CLI 예:
 
 ```bash
-kiscli symbols download --market KOSPI
-kiscli symbols download --market NASDAQ --db-path ./warehouse.duckdb
-kiscli symbols download --market NASDAQ --store supabase
-kiscli symbols search --query apple
-kiscli symbols search --query 삼성 --limit 10
+python -m kis_cli symbols download --market KOSPI
+python -m kis_cli symbols download --market NASDAQ --db-path ./warehouse.duckdb
+python -m kis_cli symbols download --market NASDAQ --store supabase
+python -m kis_cli symbols search --query apple
+python -m kis_cli symbols search --query 삼성 --limit 10
 ```
 
 ## 저장 데이터 조회 서비스
@@ -137,10 +137,10 @@ from kis_cli.services.query import query_stored_daily_ohlcv
 CLI 예:
 
 ```bash
-kiscli query ohlcv --symbol AAPL
-kiscli query ohlcv --symbol AAPL --start 2026-04-01 --end 2026-05-07
-kiscli query ohlcv --symbol AAPL --format json
-kiscli query ohlcv --symbol AAPL --export ./exports/aapl.csv
+python -m kis_cli query ohlcv --symbol AAPL
+python -m kis_cli query ohlcv --symbol AAPL --start 2026-04-01 --end 2026-05-07
+python -m kis_cli query ohlcv --symbol AAPL --format json
+python -m kis_cli query ohlcv --symbol AAPL --export ./exports/aapl.csv
 ```
 
 파일 내보내기 자체는 CLI 출력 계층에서 처리하고, 서비스는 조회 결과를 dict 목록으로 반환합니다.

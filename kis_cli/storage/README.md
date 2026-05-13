@@ -14,9 +14,9 @@
 CLI에서 다른 파일을 사용하려면 `--path` 또는 `--db-path`를 지정합니다.
 
 ```bash
-kiscli db init --path ./warehouse.duckdb
-kiscli symbols download --market NASDAQ --db-path ./warehouse.duckdb
-kiscli query ohlcv --symbol AAPL --db-path ./warehouse.duckdb
+python -m kis_cli db init --path ./warehouse.duckdb
+python -m kis_cli symbols download --market NASDAQ --db-path ./warehouse.duckdb
+python -m kis_cli query ohlcv --symbol AAPL --db-path ./warehouse.duckdb
 ```
 
 Supabase/PostgreSQL canonical store는 파일 경로 대신 DSN 환경변수를 사용합니다.
@@ -24,9 +24,9 @@ DSN은 Supabase Dashboard의 Connection Method 중 **Transaction pooler** connec
 
 ```bash
 export KISCLI_SUPABASE_DB_DSN='postgresql://USER:PASSWORD@HOST:6543/postgres'
-kiscli db init --store supabase
-kiscli symbols download --market NASDAQ --store supabase
-kiscli chart daily --profile csq1404 --symbol AAPL --start 2026-04-01 --end 2026-05-07 --save --store supabase
+python -m kis_cli db init --store supabase
+python -m kis_cli symbols download --market NASDAQ --store supabase
+python -m kis_cli chart daily --profile csq1404 --symbol AAPL --start 2026-04-01 --end 2026-05-07 --save --store supabase
 ```
 
 ## DB 초기화
@@ -34,9 +34,9 @@ kiscli chart daily --profile csq1404 --symbol AAPL --start 2026-04-01 --end 2026
 `init_database()`는 부모 디렉터리를 만들고 스키마를 생성합니다.
 
 ```bash
-kiscli db init
-kiscli db init --path ./warehouse.duckdb
-kiscli db init --store supabase
+python -m kis_cli db init
+python -m kis_cli db init --path ./warehouse.duckdb
+python -m kis_cli db init --store supabase
 ```
 
 DuckDB warehouse 테이블:
@@ -57,7 +57,7 @@ SQLite app DB 테이블:
 권장 역할은 다음과 같습니다.
 
 ```text
-SQLite app DB          # kiscli 내부 실행 상태와 로컬 작업/API 로그
+SQLite app DB          # FinLabs CLI 내부 실행 상태와 로컬 작업/API 로그
 Supabase/PostgreSQL    # symbols, ohlcv_bars 원천 시장 데이터 canonical store
 DuckDB                 # 로컬 분석 mart, feature engineering, 학습용 snapshot/export
 ```
@@ -226,8 +226,8 @@ insert_realtime_tick(
 `inspect_database_schema()`는 테이블, 컬럼, 인덱스 정보를 반환합니다.
 
 ```bash
-kiscli db schema
-kiscli db schema --path ./warehouse.duckdb
+python -m kis_cli db schema
+python -m kis_cli db schema --path ./warehouse.duckdb
 ```
 
 출력 정보:
@@ -242,15 +242,15 @@ kiscli db schema --path ./warehouse.duckdb
 - UNIQUE 여부
 - 인덱스 컬럼
 
-DB 파일이 없으면 새로 만들지 않고 `kiscli db init`을 먼저 실행하라는 에러를 냅니다.
+DB 파일이 없으면 새로 만들지 않고 `python -m kis_cli db init`을 먼저 실행하라는 에러를 냅니다.
 
 ## 레코드 수 확인
 
 `inspect_database_counts()`는 테이블별 `COUNT(*)`와 전체 합계를 반환합니다.
 
 ```bash
-kiscli db counts
-kiscli db counts --path ./warehouse.duckdb
+python -m kis_cli db counts
+python -m kis_cli db counts --path ./warehouse.duckdb
 ```
 
 예상 출력 항목:
@@ -267,10 +267,10 @@ Total         3250
 저장된 일봉 OHLCV는 `query` 명령으로 조회합니다.
 
 ```bash
-kiscli query ohlcv --symbol AAPL
-kiscli query ohlcv --symbol AAPL --start 2026-04-01 --end 2026-05-07
-kiscli query ohlcv --symbol AAPL --format csv
-kiscli query ohlcv --symbol AAPL --export ./exports/aapl.json
+python -m kis_cli query ohlcv --symbol AAPL
+python -m kis_cli query ohlcv --symbol AAPL --start 2026-04-01 --end 2026-05-07
+python -m kis_cli query ohlcv --symbol AAPL --format csv
+python -m kis_cli query ohlcv --symbol AAPL --export ./exports/aapl.json
 ```
 
 CSV/JSON 컬럼은 다음 순서를 사용합니다.

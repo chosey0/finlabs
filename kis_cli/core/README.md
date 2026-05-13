@@ -34,11 +34,11 @@ token_url("mock")
 CLI에서는 다음 명령을 통해 사용됩니다.
 
 ```bash
-kiscli auth test --profile csq1404
-kiscli auth test --profile csq1404 --refresh
-kiscli auth status --profile csq1404
-kiscli auth status --all
-kiscli auth clear --profile csq1404
+python -m kis_cli auth test --profile csq1404
+python -m kis_cli auth test --profile csq1404 --refresh
+python -m kis_cli auth status --profile csq1404
+python -m kis_cli auth status --all
+python -m kis_cli auth clear --profile csq1404
 ```
 
 토큰 값은 출력하지 않습니다. CLI에 표시되는 토큰 만료 시각은 KST 기준입니다.
@@ -129,8 +129,8 @@ Y -> 1y
 CLI 예:
 
 ```bash
-kiscli chart daily --profile csq1404 --symbol 005930 --start 2026-04-01 --end 2026-05-07 --save
-kiscli chart history --profile csq1404 --symbol 005930 --period W --start 2025-01-01 --end 2026-05-07
+python -m kis_cli chart daily --profile csq1404 --symbol 005930 --start 2026-04-01 --end 2026-05-07 --save
+python -m kis_cli chart history --profile csq1404 --symbol 005930 --period W --start 2025-01-01 --end 2026-05-07
 ```
 
 정규화 결과는 `OhlcvBar`이며, 시가/고가/저가/종가/거래량과 함께 KIS 응답의 대비, 등락률, 거래대금을 담습니다. 저장 시 `bar_to_db_values()`로 warehouse 저장 형태로 변환합니다.
@@ -152,9 +152,9 @@ TOKYO, HONGKONG, HANOI, HOCHIMINH
 CLI 예:
 
 ```bash
-kiscli symbols download --market KOSPI
-kiscli symbols download --market NASDAQ
-kiscli symbols download --all
+python -m kis_cli symbols download --market KOSPI
+python -m kis_cli symbols download --market NASDAQ
+python -m kis_cli symbols download --all
 ```
 
 검색과 저장은 `services.symbols`와 `storage.repositories`에서 이어 처리합니다.
