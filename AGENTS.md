@@ -8,10 +8,9 @@ The package exposes the `kiscli` command and focuses on:
 
 - KIS REST API authentication
 - Symbol master download and normalization
-- Current price lookup
 - Daily/minute OHLCV retrieval
-- SQLite-first storage
-- PostgreSQL extension support
+- Local DuckDB warehouse for market data, SQLite `app.db` for operational logs
+- Optional Supabase / PostgreSQL mirror
 - Ordered ingestion
 - Duplicate prevention
 - CLI-based querying and export
@@ -33,24 +32,22 @@ kis-cli/
 │     ├── storage/
 │     ├── services/
 │     └── utils/
-├── docs/
 ├── tests/
-├── examples/
 ├── README.md
-├── LICENSE
-├── CHANGELOG.md
 ├── pyproject.toml
 └── AGENTS.md
 ```
+
+`docs/`, `examples/`, `LICENSE`, and `CHANGELOG.md` do not exist yet. Add them only when explicitly requested.
 
 ### Package Responsibilities
 
 - `cli/`: CLI command definitions for `kiscli`
 - `core/`: KIS REST API logic, including auth, endpoints, headers, clients, models, parsers, and symbol utilities
 - `services/`: Application use cases that combine `core/`, `storage/`, and config
-- `storage/`: SQLite/PostgreSQL schema, database adapters, repositories, and duplicate-prevention logic
+- `storage/`: DuckDB warehouse for market data, SQLite `app.db` for operational logs, optional Supabase/PostgreSQL mirror; database adapters, repositories, and duplicate-prevention logic live here
 - `config/`: Settings loading, validation, and config file initialization
-- `utils/`: Shared helpers for paths, logging, time, and I/O
+- `utils/`: Cross-cutting helpers shared across layers. Today this is limited to `time.py` (timestamp formatting). Path resolution lives in `kis_cli/config/paths.py`, not in `utils/`. Add new utility modules here only when a helper is genuinely shared by multiple top-level packages and does not belong in `config/`, `core/`, `services/`, or `storage/`.
 
 Keep CLI command files thin. Business logic belongs in `services/`. Direct KIS REST API behavior belongs in `core/`. Database logic belongs in `storage/`.
 
@@ -63,7 +60,7 @@ Keep CLI command files thin. Business logic belongs in `services/`. Direct KIS R
 - Use `kis_cli/` as the main package directory.
 - Keep the project KIS-specific; do not add unnecessary broker abstraction.
 - Implement KIS REST API features directly under `core/`.
-- Store data in SQLite first, with PostgreSQL support designed as an extension.
+- Store market data in the local DuckDB warehouse (`warehouse.duckdb`) and operational logs in the local SQLite `app.db`. Supabase / PostgreSQL is an optional remote mirror, not the primary store.
 - Prioritize ordered ingestion and duplicate prevention using database constraints.
 - Exclude UI, chart rendering, trading/order execution, and candle-structure analysis from the initial scope.
 - Keep CLI commands simple, composable, and script-friendly.
@@ -84,20 +81,55 @@ The CLI command must start with:
 kiscli
 ```
 
-Preferred MVP commands:
+Implemented sub-apps (registered in `kis_cli/cli/app.py`):
+
+```text
+config   auth   db   symbols   chart   query   logs
+```
+
+Implemented commands:
 
 ```bash
+# config
 kiscli config init
 kiscli config add
 kiscli config update
 kiscli config delete
 kiscli config validate
+
+# auth
 kiscli auth test
+kiscli auth status
+kiscli auth clear
+
+# db
 kiscli db init
+kiscli db schema
+kiscli db counts
+
+# symbols
 kiscli symbols download --market NASDAQ
 kiscli symbols search --query apple
+
+# chart (history / daily / weekly / monthly / yearly / minutes)
 kiscli chart daily --symbol AAPL --start 2025-01-01 --end 2025-12-31 --save
-kiscli query ohlcv --symbol AAPL --interval 1d --limit 10
+kiscli chart minutes --symbol AAPL --interval-minutes 1
+
+# query (DuckDB warehouse)
+kiscli query ohlcv --symbol AAPL --limit 10
+kiscli query minutes --symbol AAPL --interval-minutes 1
+
+# logs (SQLite app.db)
+kiscli logs runs
+kiscli logs api
+```
+
+Planned (not yet implemented — do not document as available):
+
+```bash
+kiscli price current --symbol AAPL --market NASDAQ
+kiscli stream trades --symbol 005930 --market KRX
+kiscli stream quotes --symbol AAPL --market NAS
 ```
 
 Do not document commands as available unless they are implemented or clearly marked as planned.
@@ -108,7 +140,7 @@ Use `typer` as the CLI framework.
 
 - Define the root app in `kis_cli/cli/app.py`.
 - Keep `kis_cli/cli/app.py` limited to root Typer app assembly and sub-app registration.
-- Group subcommands with Typer sub-apps such as `config`, `auth`, `db`, `symbols`, `price`, `chart`, `logs`, `stream`, and `query`.
+- Group subcommands with Typer sub-apps. Implemented today: `config`, `auth`, `db`, `symbols`, `chart`, `query`, `logs`. Planned: `price`, `stream`.
 - Put command implementations in the matching `kis_cli/cli/<group>.py` module. Do not add command functions directly to `app.py`.
 - Keep command functions thin; delegate behavior to `services/`, `config/`, `core/`, and `storage/`.
 - Prefer typed options and explicit help text.
@@ -125,47 +157,61 @@ Storage must prioritize:
 2. Duplicate prevention
 3. Idempotent writes
 4. Deterministic querying
-5. SQLite-first compatibility
+5. DuckDB-first compatibility for market data
 
-### Recommended Tables
+### Storage Layout
 
-- `symbols`
-- `ohlcv_bars`
-- `realtime_ticks`
-- `api_logs`
-- `ingest_runs`
+The project uses two local databases plus an optional remote mirror:
+
+- **DuckDB warehouse** (`warehouse.duckdb`, default under `data_dir()`): market data.
+  - Tables: `symbols`, `ohlcv_bars`, `overseas_minute_bars`, `realtime_ticks`.
+  - Defined in `kis_cli/storage/warehouse.py`.
+- **SQLite app database** (`app.db`, default under `data_dir()`): operational logs.
+  - Tables: `api_logs`, `ingest_runs`.
+  - Defined in `kis_cli/storage/app_db.py`.
+- **Supabase / PostgreSQL** (optional): remote mirror selected via `KIS_SUPABASE_DSN` (or equivalent).
+  - Tables: `symbols`, `ohlcv_bars` (see `kis_cli/storage/supabase_schema.py`).
+  - Used for upsert/mirroring; not the primary store.
+
+Do not introduce a generic "SQLite-first" path for market data. Market data goes to the DuckDB warehouse; only operational logs and lightweight state belong in `app.db`.
 
 ### Duplicate Prevention
 
-Use database-level constraints.
+Enforce uniqueness with database-level constraints, not Python checks.
 
-Examples:
+DuckDB warehouse:
 
 ```sql
+-- symbols
 UNIQUE (market, symbol)
-```
 
-```sql
+-- ohlcv_bars
 UNIQUE (market, symbol, interval, timestamp)
-```
 
-For realtime ticks:
+-- overseas_minute_bars
+UNIQUE (market, symbol, interval_minutes, local_date, local_time)
 
-```sql
+-- realtime_ticks
 UNIQUE (market, symbol, exchange_ts, seq)
 ```
 
-or, if a stable trade identifier exists:
+Supabase mirror uses `PRIMARY KEY` instead of `UNIQUE`:
 
 ```sql
-UNIQUE (market, symbol, trade_id)
+-- symbols
+PRIMARY KEY (market, symbol)
+
+-- ohlcv_bars
+PRIMARY KEY (market, symbol, interval, trade_date)
 ```
+
+If a stable trade identifier becomes available for realtime data, prefer `UNIQUE (market, symbol, trade_id)`.
 
 ### Ordered Ingestion
 
 For realtime or sequential data, preserve both exchange order and local ingestion order.
 
-Recommended fields:
+Recommended fields on realtime tables:
 
 ```text
 exchange_ts
@@ -182,18 +228,17 @@ ORDER BY exchange_ts, seq, received_seq
 
 ### Idempotent Inserts
 
-SQLite:
+DuckDB (warehouse): use `ON CONFLICT DO NOTHING`. DuckDB honors `UNIQUE` constraints declared in `CREATE TABLE`.
 
 ```sql
-INSERT OR IGNORE INTO ...
+INSERT INTO ohlcv_bars (...)
+VALUES (...)
+ON CONFLICT DO NOTHING;
 ```
 
-PostgreSQL:
+SQLite (`app.db`): only used for append-only operational logs (`api_logs`, `ingest_runs`) keyed by `INTEGER PRIMARY KEY AUTOINCREMENT`, so there is normally nothing to deduplicate. If a unique constraint is added later, use `INSERT OR IGNORE`.
 
-```sql
-INSERT INTO ...
-ON CONFLICT (...) DO NOTHING;
-```
+Supabase / PostgreSQL: `ON CONFLICT (...) DO NOTHING` for append paths, `ON CONFLICT (...) DO UPDATE SET ...` for upserts (see `upsert_supabase_symbols`).
 
 Avoid Python-only duplicate checks. They are not sufficient.
 
@@ -230,11 +275,7 @@ Never commit:
 - raw market data dumps
 - private config files
 
-Provide examples under `examples/`, such as:
-
-```text
-examples/config.yaml.example
-```
+An `examples/` folder is not part of the repository today. If example configs are needed, prefer documenting the shape inline in `README.md` rather than committing a separate `examples/config.yaml.example`. The CLI itself generates a starter config via `kiscli config init`.
 
 ---
 
@@ -267,10 +308,12 @@ uv run python -m build
 If `uv` is not available, use the equivalent Python tooling:
 
 ```bash
-python -m pip install -e ".[dev]"
+python -m pip install -e .
 python -m pytest
 python -m build
 ```
+
+Note: `pyproject.toml` does not currently expose a `dev` extras group, so `pip install -e ".[dev]"` will fail. Use plain `-e .` until a `dev` group is added (see Packaging Guidelines).
 
 ---
 
@@ -332,11 +375,11 @@ When adding a command, manually verify at least:
 
 ### Add Storage Logic
 
-1. Prefer SQLite-compatible schema and SQL first.
-2. Add PostgreSQL-specific behavior only when needed and keep it isolated.
-3. Enforce duplicate prevention with database constraints, not only Python-side checks.
+1. Route market data (symbols, OHLCV, minute bars, realtime ticks) to the DuckDB warehouse in `kis_cli/storage/warehouse.py`. Route operational logs (`api_logs`, `ingest_runs`) to SQLite `app.db` in `kis_cli/storage/app_db.py`.
+2. Add Supabase / PostgreSQL behavior only when remote mirroring is explicitly requested, and keep it isolated in `kis_cli/storage/supabase*.py`.
+3. Enforce duplicate prevention with database constraints (`UNIQUE` for DuckDB, `PRIMARY KEY` for Supabase), not only Python-side checks.
 4. Preserve ingestion order using explicit fields such as `received_seq`, `exchange_ts`, and `received_at` where applicable.
-5. Use idempotent writes such as `INSERT OR IGNORE` for SQLite or `ON CONFLICT DO NOTHING` for PostgreSQL.
+5. Use idempotent writes: `ON CONFLICT DO NOTHING` for DuckDB and PostgreSQL, `INSERT OR IGNORE` only if a unique constraint is added to `app.db`.
 6. Add tests for schema creation, unique constraints, duplicate inserts, and deterministic query ordering.
 
 ### Add Dependencies
@@ -394,14 +437,28 @@ Required script entry point:
 kiscli = "kis_cli.cli.app:main"
 ```
 
-Recommended optional dependency groups:
+Current optional dependency groups in `pyproject.toml`:
 
 ```toml
 [project.optional-dependencies]
-postgres = [...]
-realtime = [...]
-dev = [...]
-all = [...]
+postgres = ["psycopg[binary]>=3.2.0"]
+all      = ["psycopg[binary]>=3.2.0"]
+```
+
+Recommended next steps for `pyproject.toml` (do when touching packaging):
+
+1. **Move `pytest` and `ruff` out of runtime `dependencies` into a new `dev` extras group.** They are currently declared as runtime deps, which bloats the installed package.
+2. **Add `realtime = [...]` extras** when WebSocket support is implemented.
+3. **Keep `all` as the union** of optional groups (currently only `postgres`).
+
+Target shape:
+
+```toml
+[project.optional-dependencies]
+postgres = ["psycopg[binary]>=3.2.0"]
+realtime = [...]   # add when stream commands ship
+dev      = ["pytest>=9.0.3", "ruff>=0.15.12"]
+all      = ["psycopg[binary]>=3.2.0"]
 ```
 
 Before packaging, verify:
