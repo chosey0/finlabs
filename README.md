@@ -6,13 +6,6 @@
 
 이 프로젝트는 시장 데이터 수집용 CLI입니다. UI, 웹 대시보드, 차트 렌더링, 자동매매, 주문 실행, 전략/백테스트 기능은 포함하지 않습니다.
 
-CLI 앱은 `kiscli`로 제공하고, 한국투자증권 REST API helper는 `kis` 패키지로도 import할 수 있습니다.
-
-```python
-from kis.chart import fetch_ohlcv_history, fetch_overseas_stock_minute_bars
-from kis.symbols import download_symbol_master
-```
-
 ## 주요 기능
 
 - 프로필 기반 설정 관리와 시크릿 분리 저장
