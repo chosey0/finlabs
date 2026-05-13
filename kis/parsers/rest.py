@@ -29,7 +29,10 @@ def output_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
     KIS uses `output2` for paginated rows on some endpoints and `output`
     on others. Both shapes (single dict or list) are flattened to a list.
     """
-    output = payload.get("output2") or payload.get("output")
+    if "output2" in payload:
+        output = payload["output2"]
+    else:
+        output = payload.get("output")
     if output is None:
         return []
     if isinstance(output, dict):

@@ -186,6 +186,43 @@ def test_realtime_quick_start_with_mock_websocket(monkeypatch) -> None:
     assert event.exchange_ts == "2023-06-12 09:33:54"
 
 
+def test_realtime_received_seq_does_not_overlap_across_multi_record_frames(
+    monkeypatch,
+) -> None:
+    first_payload = "^".join(_domestic_trade_values() + _domestic_trade_values())
+    second_payload = "^".join(_domestic_trade_values())
+    websocket = FakeWebSocket(
+        [
+            f"0|H0STCNT0|002|{first_payload}",
+            f"0|H0STCNT0|001|{second_payload}",
+        ]
+    )
+
+    async def fake_connect(url):
+        websocket.url = url
+        return websocket
+
+    async def fake_approval(self):
+        return "approval-key"
+
+    monkeypatch.setattr("kis.realtime.session.websockets.connect", fake_connect)
+    monkeypatch.setattr("kis.client.KisClient.ensure_approval_key", fake_approval)
+
+    async def run() -> list[int]:
+        received_seq: list[int] = []
+        async with KisClient(credentials=Credentials("app-key", "app-secret")) as client:
+            async with client.realtime.session() as ws:
+                await ws.subscribe_trades("005930", market="KRX")
+                async for event in ws.stream():
+                    if isinstance(event, RealtimeTick):
+                        received_seq.append(event.received_seq)
+                    if len(received_seq) == 3:
+                        return received_seq
+        raise AssertionError("expected three realtime ticks")
+
+    assert asyncio.run(run()) == [1, 2, 3]
+
+
 class FakeWebSocket:
     def __init__(self, frames: list[str]) -> None:
         self.frames = list(frames)

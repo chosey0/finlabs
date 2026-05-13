@@ -9,6 +9,7 @@ import kis
 from kis import (
     Credentials,
     KisClient,
+    KisConfigError,
     MockNotSupportedError,
     parse_domestic_current_price,
     parse_overseas_minute_bar,
@@ -22,6 +23,7 @@ def test_kis_package_exports_core_sdk_api() -> None:
     assert kis.KisClient is KisClient
     assert kis.Credentials is Credentials
     assert kis.IssuedToken is IssuedToken
+    assert kis.__version__ == "0.1.0"
     assert "domestic.price.current" in kis.names()
     assert "overseas.chart.minute" in kis.names()
 
@@ -35,6 +37,17 @@ def test_endpoint_registry_rejects_mock_for_unsupported_endpoint() -> None:
         assert exc.endpoint_name == "overseas.chart.minute"
     else:
         raise AssertionError("expected MockNotSupportedError")
+
+
+def test_endpoint_registry_rejects_invalid_environment() -> None:
+    spec = kis.lookup("domestic.price.current")
+
+    try:
+        spec.tr_id_for("dev")  # type: ignore[arg-type]
+    except KisConfigError as exc:
+        assert "environment must be one of" in str(exc)
+    else:
+        raise AssertionError("expected KisConfigError")
 
 
 def test_kis_parsers_normalize_rest_payloads() -> None:
@@ -92,6 +105,7 @@ def test_kis_auth_and_response_helpers() -> None:
 
     assert token.expires_at == issued_at + timedelta(seconds=3600)
     assert output_rows({"output": {"symbol": "AAPL"}}) == [{"symbol": "AAPL"}]
+    assert output_rows({"output": {"summary": "not a row"}, "output2": []}) == []
 
 
 def test_kis_symbol_master_parser_handles_overseas_zip() -> None:

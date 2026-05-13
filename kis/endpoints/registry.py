@@ -32,9 +32,11 @@ class EndpointSpec:
     def tr_id_for(self, environment: Environment) -> str:
         if environment == "real":
             return self.tr_id_real
-        if self.tr_id_mock is None:
-            raise MockNotSupportedError(self.name)
-        return self.tr_id_mock
+        if environment == "mock":
+            if self.tr_id_mock is None:
+                raise MockNotSupportedError(self.name)
+            return self.tr_id_mock
+        raise KisConfigError("environment must be one of: real, mock")
 
 
 @dataclass

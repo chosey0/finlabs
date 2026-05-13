@@ -129,11 +129,13 @@ class RealtimeSession:
             if frame.lstrip().startswith("{"):
                 self._handle_ack(frame)
                 continue
-            self._received_seq += 1
-            for event in parse_realtime_frame(
+            received_seq_start = self._received_seq + 1
+            events = parse_realtime_frame(
                 frame,
-                received_seq_start=self._received_seq,
-            ):
+                received_seq_start=received_seq_start,
+            )
+            self._received_seq += len(events)
+            for event in events:
                 self._validate_event(event)
                 yield event
 
