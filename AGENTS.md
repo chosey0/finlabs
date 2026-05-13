@@ -1,130 +1,80 @@
 # AGENTS.md
 
-## Project Overview
+## Project Summary
 
-`kis-cli` is a PyPI-ready Python CLI project for collecting market data from the Korea Investment & Securities Open API.
+`kis-cli` is a PyPI-ready, CLI-only Python package for collecting Korea Investment & Securities Open API market data.
 
-The package exposes the `kiscli` command and focuses on:
+Core goals:
 
-- KIS REST API authentication
-- Symbol master download and normalization
-- Daily/minute OHLCV retrieval
-- Local DuckDB warehouse for market data, SQLite `app.db` for operational logs
-- Optional Supabase / PostgreSQL mirror
-- Ordered ingestion
-- Duplicate prevention
-- CLI-based querying and export
+- Expose the `kiscli` command.
+- Authenticate with KIS REST APIs.
+- Download and normalize symbol masters.
+- Retrieve daily/weekly/monthly/yearly and minute OHLCV data.
+- Store market data in DuckDB and operational logs in SQLite.
+- Optionally mirror selected data to Supabase/PostgreSQL.
+- Preserve ordered ingestion, idempotency, and duplicate prevention.
 
-This project is intentionally CLI-only. Do not add UI, desktop app, web dashboard, chart rendering, trading/order execution, or candle-structure analysis unless explicitly requested.
-
----
+Do **not** add UI, dashboards, chart rendering, trading/order execution, strategies, backtesting, ML, news analysis, or non-KIS broker abstractions unless explicitly requested.
 
 ## Repository Layout
 
 ```text
-kis-cli/
-├── kis_cli/
-│     ├── __init__.py
-│     ├── __main__.py
-│     ├── cli/
-│     ├── config/
-│     ├── core/
-│     ├── storage/
-│     ├── services/
-│     └── utils/
-├── tests/
-├── README.md
-├── pyproject.toml
-└── AGENTS.md
+kis_cli/
+  cli/       Typer command definitions
+  config/    settings, validation, user path resolution
+  core/      KIS REST clients, auth, endpoints, parsers, models
+  services/  use cases combining core/config/storage
+  storage/   DuckDB, SQLite, optional PostgreSQL/Supabase logic
+  utils/     shared helpers only; currently time helpers
+
+tests/       focused unit tests
+README.md    user-facing usage docs
+pyproject.toml packaging and dependencies
 ```
 
-`docs/`, `examples/`, `LICENSE`, and `CHANGELOG.md` do not exist yet. Add them only when explicitly requested.
+Do not create `docs/`, `examples/`, `LICENSE`, or `CHANGELOG.md` unless explicitly requested.
 
-### Package Responsibilities
+## Architecture Rules
 
-- `cli/`: CLI command definitions for `kiscli`
-- `core/`: KIS REST API logic, including auth, endpoints, headers, clients, models, parsers, and symbol utilities
-- `services/`: Application use cases that combine `core/`, `storage/`, and config
-- `storage/`: DuckDB warehouse for market data, SQLite `app.db` for operational logs, optional Supabase/PostgreSQL mirror; database adapters, repositories, and duplicate-prevention logic live here
-- `config/`: Settings loading, validation, and config file initialization
-- `utils/`: Cross-cutting helpers shared across layers. Today this is limited to `time.py` (timestamp formatting). Path resolution lives in `kis_cli/config/paths.py`, not in `utils/`. Add new utility modules here only when a helper is genuinely shared by multiple top-level packages and does not belong in `config/`, `core/`, `services/`, or `storage/`.
+- Keep CLI files thin; delegate business logic to `services/`.
+- Put direct KIS REST behavior in `core/`.
+- Put database schema, reads, writes, and duplicate prevention in `storage/`.
+- Keep path resolution in `kis_cli/config/paths.py`, not `utils/`.
+- Use Typer for CLI commands; do not add raw `argparse` commands.
+- Keep the project KIS-specific.
+- Never store credentials, tokens, logs, database files, raw market dumps, or private configs in package source.
 
-Keep CLI command files thin. Business logic belongs in `services/`. Direct KIS REST API behavior belongs in `core/`. Database logic belongs in `storage/`.
+## CLI Contract
 
----
-
-## Implementation Guidelines
-
-- Build the project as a PyPI-ready Python package named `kis-cli`.
-- Expose the CLI entry point as `kiscli`.
-- Use `kis_cli/` as the main package directory.
-- Keep the project KIS-specific; do not add unnecessary broker abstraction.
-- Implement KIS REST API features directly under `core/`.
-- Store market data in the local DuckDB warehouse (`warehouse.duckdb`) and operational logs in the local SQLite `app.db`. Supabase / PostgreSQL is an optional remote mirror, not the primary store.
-- Prioritize ordered ingestion and duplicate prevention using database constraints.
-- Exclude UI, chart rendering, trading/order execution, and candle-structure analysis from the initial scope.
-- Keep CLI commands simple, composable, and script-friendly.
-- Do not store API keys, secrets, tokens, logs, or database files inside the package source.
-- Use OS-appropriate user directories for config, cache, data, and logs.
-- Use `pyproject.toml` for packaging, dependencies, and the CLI script entry point.
-- Use Typer for CLI command definitions under `kis_cli/cli/`; do not implement new CLI commands with raw `argparse`.
-- Make PostgreSQL and realtime/WebSocket features optional dependencies if added later.
-- Add focused tests for config loading, DB schema creation, duplicate prevention, and REST response parsing.
-
----
-
-## CLI Naming
-
-The CLI command must start with:
+The command name is always:
 
 ```bash
 kiscli
 ```
 
-Implemented sub-apps (registered in `kis_cli/cli/app.py`):
+Implemented sub-apps:
 
 ```text
-config   auth   db   symbols   chart   query   logs
+config  auth  db  symbols  chart  query  logs
 ```
 
-Implemented commands:
+Implemented commands include:
 
 ```bash
-# config
-kiscli config init
-kiscli config add
-kiscli config update
-kiscli config delete
-kiscli config validate
-
-# auth
-kiscli auth test
-kiscli auth status
-kiscli auth clear
-
-# db
-kiscli db init
-kiscli db schema
-kiscli db counts
-
-# symbols
+kiscli config init|add|update|delete|validate
+kiscli auth test|status|clear
+kiscli db init|schema|counts
 kiscli symbols download --market NASDAQ
 kiscli symbols search --query apple
-
-# chart (history / daily / weekly / monthly / yearly / minutes)
 kiscli chart daily --symbol AAPL --start 2025-01-01 --end 2025-12-31 --save
 kiscli chart minutes --symbol AAPL --interval-minutes 1
-
-# query (DuckDB warehouse)
 kiscli query ohlcv --symbol AAPL --limit 10
 kiscli query minutes --symbol AAPL --interval-minutes 1
-
-# logs (SQLite app.db)
 kiscli logs runs
 kiscli logs api
 ```
 
-Planned (not yet implemented — do not document as available):
+Planned only; do not document as available unless implemented:
 
 ```bash
 kiscli price current --symbol AAPL --market NASDAQ
@@ -132,123 +82,42 @@ kiscli stream trades --symbol 005930 --market KRX
 kiscli stream quotes --symbol AAPL --market NAS
 ```
 
-Do not document commands as available unless they are implemented or clearly marked as planned.
+## Storage Rules
 
-### CLI Framework
+Market data is DuckDB-first:
 
-Use `typer` as the CLI framework.
+- DuckDB warehouse: `warehouse.duckdb`, default under `data_dir()`.
+- SQLite app DB: `app.db`, operational logs only.
+- Supabase/PostgreSQL: optional mirror, not primary storage.
 
-- Define the root app in `kis_cli/cli/app.py`.
-- Keep `kis_cli/cli/app.py` limited to root Typer app assembly and sub-app registration.
-- Group subcommands with Typer sub-apps. Implemented today: `config`, `auth`, `db`, `symbols`, `chart`, `query`, `logs`. Planned: `price`, `stream`.
-- Put command implementations in the matching `kis_cli/cli/<group>.py` module. Do not add command functions directly to `app.py`.
-- Keep command functions thin; delegate behavior to `services/`, `config/`, `core/`, and `storage/`.
-- Prefer typed options and explicit help text.
-- Convert expected user errors into `typer.BadParameter` or `typer.Exit` with clear messages.
-- Do not print secrets or unmasked credential values from any Typer command.
-
----
-
-## Storage Requirements
-
-Storage must prioritize:
-
-1. Ordered ingestion
-2. Duplicate prevention
-3. Idempotent writes
-4. Deterministic querying
-5. DuckDB-first compatibility for market data
-
-### Storage Layout
-
-The project uses two local databases plus an optional remote mirror:
-
-- **DuckDB warehouse** (`warehouse.duckdb`, default under `data_dir()`): market data.
-  - Tables: `symbols`, `ohlcv_bars`, `overseas_minute_bars`, `realtime_ticks`.
-  - Defined in `kis_cli/storage/warehouse.py`.
-- **SQLite app database** (`app.db`, default under `data_dir()`): operational logs.
-  - Tables: `api_logs`, `ingest_runs`.
-  - Defined in `kis_cli/storage/app_db.py`.
-- **Supabase / PostgreSQL** (optional): remote mirror selected via `KIS_SUPABASE_DSN` (or equivalent).
-  - Tables: `symbols`, `ohlcv_bars` (see `kis_cli/storage/supabase_schema.py`).
-  - Used for upsert/mirroring; not the primary store.
-
-Do not introduce a generic "SQLite-first" path for market data. Market data goes to the DuckDB warehouse; only operational logs and lightweight state belong in `app.db`.
-
-### Duplicate Prevention
-
-Enforce uniqueness with database-level constraints, not Python checks.
-
-DuckDB warehouse:
+DuckDB tables and required uniqueness:
 
 ```sql
--- symbols
-UNIQUE (market, symbol)
-
--- ohlcv_bars
-UNIQUE (market, symbol, interval, timestamp)
-
--- overseas_minute_bars
-UNIQUE (market, symbol, interval_minutes, local_date, local_time)
-
--- realtime_ticks
-UNIQUE (market, symbol, exchange_ts, seq)
+symbols UNIQUE (market, symbol)
+ohlcv_bars UNIQUE (market, symbol, interval, timestamp)
+overseas_minute_bars UNIQUE (market, symbol, interval_minutes, local_date, local_time)
+realtime_ticks UNIQUE (market, symbol, exchange_ts, seq)
 ```
 
-Supabase mirror uses `PRIMARY KEY` instead of `UNIQUE`:
+Supabase/PostgreSQL mirrors use primary keys:
 
 ```sql
--- symbols
-PRIMARY KEY (market, symbol)
-
--- ohlcv_bars
-PRIMARY KEY (market, symbol, interval, trade_date)
+symbols PRIMARY KEY (market, symbol)
+ohlcv_bars PRIMARY KEY (market, symbol, interval, trade_date)
 ```
 
-If a stable trade identifier becomes available for realtime data, prefer `UNIQUE (market, symbol, trade_id)`.
+Idempotency requirements:
 
-### Ordered Ingestion
+- Use database constraints, not Python-only duplicate checks.
+- DuckDB/PostgreSQL append paths should use `ON CONFLICT DO NOTHING`.
+- PostgreSQL upsert paths may use `ON CONFLICT (...) DO UPDATE`.
+- SQLite is for append-only operational logs; use `INSERT OR IGNORE` only if a unique constraint is added later.
+- Realtime/sequential data should preserve exchange and local ingestion order with fields such as `exchange_ts`, `seq`, `received_at`, and `received_seq`.
+- Deterministic realtime ordering should prefer `ORDER BY exchange_ts, seq, received_seq`.
 
-For realtime or sequential data, preserve both exchange order and local ingestion order.
+## Config and Local Files
 
-Recommended fields on realtime tables:
-
-```text
-exchange_ts
-received_at
-received_seq
-seq
-```
-
-Recommended query order:
-
-```sql
-ORDER BY exchange_ts, seq, received_seq
-```
-
-### Idempotent Inserts
-
-DuckDB (warehouse): use `ON CONFLICT DO NOTHING`. DuckDB honors `UNIQUE` constraints declared in `CREATE TABLE`.
-
-```sql
-INSERT INTO ohlcv_bars (...)
-VALUES (...)
-ON CONFLICT DO NOTHING;
-```
-
-SQLite (`app.db`): only used for append-only operational logs (`api_logs`, `ingest_runs`) keyed by `INTEGER PRIMARY KEY AUTOINCREMENT`, so there is normally nothing to deduplicate. If a unique constraint is added later, use `INSERT OR IGNORE`.
-
-Supabase / PostgreSQL: `ON CONFLICT (...) DO NOTHING` for append paths, `ON CONFLICT (...) DO UPDATE SET ...` for upserts (see `upsert_supabase_symbols`).
-
-Avoid Python-only duplicate checks. They are not sufficient.
-
----
-
-## Configuration and Local Files
-
-Do not place user-specific files inside `kis-cli/`.
-
-Use OS-appropriate user directories.
+Use OS-appropriate user directories via `platformdirs` or equivalent.
 
 Recommended defaults:
 
@@ -259,53 +128,21 @@ Cache:  ~/.cache/kis-cli/
 Logs:   ~/.local/state/kis-cli/logs/
 ```
 
-On Windows, use platform-appropriate app data directories.
+Never commit secrets, account numbers, access/refresh tokens, local DB files, logs, raw market data, or private config files. Mask secrets in all CLI output and logs.
 
-Use `platformdirs` or an equivalent lightweight approach.
+## Development Commands
 
-Never commit:
-
-- API keys
-- API secrets
-- account numbers
-- access tokens
-- refresh tokens
-- local SQLite files
-- logs
-- raw market data dumps
-- private config files
-
-An `examples/` folder is not part of the repository today. If example configs are needed, prefer documenting the shape inline in `README.md` rather than committing a separate `examples/config.yaml.example`. The CLI itself generates a starter config via `kiscli config init`.
-
----
-
-## Build and Development Commands
-
-Use the repository’s package manager workflow. This project is expected to be compatible with `uv`.
-
-Typical commands:
+Prefer `uv`:
 
 ```bash
 uv sync
-```
-
-```bash
 uv run kiscli --help
-```
-
-```bash
 uv run pytest
-```
-
-```bash
 uv run ruff check .
-```
-
-```bash
 uv run python -m build
 ```
 
-If `uv` is not available, use the equivalent Python tooling:
+Fallback without `uv`:
 
 ```bash
 python -m pip install -e .
@@ -313,131 +150,33 @@ python -m pytest
 python -m build
 ```
 
-Note: `pyproject.toml` does not currently expose a `dev` extras group, so `pip install -e ".[dev]"` will fail. Use plain `-e .` until a `dev` group is added (see Packaging Guidelines).
+Do not use `pip install -e ".[dev]"` unless a `dev` extras group exists.
 
----
+## Testing Rules
 
-## Testing Instructions
+Add behavior-focused tests for:
 
-Add tests for behavior, not just implementation details.
-
-Focus on:
-
-- Config file loading and validation
-- CLI argument validation
+- config loading and validation
+- CLI argument validation and output formatting
 - DB schema creation
-- Unique constraints
-- Duplicate inserts
-- Deterministic ordering
-- KIS REST response parsing
-- Error handling for failed API responses
-- Output formatting for table, JSON, or CSV modes
+- uniqueness constraints and duplicate inserts
+- deterministic query ordering
+- mocked KIS REST response parsing and error handling
 
 Do not call the real KIS API in unit tests.
 
-Use mocked HTTP responses for API behavior.
+When adding a command, manually verify at least one success path and one failure path when practical.
 
-Manual verification is still recommended for API integration commands, especially:
+## Packaging Rules
 
-```bash
-kiscli auth test
-kiscli chart daily --symbol AAPL --start 2025-01-01 --end 2025-12-31
-```
-
-When adding a command, manually verify at least:
-
-- one successful path
-- one failure path
-
----
-
-## Common Tasks
-
-### Add a CLI Command
-
-1. Define the command contract clearly: command name, arguments, options, output format, and failure behavior.
-2. Place command definitions under the matching `kis_cli/cli/<group>.py` module.
-3. Keep CLI files thin; delegate business logic to `services/`.
-4. Use `core/` only for direct KIS REST API behavior such as auth, endpoints, headers, clients, and parsers.
-5. Use `storage/` for database reads, writes, schema creation, and duplicate-prevention logic.
-6. Add focused tests when the command includes validation, branching, database writes, formatted output, or error handling.
-7. Manually verify at least one success path and one failure path when applicable.
-
-### Add or Change KIS REST API Features
-
-1. Define the target KIS endpoint, required TR ID, request parameters, headers, and expected response shape.
-2. Add or update endpoint metadata in `core/endpoints.py`.
-3. Implement request construction in `core/client.py` or a focused `core/` module.
-4. Normalize raw KIS responses in `core/parser.py`.
-5. Keep API credentials, access tokens, and environment settings outside source code.
-6. Add tests using mocked responses rather than calling the real API in unit tests.
-7. Verify manually with `kiscli auth test` or the relevant CLI command.
-
-### Add Storage Logic
-
-1. Route market data (symbols, OHLCV, minute bars, realtime ticks) to the DuckDB warehouse in `kis_cli/storage/warehouse.py`. Route operational logs (`api_logs`, `ingest_runs`) to SQLite `app.db` in `kis_cli/storage/app_db.py`.
-2. Add Supabase / PostgreSQL behavior only when remote mirroring is explicitly requested, and keep it isolated in `kis_cli/storage/supabase*.py`.
-3. Enforce duplicate prevention with database constraints (`UNIQUE` for DuckDB, `PRIMARY KEY` for Supabase), not only Python-side checks.
-4. Preserve ingestion order using explicit fields such as `received_seq`, `exchange_ts`, and `received_at` where applicable.
-5. Use idempotent writes: `ON CONFLICT DO NOTHING` for DuckDB and PostgreSQL, `INSERT OR IGNORE` only if a unique constraint is added to `app.db`.
-6. Add tests for schema creation, unique constraints, duplicate inserts, and deterministic query ordering.
-
-### Add Dependencies
-
-1. Confirm the dependency is necessary for the requested behavior.
-2. Prefer lightweight, well-maintained dependencies suitable for PyPI distribution.
-3. Keep optional features behind optional dependencies, for example PostgreSQL or realtime/WebSocket support.
-4. Update `pyproject.toml` through the repository’s package manager workflow.
-5. Re-run the smallest command or test that imports or exercises the dependency.
-6. Avoid adding dependencies for functionality that can be handled cleanly with the standard library.
-
-### Document Usage
-
-1. Keep `README.md` practical: installation, configuration, database setup, core commands, examples, and development commands.
-2. Use the final CLI name `kiscli` in all documentation.
-3. Match documented commands to commands that were actually implemented or manually verified.
-4. Document where config, cache, data, and logs are stored.
-5. Do not include real API keys, secrets, tokens, account numbers, or private paths in examples.
-6. Clearly mark unfinished features as planned rather than available.
-
----
-
-## Code Style Guidelines
-
-- Prefer clear, typed Python code.
-- Use type hints for public functions and service-layer functions.
-- Keep functions small and purpose-specific.
-- Avoid hidden global state.
-- Avoid hardcoded paths.
-- Avoid hardcoded KIS credentials.
-- Prefer explicit error messages over silent failures.
-- Prefer deterministic output for CLI commands.
-- Use timezone-aware datetimes where possible.
-- Normalize external API responses before passing data into storage.
-- Keep parsing logic separate from HTTP request logic.
-
----
-
-## Packaging Guidelines
-
-This project should remain PyPI-ready.
-
-`pyproject.toml` should define:
-
-- package metadata
-- runtime dependencies
-- optional dependencies
-- dev dependencies
-- CLI script entry point
-
-Required script entry point:
+`pyproject.toml` must keep the CLI entry point:
 
 ```toml
 [project.scripts]
 kiscli = "kis_cli.cli.app:main"
 ```
 
-Current optional dependency groups in `pyproject.toml`:
+Current optional dependency groups:
 
 ```toml
 [project.optional-dependencies]
@@ -445,120 +184,25 @@ postgres = ["psycopg[binary]>=3.2.0"]
 all      = ["psycopg[binary]>=3.2.0"]
 ```
 
-Recommended next steps for `pyproject.toml` (do when touching packaging):
+When touching packaging, prefer moving `pytest` and `ruff` out of runtime dependencies into a future `dev` extras group.
 
-1. **Move `pytest` and `ruff` out of runtime `dependencies` into a new `dev` extras group.** They are currently declared as runtime deps, which bloats the installed package.
-2. **Add `realtime = [...]` extras** when WebSocket support is implemented.
-3. **Keep `all` as the union** of optional groups (currently only `postgres`).
+## Documentation Rules
 
-Target shape:
+- Keep `README.md` practical: install, configure, initialize DB, core commands, examples, development commands.
+- Use `kiscli` in docs.
+- Only document implemented commands as available.
+- Clearly mark unfinished features as planned.
+- Do not include real secrets, account numbers, or private paths.
 
-```toml
-[project.optional-dependencies]
-postgres = ["psycopg[binary]>=3.2.0"]
-realtime = [...]   # add when stream commands ship
-dev      = ["pytest>=9.0.3", "ruff>=0.15.12"]
-all      = ["psycopg[binary]>=3.2.0"]
-```
+## Git and PR Rules
 
-Before packaging, verify:
-
-```bash
-uv run pytest
-uv run ruff check .
-uv run python -m build
-```
-
-Do not include local data, logs, config files, or secrets in the built package.
-
----
-
-## Security Considerations
-
-This project handles sensitive API credentials.
-
-Agents must not:
-
-- print secrets in logs
-- commit real config files
-- embed credentials in tests
-- store tokens in the package directory
-- include private account information in examples
-- expose raw exception output that contains secrets
-
-Mask sensitive values in logs and CLI output.
-
-Example:
-
-```text
-app_key: abcd********wxyz
-```
-
-Do not implement trading/order execution unless explicitly requested and reviewed separately.
-
----
-
-## Git and Pull Request Guidelines
-
-Use concise, descriptive commit messages.
-
-Preferred style:
+Use concise commit messages such as:
 
 ```text
 feat: add config validation command
 fix: prevent duplicate OHLCV inserts
-test: add SQLite unique constraint tests
+test: add warehouse uniqueness tests
 docs: document kiscli db init
-refactor: move KIS parser into core
 ```
 
-Pull requests should include:
-
-- summary of changes
-- commands run
-- tests added or updated
-- manual verification steps
-- any known limitations
-
-Do not mix unrelated changes in one pull request.
-
----
-
-## Out of Scope Unless Explicitly Requested
-
-Do not add the following by default:
-
-- PySide6 UI
-- web dashboard
-- chart rendering
-- auto trading
-- order execution
-- strategy engine
-- backtesting engine
-- candle-structure analysis
-- machine learning models
-- news analysis
-- broker abstraction for non-KIS brokers
-
-Keep the initial product focused on reliable CLI-based KIS REST data collection and storage.
-
----
-
-## Final Development Priority
-
-Work in this order unless the user requests otherwise:
-
-```text
-kis-cli package structure
-→ kiscli entry point
-→ config management
-→ SQLite schema
-→ KIS authentication
-→ symbol download
-→ REST current price
-→ REST OHLCV retrieval
-→ duplicate-safe storage
-→ CLI query commands
-→ PostgreSQL extension
-→ realtime/WebSocket extension
-```
+Keep PRs focused. Include summary, tests/commands run, manual verification, and known limitations.
