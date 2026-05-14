@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 from typer.testing import CliRunner
 
-from kis import IssuedToken, KisAuthError, mask_sensitive_message, parse_token_response
+from kis import IssuedToken, KisAuthError, TokenRecord, mask_sensitive_message, parse_token_response
 
 from kis_cli.cli.app import app
 from kis_cli.config.profiles import ProfileCredentials, add_profile
+from kis_cli.config.resolver import ResolvedProfile
 from kis_cli.core.token_cache import read_cached_token, read_cached_token_result, write_cached_token
+from kis_cli.services.auth import _CliSdkTokenCache
 
 runner = CliRunner()
 
@@ -55,7 +58,7 @@ def test_mask_sensitive_message_masks_token_like_values() -> None:
 
 def test_token_cache_roundtrip(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr("kis_cli.core.token_cache.cache_dir", lambda: tmp_path)
-    issued_at = datetime(2026, 5, 7, 1, 0, tzinfo=UTC)
+    issued_at = datetime.now(UTC)
     expires_at = issued_at + timedelta(hours=1)
 
     cached = write_cached_token(
@@ -79,6 +82,34 @@ def test_token_cache_roundtrip(tmp_path, monkeypatch) -> None:
     assert "secret-token" in cached.path.read_text(encoding="utf-8")
 
 
+def test_cli_sdk_token_cache_reuses_persistent_cli_token(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("kis_cli.core.token_cache.cache_dir", lambda: tmp_path)
+    issued_at = datetime.now(UTC)
+    expires_at = issued_at + timedelta(hours=1)
+    resolved = _resolved_profile()
+
+    write_cached_token(
+        IssuedToken(
+            access_token="persistent-secret-token",
+            token_type="Bearer",
+            issued_at=issued_at,
+            expires_at=expires_at,
+            raw={},
+        ),
+        profile_id=resolved.profile_id,
+        profile_name=resolved.name,
+        environment=resolved.environment,
+    )
+
+    record = _CliSdkTokenCache(resolved).get("real:app-key")
+
+    assert record == TokenRecord(
+        access_token="persistent-secret-token",
+        token_type="Bearer",
+        expires_at=expires_at,
+    )
+
+
 def test_token_cache_reports_invalid_json(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr("kis_cli.core.token_cache.cache_dir", lambda: tmp_path)
     path = tmp_path / "tokens" / "profile-id.json"
@@ -89,6 +120,22 @@ def test_token_cache_reports_invalid_json(tmp_path, monkeypatch) -> None:
 
     assert result.status == "invalid"
     assert result.token is None
+
+
+def _resolved_profile() -> ResolvedProfile:
+    return ResolvedProfile(
+        name="csq1404",
+        profile_id="profile-id",
+        environment="real",
+        expires_at="2026-12-31",
+        app_key="app-key",
+        app_secret="app-secret",
+        owner="choe",
+        account_no="12345678",
+        description="",
+        config_path=Path("config.yaml"),
+        env_path=Path("profiles.env"),
+    )
 
 
 def test_auth_test_command_issues_token_without_printing_secret(tmp_path, monkeypatch) -> None:

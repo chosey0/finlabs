@@ -7,7 +7,14 @@ from pathlib import Path
 from typing import Awaitable, Callable, TypeVar
 from zoneinfo import ZoneInfo
 
-from kis import Credentials, KisAuthError, KisClient, MemoryTokenCache, issue_access_token
+from kis import (
+    Credentials,
+    IssuedToken,
+    KisAuthError,
+    KisClient,
+    TokenRecord,
+    issue_access_token,
+)
 
 from kis_cli.config.paths import default_config_file
 from kis_cli.config.resolver import ResolvedProfile
@@ -111,7 +118,10 @@ async def _call_with_sdk_client_async(
     resolved = resolve_profile(profile=profile, config_path=config_path)
     try:
         return await _run_with_sdk_client(operation, resolved)
-    except KisAuthError:
+    except KisAuthError as exc:
+        if not _should_retry_auth_error(exc):
+            raise
+        clear_cached_token(profile_id=resolved.profile_id)
         return await _run_with_sdk_client(operation, resolved)
 
 
@@ -122,9 +132,58 @@ async def _run_with_sdk_client(
     async with KisClient(
         credentials=_credentials_from_profile(resolved),
         environment=resolved.environment,  # type: ignore[arg-type]
-        token_cache=MemoryTokenCache(),
+        token_cache=_CliSdkTokenCache(resolved),
     ) as client:
         return await operation(client)
+
+
+class _CliSdkTokenCache:
+    """Bridge the SDK TokenCache protocol to the CLI's persistent token file."""
+
+    def __init__(self, resolved: ResolvedProfile) -> None:
+        self._resolved = resolved
+
+    def get(self, key: str) -> TokenRecord | None:
+        cached = read_cached_token(profile_id=self._resolved.profile_id)
+        if cached is None:
+            return None
+        if cached.profile_name != self._resolved.name:
+            return None
+        if cached.environment != self._resolved.environment:
+            return None
+        if not cached.is_valid():
+            return None
+        return TokenRecord(
+            access_token=cached.access_token,
+            token_type=cached.token_type,
+            expires_at=cached.expires_at,
+        )
+
+    def set(self, key: str, record: TokenRecord) -> None:
+        write_cached_token(
+            IssuedToken(
+                access_token=record.access_token,
+                token_type=record.token_type,
+                issued_at=datetime.now(UTC),
+                expires_at=record.expires_at,
+                raw={},
+            ),
+            profile_id=self._resolved.profile_id,
+            profile_name=self._resolved.name,
+            environment=self._resolved.environment,
+        )
+
+    def delete(self, key: str) -> None:
+        clear_cached_token(profile_id=self._resolved.profile_id)
+
+
+def _should_retry_auth_error(exc: KisAuthError) -> bool:
+    message = str(exc)
+    return not (
+        message.startswith("KIS token request failed:")
+        or message.startswith("KIS token response did not include access_token:")
+        or message.startswith("KIS token response was not valid JSON")
+    )
 
 
 def _credentials_from_profile(resolved: ResolvedProfile) -> Credentials:

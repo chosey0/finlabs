@@ -18,6 +18,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 from typing import TYPE_CHECKING, Any, Literal
 
+from kis._internal.pacing import ContinuationPacer, call_with_continuation_pacing
 from kis.endpoints.registry import lookup
 from kis.models.ohlcv import OhlcvBar, OverseasMinuteBar
 from kis.parsers.rest import (
@@ -87,19 +88,23 @@ class OverseasChartAPI:
         bars: dict[str, OhlcvBar] = {}
         keyb = ""
         page_end = end_date
+        pacer = ContinuationPacer()
 
         for _ in range(max_pages):
-            payload = await self._parent.request(
-                _DAILY_SPEC,
-                params={
-                    "AUTH": "",
-                    "EXCD": normalized_exchange,
-                    "SYMB": normalized_symbol,
-                    "GUBN": _PERIOD_TO_GUBN[period],
-                    "BYMD": format_date(page_end),
-                    "MODP": "1" if adjusted else "0",
-                    "KEYB": keyb,
-                },
+            payload = await call_with_continuation_pacing(
+                pacer,
+                lambda: self._parent.request(
+                    _DAILY_SPEC,
+                    params={
+                        "AUTH": "",
+                        "EXCD": normalized_exchange,
+                        "SYMB": normalized_symbol,
+                        "GUBN": _PERIOD_TO_GUBN[period],
+                        "BYMD": format_date(page_end),
+                        "MODP": "1" if adjusted else "0",
+                        "KEYB": keyb,
+                    },
+                ),
             )
             rows = output_rows(payload)
             raw_dates = [parse_date(date_value(row, "xymd")) for row in rows]
@@ -168,21 +173,25 @@ class OverseasChartAPI:
         next_value = ""
         keyb = ""
         seen_keybs: set[str] = set()
+        pacer = ContinuationPacer()
 
         for _ in range(max_pages):
-            payload = await self._parent.request(
-                _MINUTE_SPEC,
-                params={
-                    "AUTH": "",
-                    "EXCD": normalized_exchange,
-                    "SYMB": normalized_symbol,
-                    "NMIN": str(interval_minutes),
-                    "PINC": "1" if include_previous else "0",
-                    "NEXT": next_value,
-                    "NREC": str(count),
-                    "FILL": "",
-                    "KEYB": keyb,
-                },
+            payload = await call_with_continuation_pacing(
+                pacer,
+                lambda: self._parent.request(
+                    _MINUTE_SPEC,
+                    params={
+                        "AUTH": "",
+                        "EXCD": normalized_exchange,
+                        "SYMB": normalized_symbol,
+                        "NMIN": str(interval_minutes),
+                        "PINC": "1" if include_previous else "0",
+                        "NEXT": next_value,
+                        "NREC": str(count),
+                        "FILL": "",
+                        "KEYB": keyb,
+                    },
+                ),
             )
             rows = output_rows(payload)
             parsed = [

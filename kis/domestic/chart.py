@@ -11,6 +11,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 from typing import TYPE_CHECKING, Literal
 
+from kis._internal.pacing import ContinuationPacer, call_with_continuation_pacing
 from kis.endpoints.registry import lookup
 from kis.models.ohlcv import OhlcvBar
 from kis.parsers.rest import (
@@ -143,18 +144,22 @@ class DomesticChartAPI:
 
         bars: dict[str, OhlcvBar] = {}
         page_end = end_date
+        pacer = ContinuationPacer()
 
         for _ in range(max_pages):
-            payload = await self._parent.request(
-                _SPEC,
-                params={
-                    "FID_COND_MRKT_DIV_CODE": "J",
-                    "FID_INPUT_ISCD": normalized_symbol,
-                    "FID_INPUT_DATE_1": format_date(start_date),
-                    "FID_INPUT_DATE_2": format_date(page_end),
-                    "FID_PERIOD_DIV_CODE": period,
-                    "FID_ORG_ADJ_PRC": "0" if adjusted else "1",
-                },
+            payload = await call_with_continuation_pacing(
+                pacer,
+                lambda: self._parent.request(
+                    _SPEC,
+                    params={
+                        "FID_COND_MRKT_DIV_CODE": "J",
+                        "FID_INPUT_ISCD": normalized_symbol,
+                        "FID_INPUT_DATE_1": format_date(start_date),
+                        "FID_INPUT_DATE_2": format_date(page_end),
+                        "FID_PERIOD_DIV_CODE": period,
+                        "FID_ORG_ADJ_PRC": "0" if adjusted else "1",
+                    },
+                ),
             )
             rows = output_rows(payload)
             parsed = [

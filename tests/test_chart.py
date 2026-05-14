@@ -14,6 +14,10 @@ from kis import (
     parse_overseas_minute_bar,
     parse_overseas_ohlcv_bar,
 )
+from kis._internal.pacing import (
+    KIS_CONTINUATION_MIN_INTERVAL_SECONDS,
+    ContinuationPacer,
+)
 from kis.domestic.chart import DomesticChartAPI
 from kis.endpoints.registry import lookup
 from kis.overseas.chart import OverseasChartAPI
@@ -178,6 +182,25 @@ def test_overseas_stock_minute_history_uses_previous_last_bar_keyb() -> None:
         "2024-10-14 14:01:00",
         "2024-10-14 14:06:00",
     ]
+
+
+def test_continuation_pacer_waits_between_request_starts(monkeypatch) -> None:
+    monotonic_values = iter([100.0, 100.01, 100.05])
+    sleep_delays: list[float] = []
+
+    async def fake_sleep(delay: float) -> None:
+        sleep_delays.append(delay)
+
+    monkeypatch.setattr("kis._internal.pacing.monotonic", lambda: next(monotonic_values))
+    monkeypatch.setattr("kis._internal.pacing.asyncio.sleep", fake_sleep)
+
+    pacer = ContinuationPacer()
+
+    asyncio.run(pacer.wait_before_request())
+    asyncio.run(pacer.wait_before_request())
+
+    assert len(sleep_delays) == 1
+    assert abs(sleep_delays[0] - (KIS_CONTINUATION_MIN_INTERVAL_SECONDS - 0.01)) < 1e-9
 
 
 def test_domestic_history_continues_by_moving_end_date() -> None:

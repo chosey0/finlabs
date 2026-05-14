@@ -122,6 +122,29 @@ def test_call_with_sdk_client_does_not_retry_more_than_once(monkeypatch) -> None
     assert attempts["count"] == 2
 
 
+def test_call_with_sdk_client_does_not_retry_token_issue_rate_limit(monkeypatch) -> None:
+    attempts = {"count": 0}
+
+    async def fail_token_issue(operation, resolved):
+        attempts["count"] += 1
+        raise KisAuthError("KIS token request failed: 접근토큰 발급 잠시 후 다시 시도하세요(1분당 1회)")
+
+    async def fake_operation(client) -> CurrentPrice:
+        raise AssertionError("operation should not run")
+
+    monkeypatch.setattr("kis_cli.services.auth.resolve_profile", _fake_resolve_profile)
+    monkeypatch.setattr("kis_cli.services.auth._run_with_sdk_client", fail_token_issue)
+
+    try:
+        call_with_sdk_client(fake_operation, profile="csq1404")
+    except KisAuthError as exc:
+        assert "1분당 1회" in str(exc)
+    else:
+        raise AssertionError("expected KisAuthError")
+
+    assert attempts["count"] == 1
+
+
 def _fake_resolve_profile(*, profile=None, config_path=None) -> ResolvedProfile:
     return ResolvedProfile(
         name=profile or "csq1404",
