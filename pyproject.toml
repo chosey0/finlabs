@@ -21,8 +21,14 @@ dependencies = [
 postgres = [
     "psycopg[binary]>=3.2.0",
 ]
+tokenizers = [
+    "numpy>=1.26.0",
+    "torch>=2.2.0",
+]
 all = [
     "psycopg[binary]>=3.2.0",
+    "numpy>=1.26.0",
+    "torch>=2.2.0",
 ]
 
 [tool.uv]

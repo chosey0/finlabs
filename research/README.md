@@ -217,7 +217,7 @@ same checkpoint + same input
 
 학습 과정의 완전한 determinism은 hardware/backend에 따라 달라질 수 있으므로 best-effort로 다룹니다. 하지만 저장된 checkpoint를 load한 뒤 CPU inference에서 동일한 token sequence가 나오는 것은 반드시 보장해야 합니다.
 
-## Planned Package Structure
+## Initial Package Structure
 
 ```text
 research/
@@ -234,7 +234,7 @@ research/
     └── metrics.py     # utilization, semantic consistency, transition metrics
 ```
 
-## Planned Public API
+## Initial Public API
 
 ```python
 from research.tokenizers import (
@@ -366,4 +366,4 @@ Analysis component는 아직 명확히 정의하지 않습니다. Tokenizer가 �
 
 ## Status
 
-Planning / early research prototype.
+Foundation scaffold implemented. VQ-VAE training and checkpoint-based encoding are available behind optional `tokenizers` dependencies and should be treated as early research code.

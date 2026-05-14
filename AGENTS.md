@@ -14,13 +14,14 @@ Core goals:
 - Optionally mirror selected data to Supabase/PostgreSQL.
 - Preserve ordered ingestion, idempotency, and duplicate prevention.
 
-Do **not** add UI, dashboards, chart rendering, trading/order execution, strategies, backtesting, ML, news analysis, or new broker adapters unless explicitly requested for a concrete feature.
+Do **not** add UI, dashboards, chart rendering, trading/order execution, strategies, backtesting, ML, news analysis, or new broker adapters unless explicitly requested for a concrete feature. The current `research/tokenizers/` work is explicitly requested and should remain isolated from SDK/CLI runtime paths.
 
 ## Repository Layout
 
 ```text
 kis/       KIS SDK: REST/WebSocket clients, endpoint specs, parsers, models
 kis_cli/   Current FinLabs KIS CLI application and storage workflows
+research/  Experimental market representation and tokenizer research
 tests/     Focused unit tests
 exports/   CSV sample outputs
 README.md  User-facing usage docs
@@ -33,6 +34,7 @@ For detailed guidelines, see the AGENTS.md in each directory:
 |-----------|-----------|
 | `kis/` | [kis/AGENTS.md](kis/AGENTS.md) |
 | `kis_cli/` | [kis_cli/AGENTS.md](kis_cli/AGENTS.md) |
+| `research/` | [research/AGENTS.md](research/AGENTS.md) |
 | `tests/` | [tests/AGENTS.md](tests/AGENTS.md) |
 | `exports/` | [exports/AGENTS.md](exports/AGENTS.md) |
 

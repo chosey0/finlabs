@@ -13,6 +13,7 @@ FinLabs는 증권사 Open API를 파이썬 SDK로 구현하고, 그 SDK를 기�
 | [`kis/`](./kis/README.md) | 구현 중 | 한국투자증권 Open API SDK. 해외주식 REST/WebSocket 데이터 조회, 인증, 엔드포인트 스펙, 파서, 모델 제공 |
 | [`kis_cli/`](./kis_cli/README.md) | 구현 중 | KIS SDK 기반 CLI. 해외 심볼 다운로드, OHLCV·분봉 수집, DuckDB 저장, 조회/내보내기 제공 |
 | Kiwoom SDK | 예정 | 국내주식 데이터 조회용 Kiwoom REST API SDK |
+| [`research/`](./research/README.md) | 초기 연구 | Candlestick VQ-VAE Tokenizer 중심의 시장 표현 학습 연구 |
 | 분석 패키지 | 예정 | 수집된 시장 데이터 기반 통계 분석, 팩터 연구, 백테스트 도구 |
 | 대시보드 패키지 | 예정 | 수집·분석된 시장 데이터를 시각화하는 인터랙티브 대시보드 |
 
@@ -36,6 +37,7 @@ FinLabs는 증권사 Open API를 파이썬 SDK로 구현하고, 그 SDK를 기�
 finlabs/
 ├── kis/        # 한국투자증권 해외주식 데이터 조회 SDK
 ├── kis_cli/    # KIS SDK 기반 시장 데이터 수집 CLI
+├── research/   # 시장 표현 학습 및 tokenizer 연구
 ├── tests/      # 단위·통합 테스트
 ├── exports/    # CSV 샘플 출력물
 ├── AGENTS.md   # 에이전트 작업 가이드
@@ -66,8 +68,9 @@ uv run python -m kis_cli --help
 2. KIS CLI의 해외주식 데이터 수집·저장 워크플로 개선
 3. Kiwoom REST API 기반 국내주식 SDK 추가
 4. 공통 시장 데이터 모델과 저장소 구조 정리
-5. 분석 패키지 분리
-6. 대시보드 패키지 분리
+5. Candlestick VQ-VAE Tokenizer 연구 구현
+6. 분석 패키지 분리
+7. 대시보드 패키지 분리
 
 ## 라이선스
 

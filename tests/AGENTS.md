@@ -22,6 +22,9 @@
 | `test_storage.py` | DuckDB/SQLite schema creation, unique constraints, ingestion ordering |
 | `test_supabase_schema.py` | Supabase DDL SQL generation + `PRIMARY KEY` verification |
 | `test_symbols.py` | Overseas symbol master parsing (TSV) + DuckDB upsert |
+| `test_tokenizer_features.py` | Candlestick 7D feature extraction and boundary cases |
+| `test_tokenizer_data.py` | Tokenizer DuckDB loading and time-based split behavior |
+| `test_tokenizer_metrics.py` | Token utilization, transition counts, semantic consistency |
 
 ## For AI Agents
 
@@ -38,7 +41,7 @@
 
 ### Common Patterns
 - Mock transport: `httpx.MockTransport(handler)` → `httpx.AsyncClient(transport=mock_transport)` → `KisClient(..., http_client=client)`.
-- DuckDB unit tests: call `init_warehouse(tmp_path/'wh.duckdb')`, then call repository functions directly.
+- DuckDB unit tests: call `init_warehouse(tmp_path/'wh.duckdb')`, then call repository functions directly. Tokenizer data tests may create a minimal temporary `ohlcv_bars` table.
 - Frozen dataclass result comparison: `assert result == ExpectedResult(...)` — all service results are frozen and support equality.
 - Write response fixtures as inline dicts where possible — avoid separate JSON files (readability first).
 
