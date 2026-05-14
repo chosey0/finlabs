@@ -1,5 +1,5 @@
 from research.tokenizers.features import FeatureVector
-from research.tokenizers.metrics import semantic_consistency, token_utilization, transition_counts
+from research.tokenizers.shape_metrics import semantic_consistency, token_utilization
 
 
 def test_token_utilization_reports_dead_codes_and_entropy():
@@ -10,10 +10,6 @@ def test_token_utilization_reports_dead_codes_and_entropy():
     assert result.dead_ratio == 0.5
     assert result.entropy == 1.0
     assert result.histogram == {0: 2, 2: 2}
-
-
-def test_transition_counts():
-    assert transition_counts([1, 2, 1, 2, 2]) == {(1, 2): 2, (2, 1): 1, (2, 2): 1}
 
 
 def test_semantic_consistency_groups_by_token():

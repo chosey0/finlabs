@@ -24,7 +24,8 @@
 | `test_symbols.py` | Overseas symbol master parsing (TSV) + DuckDB upsert |
 | `test_tokenizer_features.py` | Candlestick 7D feature extraction and boundary cases |
 | `test_tokenizer_data.py` | Tokenizer DuckDB loading and time-based split behavior |
-| `test_tokenizer_metrics.py` | Token utilization, transition counts, semantic consistency |
+| `test_tokenizer_shape_metrics.py` | Phase 1 token utilization and semantic consistency |
+| `test_tokenizer_sequence_metrics.py` | Phase 2 transition counts and transition report behavior |
 
 ## For AI Agents
 

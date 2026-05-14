@@ -2,66 +2,134 @@
 
 FinLabs Research는 시장 데이터를 단순한 price prediction target으로만 보지 않고, 학습 가능한 **market representation**으로 재구성하기 위한 연구 공간입니다.
 
-현재 research track의 첫 번째 목표는 **Candlestick VQ-VAE Tokenizer**입니다. OHLCV candlestick sequence를 7-dimensional feature vector로 변환한 뒤, VQ-VAE의 learned codebook을 통해 각 candle을 discrete token으로 매핑합니다.
+현재 research track은 **Candlestick VQ-VAE Tokenizer**에서 시작하지만, 최종 주장을 한 번에 `market state modeling`으로 두지 않습니다. 연구 질문을 다음 3단계로 분리합니다.
+
+```text
+1. Shape Quantization
+   비슷한 candle shape를 같은 token으로 묶을 수 있는가?
+
+2. Sequential Dynamics
+   shape token sequence의 transition이 구조를 가지는가?
+
+3. Market State Modeling
+   token 또는 token sequence가 미래 market dynamics를 설명하는가?
+```
+
+이 분리는 중요한 안전장치입니다. Phase 1에서 생성된 token은 우선 **shape token**입니다. Phase 2에서 transition structure가 확인되면 **state candidate**가 되고, Phase 3에서 미래 return/volatility/regime distribution과의 관계가 검증될 때에만 **market state representation**이라고 부를 수 있습니다.
+
+## Research Frame
+
+### Phase 1 — Shape Quantization
+
+질문:
+
+> 비슷한 OHLCV candle shape를 같은 learned token으로 묶을 수 있는가?
+
+입력과 출력:
 
 ```text
 OHLCV candle
 → 7D candle feature vector
 → VQ-VAE encoder
 → learned codebook
-→ discrete market state token
+→ shape token
 ```
 
-이 tokenizer는 시장을 continuous signal이 아니라 reusable discrete latent states의 sequence로 다루기 위한 foundation layer입니다.
+이 단계에서는 미래 예측을 평가하지 않습니다. 관심사는 tokenizer 자체가 candle morphology를 안정적으로 압축·양자화하는지입니다.
 
-## Research Goal
+주요 평가:
 
-Candlestick VQ-VAE Tokenizer의 목표는 다음과 같습니다.
+- Reconstruction Loss
+- Semantic Consistency
+- Token Utilization
+- Dead Code Ratio
+- Compression vs Information Tradeoff
+- deterministic inference: same checkpoint + same input → same token sequence
 
-> 캔들스틱(OHLCV) 시계열을 학습 가능한 discrete state space로 압축·추상화한다.
+### Phase 2 — Sequential Dynamics
 
-구체적으로는 다음 과정을 구현합니다.
+질문:
+
+> shape token sequence가 시간축에서 non-random transition structure를 가지는가?
+
+입력과 출력:
 
 ```text
-1 candle
-→ FeatureVector(7D)
-→ encoder
-→ vector quantization
-→ codebook index
-→ token sequence
+shape token sequence
+→ transition counts / probabilities
+→ transition entropy
+→ repeated sequence pattern candidates
 ```
 
-여기서 하나의 token은 rule-based label이 아니라, VQ-VAE가 학습한 codebook의 index입니다. 즉, token은 특정 candlestick feature pattern을 대표하는 learned discrete latent state입니다.
+이 단계는 token이 단순한 candle label을 넘어 sequence 안에서 구조를 가지는지 확인합니다. 하지만 아직 미래 시장 설명력까지 주장하지 않습니다.
 
-## Scope
+주요 평가:
+
+- 1-step transition counts
+- transition probability
+- transition entropy
+- shuffled sequence baseline 대비 structure 차이
+- symbol / market / timeframe별 transition stability
+
+### Phase 3 — Market State Modeling
+
+질문:
+
+> token 또는 token sequence가 미래 market dynamics를 설명하는가?
+
+입력과 출력:
+
+```text
+token_t 또는 token sequence_{t-n:t}
+→ future return distribution
+→ future volatility distribution
+→ drawdown / rebound tendency
+→ regime statistics
+```
+
+이 단계에서 처음으로 미래를 봅니다. 단, 목표는 trading signal 생성이 아니라 representation의 설명력 검증입니다.
+
+주요 평가 후보:
+
+- token별 forward return distribution
+- token별 future volatility distribution
+- token motif별 future drawdown / rebound tendency
+- raw feature baseline 대비 설명력
+- out-of-sample stability
+
+Phase 3는 아직 구현하지 않습니다. 별도 spec이 생기기 전까지는 research planning scope에만 둡니다.
+
+## Current Implementation Scope
+
+현재 구현은 Phase 1 중심이며, Phase 2 metric primitive 일부만 제공합니다.
 
 ### In Scope
 
-- `research/tokenizers/` 패키지 설계 및 구현
+- `research/tokenizers/` package scaffold
 - DuckDB `ohlcv_bars` 기반 OHLCV loading
 - candle 1개 → 7D feature vector 변환
-- VQ-VAE encoder + codebook 기반 tokenizer 학습
+- VQ-VAE encoder + codebook 기반 shape tokenizer 학습
 - time-based `train` / `val` / `test` split
 - deterministic inference: 동일 input + 동일 checkpoint → 동일 token sequence
-- tokenizer quality metrics
-  - Reconstruction loss
+- Phase 1 metrics
+  - Reconstruction Loss
   - Semantic Consistency
   - Token Utilization
-  - Transition Structure
-  - Cross-market Stability
   - Compression vs Information Tradeoff
+- Phase 2 primitives
+  - transition counts
+  - transition probability
+  - transition entropy
 
 ### Out of Scope
 
-- Analysis component 전체 설계
-- multi-market / multi-asset / multi-timeframe training
+- Phase 3 Market State Modeling 구현
 - downstream prediction model
 - trading signal generation
 - realtime tokenization service
 - UI / dashboard / backtesting
 - 신규 broker API endpoint 추가
-
-Analysis는 이번 단계에서는 deferred 상태입니다. Tokenizer를 먼저 독립적으로 설계하고, token sequence 기반 analysis는 후속 design phase에서 다룹니다.
+- multi-market / multi-asset / multi-timeframe training
 
 ## Data Source
 
@@ -79,7 +147,7 @@ ohlcv_bars
 UNIQUE (market, symbol, interval, timestamp)
 ```
 
-1단계 학습 범위는 단순하게 제한합니다.
+초기 학습 범위는 단순하게 제한합니다.
 
 ```text
 single market × single asset × single timeframe
@@ -109,7 +177,7 @@ Feature extraction은 deterministic해야 합니다. 동일한 `CandleBar`와 �
 - `open == 0`인 candle
 - volume standard deviation이 0인 경우
 
-## VQ-VAE Tokenizer
+## VQ-VAE Shape Tokenizer
 
 Tokenizer는 VQ-VAE 구조를 사용합니다.
 
@@ -130,79 +198,56 @@ feature vector
 - `Codebook`: `K`개의 learned embedding vector
 - `VectorQuantizer`: encoder output과 가장 가까운 codebook entry 선택
 - `Decoder`: quantized vector로부터 feature vector 복원
-- `Tokenizer`: 학습된 encoder + codebook을 사용해 candle sequence를 token sequence로 변환
+- `Tokenizer`: 학습된 encoder + codebook을 사용해 candle sequence를 shape token sequence로 변환
 
 Codebook size `K`는 configurable해야 합니다. `K`가 작으면 compression은 강해지지만 information loss가 커질 수 있고, `K`가 크면 reconstruction은 좋아질 수 있으나 dead code가 늘어날 수 있습니다.
 
-## Evaluation Metrics
+## Metrics by Research Phase
 
-Tokenizer의 성공 여부는 단일 metric으로 판단하지 않습니다. 다음 관점들을 함께 봅니다.
+### Phase 1 Metrics — Shape Quantization
 
-### Reconstruction Loss
+Phase 1 metric은 `research/tokenizers/shape_metrics.py`에 둡니다.
 
-입력 feature vector와 decoder reconstruction 사이의 MSE를 측정합니다.
+- `token_utilization(tokens, codebook_size=K)`
+  - utilized code count
+  - dead code count
+  - dead code ratio
+  - token histogram
+  - token entropy
+- `semantic_consistency(tokens, features)`
+  - 같은 token에 배정된 candle들이 feature space에서 얼마나 일관적인지 측정
 
-```text
-lower reconstruction loss
-= better information preservation
-```
-
-### Semantic Consistency
-
-같은 token에 배정된 candle들이 feature space에서 얼마나 일관된 분포를 가지는지 측정합니다.
-
-예시 metric:
-
-```text
-intra-cluster variance
-inter-cluster variance
-intra/inter ratio
-```
-
-### Token Utilization
-
-Codebook이 얼마나 고르게 사용되는지 확인합니다.
-
-주요 지표:
-
-- utilized code count
-- dead code count
-- dead code ratio
-- token histogram
-- token entropy
-
-### Transition Structure
-
-Token sequence의 1-step transition matrix를 계산합니다.
-
-```text
-token_t → token_t+1
-```
-
-이를 통해 학습된 state들이 의미 있는 transition dynamics를 가지는지 확인합니다.
-
-### Cross-market Stability
-
-학습에 사용하지 않은 market/asset에 tokenizer를 적용했을 때 token distribution이 얼마나 안정적으로 유지되는지 측정합니다.
-
-기본 divergence metric은 JS divergence를 사용합니다.
-
-```text
-reference token distribution
-vs
-out-of-sample token distribution
-```
-
-### Compression vs Information Tradeoff
-
-여러 codebook size `K`에 대해 다음 값을 비교합니다.
+추가 후보:
 
 - reconstruction loss
-- dead code ratio
-- token entropy
-- utilized code ratio
+- compression vs information tradeoff curve
+- token별 representative candle shape summary
 
-목표는 하나의 최적값을 고정하는 것이 아니라, compression과 information preservation 사이의 tradeoff curve를 관찰하는 것입니다.
+### Phase 2 Metrics — Sequential Dynamics
+
+Phase 2 metric은 `research/tokenizers/sequence_metrics.py`에 둡니다.
+
+- `transition_counts(tokens)`
+- `transition_report(tokens)`
+  - transition probabilities
+  - entropy by source token
+
+추가 후보:
+
+- shuffled baseline comparison
+- n-step transition pattern
+- transition matrix normalization
+- market/symbol/timeframe별 transition stability
+
+### Phase 3 Metrics — Market State Modeling
+
+Phase 3 metric은 아직 구현하지 않습니다. 후보는 별도 spec에서 정의합니다.
+
+- token별 forward return distribution
+- token별 future volatility distribution
+- motif별 future drawdown / rebound tendency
+- raw feature baseline 대비 설명력
+- out-of-sample stability
 
 ## Determinism
 
@@ -226,12 +271,14 @@ research/
 └── tokenizers/
     ├── __init__.py
     ├── AGENTS.md
-    ├── data.py        # CandleBar loading, DuckDB integration, time split
-    ├── features.py    # CandleBar -> FeatureVector(7D)
-    ├── model.py       # VectorQuantizer, VQVAE, model config
-    ├── train.py       # training loop, checkpoint, history
-    ├── encode.py      # Tokenizer facade, checkpoint loading, encode()
-    └── metrics.py     # utilization, semantic consistency, transition metrics
+    ├── data.py              # CandleBar loading, DuckDB integration, time split
+    ├── features.py          # CandleBar -> FeatureVector(7D)
+    ├── model.py             # VectorQuantizer, VQVAE, model config
+    ├── train.py             # training loop, checkpoint, history
+    ├── encode.py            # Tokenizer facade, checkpoint loading, encode()
+    ├── shape_metrics.py     # Phase 1 shape quantization metrics
+    ├── sequence_metrics.py  # Phase 2 sequential dynamics metrics
+    └── metrics.py           # backward-compatible metric exports
 ```
 
 ## Initial Public API
@@ -253,8 +300,11 @@ from research.tokenizers.data import load_candles, split_by_date
 from research.tokenizers.features import build_volume_context, extract_features_batch
 from research.tokenizers.train import TrainConfig, train
 from research.tokenizers.encode import Tokenizer
+from research.tokenizers.shape_metrics import token_utilization
+from research.tokenizers.sequence_metrics import transition_report
 
 candles = load_candles(
+    warehouse_path="warehouse.duckdb",
     market="NASDAQ",
     symbol="AAPL",
     interval="1d",
@@ -272,6 +322,9 @@ train_features = extract_features_batch(split.train, volume_context)
 result = train(train_features, config=TrainConfig(...))
 tokenizer = Tokenizer.load(result.checkpoint_path)
 tokens = tokenizer.encode(split.test)
+
+shape_report = token_utilization(tokens, codebook_size=32)
+sequence_report = transition_report(tokens)
 ```
 
 ## Dependency Policy
@@ -319,19 +372,20 @@ pip install -e ".[tokenizers]"
   - smoke training
   - checkpoint 생성
   - history JSONL 기록
-- `test_tokenizer_metrics.py`
+- `test_tokenizer_shape_metrics.py`
   - codebook utilization
-  - transition matrix
   - semantic consistency
-  - JS divergence
+- `test_tokenizer_sequence_metrics.py`
+  - transition counts
+  - transition report
 - `test_tokenizer_determinism.py`
   - same checkpoint + same input → same tokens
 
-`torch`가 설치되지 않은 환경에서는 tokenizer test를 skip할 수 있도록 구성합니다.
+`torch`가 설치되지 않은 환경에서는 tokenizer model/train/determinism test를 skip할 수 있도록 구성합니다.
 
 ## Research Phases
 
-### Phase 1 — Tokenizer Foundation
+### Phase 1 — Shape Quantization
 
 - `research/tokenizers/` package scaffold
 - CandleBar data loading
@@ -339,31 +393,32 @@ pip install -e ".[tokenizers]"
 - time-based split
 - baseline VQ-VAE model
 - tokenizer training / checkpoint / encode
+- shape metrics
 
-### Phase 2 — Tokenizer Evaluation
+### Phase 2 — Sequential Dynamics
 
-- reconstruction history
-- token utilization report
-- semantic consistency metric
-- transition matrix
-- cross-market stability report
-- compression vs information tradeoff curve
+- transition counts
+- transition probabilities
+- transition entropy
+- shuffled baseline comparison
+- n-step transition structure
 
-### Phase 3 — Analysis Design
+### Phase 3 — Market State Modeling
 
-- token sequence analysis component
-- motif discovery
-- regime structure analysis
-- downstream evaluation tasks
+- token-level future return distribution
+- token-level future volatility distribution
+- motif-level future dynamics
+- baseline comparison against raw features
+- out-of-sample stability
 
-Analysis component는 아직 명확히 정의하지 않습니다. Tokenizer가 안정화된 뒤 별도 spec으로 설계합니다.
+Phase 3는 아직 명확히 정의하지 않습니다. Shape Quantization과 Sequential Dynamics가 안정화된 뒤 별도 spec으로 설계합니다.
 
 ## Non-Assumptions
 
 이 연구는 financial markets가 natural language와 동일한 구조를 가진다고 가정하지 않습니다.
 
-다만 candlestick sequence가 learned discrete representation과 symbolic sequence modeling 방식에서 도움을 받을 수 있는지 실험합니다.
+또한 Phase 1의 shape token이 곧바로 market state라고 가정하지 않습니다. 먼저 shape quantization을 검증하고, 그 다음 sequential dynamics와 future market dynamics 설명력을 단계적으로 검증합니다.
 
 ## Status
 
-Foundation scaffold implemented. VQ-VAE training and checkpoint-based encoding are available behind optional `tokenizers` dependencies and should be treated as early research code.
+Foundation scaffold implemented. Current terminology is phase-aware: Phase 1 outputs are shape tokens; Market State Modeling remains a future research phase.
