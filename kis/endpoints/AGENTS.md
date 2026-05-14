@@ -1,43 +1,43 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-05-13 | Updated: 2026-05-13 -->
+<!-- Generated: 2026-05-13 | Updated: 2026-05-14 -->
 
 # endpoints
 
 ## Purpose
-KIS REST/WebSocket 엔드포인트 메타데이터를 **데이터 기반 레지스트리**로 관리합니다. `EndpointSpec`은 path, TR ID(real/mock), 필수 파라미터, 페이지네이션 지원 여부를 frozen dataclass로 보관하며, 도메인별 등록 모듈이 import 시점에 `register()`로 글로벌 레지스트리에 추가합니다. 비즈니스 로직은 없으며, 모든 사용처는 `lookup("name")`으로 spec을 가져옵니다.
+Manages KIS REST/WebSocket endpoint metadata as a **data-driven registry**. `EndpointSpec` stores path, TR IDs (real/mock), required parameters, and pagination support as a frozen dataclass. Domain-specific registration modules call `register()` at import time to add specs to the global registry. No business logic — all consumers retrieve specs via `lookup("name")`.
 
 ## Key Files
 
 | File | Description |
 |------|-------------|
-| `__init__.py` | `domestic`/`overseas` 서브모듈을 import하여 spec 등록 트리거 + `EndpointSpec`/`lookup`/`names`/`register` re-export |
-| `registry.py` | `EndpointSpec` frozen dataclass (`tr_id_for(env)` with `MockNotSupportedError` 가드), `_EndpointRegistry` (중복 등록 차단), 모듈 레벨 헬퍼 `register`/`lookup`/`names` |
+| `__init__.py` | Imports `domestic`/`overseas` submodules to trigger spec registration + re-exports `EndpointSpec`/`lookup`/`names`/`register` |
+| `registry.py` | `EndpointSpec` frozen dataclass (`tr_id_for(env)` with `MockNotSupportedError` guard), `_EndpointRegistry` (rejects duplicate registrations), module-level helpers `register`/`lookup`/`names` |
 
 ## Subdirectories
 
 | Directory | Purpose |
 |-----------|---------|
-| `domestic/` | 국내 KRX/NXT 엔드포인트 등록 — basic_quote, analysis, rank, sector, symbol_info, realtime (see `domestic/AGENTS.md`) |
-| `overseas/` | 해외 거래소 엔드포인트 등록 — basic_quote, analysis, realtime (see `overseas/AGENTS.md`) |
+| `domestic/` | Domestic KRX/NXT endpoint registrations — basic_quote, analysis, rank, sector, symbol_info, realtime (see `domestic/AGENTS.md`) |
+| `overseas/` | Overseas exchange endpoint registrations — basic_quote, analysis, realtime (see `overseas/AGENTS.md`) |
 
 ## For AI Agents
 
 ### Working In This Directory
-- 새 엔드포인트는 `EndpointSpec(name=..., method=..., path=..., tr_id_real=..., tr_id_mock=...)`로 만들고 **`register()`로 글로벌 레지스트리에 등록**합니다.
-- `name`은 `<domain>.<group>.<action>` 패턴 (e.g. `domestic.price.current`, `overseas.chart.minute`) — duplicate 시 `KisConfigError`가 발생합니다.
-- 모의투자 미지원 엔드포인트는 `tr_id_mock=None`으로 두세요. `tr_id_for("mock")` 호출 시 자동으로 `MockNotSupportedError`가 발생합니다.
-- 페이지네이션이 필요한 엔드포인트는 `supports_tr_cont=True`로 표시합니다 — 호출자는 응답 헤더의 `tr_cont`를 다음 요청 헤더로 전달해야 합니다.
-- `required_params`/`required_headers`는 문서화 목적입니다 — 현재 트랜스포트가 강제 검증은 하지 않지만, 새 엔드포인트 작성 시 KIS 문서의 필수 필드를 정확히 옮겨 두세요.
-- POST 엔드포인트(특히 WebSocket realtime)는 `method="POST"` + `required_headers=("approval_key", "custtype", "tr_type", "content-type")` 패턴을 따릅니다.
+- Create new endpoints as `EndpointSpec(name=..., method=..., path=..., tr_id_real=..., tr_id_mock=...)` and **call `register()`** to add them to the global registry.
+- Names follow the pattern `<domain>.<group>.<action>` (e.g. `domestic.price.current`, `overseas.chart.minute`) — duplicates raise `KisConfigError`.
+- Set `tr_id_mock=None` for endpoints not supported in paper-trading. `tr_id_for("mock")` will automatically raise `MockNotSupportedError`.
+- Mark paginating endpoints with `supports_tr_cont=True` — callers must pass the `tr_cont` response header to the next request header.
+- `required_params`/`required_headers` are documentation hints — the current transport does not enforce them at runtime, but populate them accurately from the KIS spec for each new endpoint.
+- POST endpoints (especially WebSocket realtime) follow `method="POST"` + `required_headers=("approval_key", "custtype", "tr_type", "content-type")`.
 
 ### Testing Requirements
-- 새 엔드포인트 등록 후 `lookup("name")`이 성공하는지, `tr_id_for("real")`/`tr_id_for("mock")` 동작을 회귀 케이스로 추가합니다.
-- 중복 등록 시 `KisConfigError`, 미지원 mock 시 `MockNotSupportedError` 발생도 회귀로 둡니다.
+- After registering a new endpoint, add regression cases: `lookup("name")` succeeds, `tr_id_for("real")`/`tr_id_for("mock")` behave correctly.
+- Also regression-test that duplicate registration raises `KisConfigError` and that mock-unsupported endpoints raise `MockNotSupportedError`.
 
 ### Common Patterns
-- 등록 패턴 1 (단일 spec): 모듈 상단에서 `CURRENT_PRICE = register(EndpointSpec(...))` 후 모듈 변수로 노출.
-- 등록 패턴 2 (대량 spec): `_SPECS = (...,)` 튜플 정의 후 모듈 import 시 루프로 `register()` 호출 (analysis/rank/sector/symbol_info에서 사용).
-- 마지막 필드에 원본 엑셀 워크북의 "API 명"을 한국어로 기록해 추적성을 유지합니다.
+- Pattern 1 (single spec): expose as a module variable (`CURRENT_PRICE = register(EndpointSpec(...))`) for direct reference from other modules.
+- Pattern 2 (bulk specs): define as a `_SPECS = (...,)` tuple and call `register()` in a loop at the end of the module (used by analysis/rank/sector/symbol_info).
+- Record the original Korean API name from the KIS Excel workbook in the last field to maintain traceability.
 
 ## Dependencies
 
@@ -46,6 +46,6 @@ KIS REST/WebSocket 엔드포인트 메타데이터를 **데이터 기반 레지�
 - `kis.types` — `Environment`, `HttpMethod`
 
 ### External
-- 없음 (stdlib만 사용).
+- None (stdlib only).
 
-<!-- MANUAL: 수동 메모는 이 라인 아래에 작성하면 재생성 시 보존됩니다 -->
+<!-- MANUAL: Manually added notes below this line are preserved on regeneration -->

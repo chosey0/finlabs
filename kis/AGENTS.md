@@ -1,62 +1,62 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-05-13 | Updated: 2026-05-13 -->
+<!-- Generated: 2026-05-13 | Updated: 2026-05-14 -->
 
 # kis
 
 ## Purpose
-`kis`는 한국투자증권 Open API를 감싸는 순수 Python SDK 패키지입니다. 트랜스포트 (REST `httpx` / WebSocket `websockets`)와 페이로드 정규화 (frozen dataclass 모델 + 파서)만 책임지며, 파일 시스템·DB·CLI 코드는 포함하지 않습니다. 영속 계층과 사용자 워크플로는 자매 패키지 `kis_cli/`가 담당합니다.
+`kis` is a pure Python SDK package wrapping the Korea Investment & Securities Open API. It is responsible only for transport (REST via `httpx` / WebSocket via `websockets`) and payload normalization (frozen dataclass models + parsers). It contains no filesystem, DB, or CLI code. Persistence and user workflows are handled by the sibling package `kis_cli/`.
 
 ## Key Files
 
 | File | Description |
 |------|-------------|
-| `__init__.py` | 공개 surface 일괄 export (`KisClient`, `Credentials`, 모델, 파서, 심볼, 예외) |
-| `client.py` | `KisClient` 파사드 — async context manager, `request(spec, ...)`, `ensure_token()`, `ensure_approval_key()` |
-| `config.py` | `Credentials` (`from_env()` 헬퍼), `rest_base_url()`, `websocket_url()` 환경별 URL 매핑 |
-| `symbols.py` | 종목 마스터 다운로드/파싱 (`download_symbol_master`, `KOSPI/KOSDAQ` 고정폭, 해외 TSV) |
-| `types.py` | 공용 Literal 타입 (`Environment`, `Market`, `Interval`, `HttpMethod`, `CustType`) |
-| `exceptions.py` | `KisError` 계층 (`KisAuthError`, `KisApiError`, `KisConfigError`, `KisRealtimeError`, `MockNotSupportedError`) |
+| `__init__.py` | Public surface exports (`KisClient`, `Credentials`, models, parsers, symbols, exceptions) |
+| `client.py` | `KisClient` facade — async context manager, `request(spec, ...)`, `ensure_token()`, `ensure_approval_key()` |
+| `config.py` | `Credentials` (with `from_env()` helper), `rest_base_url()`, `websocket_url()` — environment-specific URL mapping |
+| `symbols.py` | Symbol master download/parsing (`download_symbol_master`, KOSPI/KOSDAQ fixed-width, overseas TSV) |
+| `types.py` | Shared Literal types (`Environment`, `Market`, `Interval`, `HttpMethod`, `CustType`) |
+| `exceptions.py` | `KisError` hierarchy (`KisAuthError`, `KisApiError`, `KisConfigError`, `KisRealtimeError`, `MockNotSupportedError`) |
 
 ## Subdirectories
 
 | Directory | Purpose |
 |-----------|---------|
-| `_internal/` | 비공개 트랜스포트 — `AsyncHttpTransport`, 헤더 빌더 (see `_internal/AGENTS.md`) |
-| `auth/` | OAuth 토큰 발급/캐시 + WebSocket approval key (see `auth/AGENTS.md`) |
-| `endpoints/` | `EndpointSpec` 레지스트리와 도메인별 등록 모듈 (see `endpoints/AGENTS.md`) |
-| `models/` | 정규화된 응답 dataclass 모델 (see `models/AGENTS.md`) |
-| `parsers/` | KIS 페이로드 → 모델 변환 (REST + realtime, see `parsers/AGENTS.md`) |
-| `domestic/` | 국내(KRX/NXT) 고수준 API 클라이언트 (see `domestic/AGENTS.md`) |
-| `overseas/` | 해외 거래소 고수준 API 클라이언트 (see `overseas/AGENTS.md`) |
-| `realtime/` | WebSocket 실시간 세션 (`RealtimeSession`) (see `realtime/AGENTS.md`) |
+| `_internal/` | Private transport — `AsyncHttpTransport`, header builders (see `_internal/AGENTS.md`) |
+| `auth/` | OAuth token issuance/caching + WebSocket approval key (see `auth/AGENTS.md`) |
+| `endpoints/` | `EndpointSpec` registry and domain-specific registration modules (see `endpoints/AGENTS.md`) |
+| `models/` | Normalized response dataclass models (see `models/AGENTS.md`) |
+| `parsers/` | KIS payload → model conversion (REST + realtime, see `parsers/AGENTS.md`) |
+| `domestic/` | High-level client for domestic (KRX/NXT) APIs (see `domestic/AGENTS.md`) |
+| `overseas/` | High-level client for overseas exchange APIs (see `overseas/AGENTS.md`) |
+| `realtime/` | WebSocket realtime session (`RealtimeSession`) (see `realtime/AGENTS.md`) |
 
 ## For AI Agents
 
 ### Working In This Directory
-- 이 패키지는 **순수 SDK**입니다. 파일 시스템 접근, KST timestamp 스탬핑, DuckDB/SQLite 로직을 절대 추가하지 마세요 — 그런 책임은 `kis_cli/`에 있습니다.
-- `KisClient`는 반드시 `async with` 컨텍스트로 사용해야 합니다. 컨텍스트 밖에서 `request()`를 호출하면 `RuntimeError`가 발생합니다.
-- 새 엔드포인트는 (1) `endpoints/`에 `EndpointSpec` 등록 → (2) `parsers/rest.py`에 파서 추가 → (3) `models/`에 모델 추가 → (4) `domestic/` 또는 `overseas/`에 고수준 메서드 노출 순서로 추가합니다.
-- 모든 모델은 `@dataclass(frozen=True)`이며 `raw: dict[str, Any]` 필드를 포함해 원본 페이로드를 보존합니다.
-- 모의투자 미지원 엔드포인트는 `tr_id_mock=None`으로 등록 → `tr_id_for("mock")` 호출 시 `MockNotSupportedError`가 자동 발생합니다.
+- This package is a **pure SDK**. Never add filesystem access, KST timestamping, DuckDB/SQLite logic here — those responsibilities belong in `kis_cli/`.
+- `KisClient` must always be used inside an `async with` context. Calling `request()` outside a context raises `RuntimeError`.
+- Adding a new endpoint follows this order: (1) register `EndpointSpec` in `endpoints/` → (2) add parser in `parsers/rest.py` → (3) add model in `models/` → (4) expose high-level method in `domestic/` or `overseas/`.
+- All models are `@dataclass(frozen=True)` and include a `raw: dict[str, Any]` field to preserve the original payload.
+- Endpoints not supported in paper-trading are registered with `tr_id_mock=None` — `tr_id_for("mock")` automatically raises `MockNotSupportedError`.
 
 ### Testing Requirements
-- 실제 KIS API를 호출하지 마세요. `httpx.MockTransport` 또는 mock 객체로 트랜스포트를 대체합니다.
-- 파서 테스트는 `tests/test_kis_package.py`, 고수준 메서드는 `tests/test_stage5_facades.py`, realtime은 `tests/test_realtime.py`에서 다룹니다.
-- 새 endpoint를 등록하면 `lookup("name")`이 성공하는지, `tr_id_for("real")` / `tr_id_for("mock")` 동작이 의도대로인지 확인합니다.
+- Never call the real KIS API. Replace the transport with `httpx.MockTransport` or a mock object.
+- Parser tests are in `tests/test_kis_package.py`; high-level methods in `tests/test_stage5_facades.py`; realtime in `tests/test_realtime.py`.
+- After registering a new endpoint, verify that `lookup("name")` succeeds and that `tr_id_for("real")` / `tr_id_for("mock")` behave as intended.
 
 ### Common Patterns
-- async-first 설계, 동기 wrapper는 Stage 6에서 별도 모듈로 제공 예정.
-- 토큰 캐싱: `KisClient._token_cache_key()` = `f"{environment}:{app_key}"`, approval key는 `f"ws:{environment}:{app_key}"`.
-- `EndpointSpec`은 frozen dataclass로 메타데이터만 보유 — 비즈니스 로직 금지.
-- Decimal/int 변환은 항상 파서에서 수행하고 모델은 이미 변환된 값을 받습니다.
+- Async-first design; a sync wrapper is planned as a separate module in Stage 6.
+- Token cache key convention: REST token = `f"{environment}:{app_key}"`, WebSocket approval key = `f"ws:{environment}:{app_key}"`.
+- `EndpointSpec` is a frozen dataclass holding metadata only — no business logic.
+- Decimal/int conversion always happens in parsers; models receive already-converted values.
 
 ## Dependencies
 
 ### Internal
-- 패키지 내부 import만 사용 — `kis_cli`에 대한 의존은 없어야 합니다 (역방향 의존은 OK).
+- Internal imports only — no dependency on `kis_cli` (reverse dependency is allowed).
 
 ### External
-- `httpx>=0.27.0` — REST async 트랜스포트
-- `websockets>=13.0` — realtime 세션
+- `httpx>=0.27.0` — async REST transport
+- `websockets>=13.0` — realtime session
 
-<!-- MANUAL: 수동 메모는 이 라인 아래에 작성하면 재생성 시 보존됩니다 -->
+<!-- MANUAL: Manually added notes below this line are preserved on regeneration -->

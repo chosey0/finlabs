@@ -1,61 +1,61 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-05-13 | Updated: 2026-05-13 -->
+<!-- Generated: 2026-05-13 | Updated: 2026-05-14 -->
 
 # kis_cli
 
 ## Purpose
-`kis_cli`는 FinLabs의 현재 KIS CLI와 영속 계층을 담당하는 애플리케이션 패키지입니다. 순수 SDK 인 `kis/`를 소비하여 (1) 프로필/시크릿 관리, (2) DuckDB 웨어하우스 + SQLite `app.db` 저장, (3) Supabase/PostgreSQL 미러 (옵션), (4) Typer 기반 CLI를 제공합니다. KST 시간 스탬핑·파일 경로 결정·인제스트 로그 같은 운영성 책임은 모두 여기에 위치합니다.
+`kis_cli` is the application package responsible for the FinLabs KIS CLI and persistence layer. It consumes the pure SDK `kis/` and provides: (1) profile/secret management, (2) DuckDB warehouse + SQLite `app.db` storage, (3) optional Supabase/PostgreSQL mirror, and (4) a Typer-based CLI. Operational concerns such as KST timestamping, file path resolution, and ingestion logging all live here.
 
 ## Key Files
 
 | File | Description |
 |------|-------------|
-| `__init__.py` | 패키지 메타데이터 (`__version__`) |
-| `__main__.py` | `python -m kis_cli` 진입점 — `cli.app:main` 위임 |
+| `__init__.py` | Package metadata (`__version__`) |
+| `__main__.py` | Entry point for `python -m kis_cli` — delegates to `cli.app:main` |
 
 ## Subdirectories
 
 | Directory | Purpose |
 |-----------|---------|
-| `cli/` | Typer 서브앱(`config`/`auth`/`db`/`symbols`/`chart`/`query`/`logs`)과 공용 console |
-| `config/` | 프로필 기반 설정 로딩 + 현재 호환용 `~/.config/kis-cli/` 경로 결정 |
-| `core/` | 레거시 동기 REST 클라이언트와 파일 기반 토큰 캐시 (`CachedToken`) |
-| `services/` | CLI ↔ 저장소를 잇는 유스케이스 (인제스트, 인증, 차트 수집, 쿼리) |
-| `storage/` | DuckDB 웨어하우스, SQLite `app.db`, Supabase 어댑터 + repositories |
-| `utils/` | 공용 헬퍼 — 현재는 KST 타임스탬프 (`now_kst_iso`) |
+| `cli/` | Typer sub-apps (`config`/`auth`/`db`/`symbols`/`chart`/`query`/`logs`) and shared console |
+| `config/` | Profile-based settings loading + `~/.config/kis-cli/` path resolution for legacy compatibility |
+| `core/` | Legacy synchronous REST client and file-based token cache (`CachedToken`) |
+| `services/` | Use cases bridging CLI ↔ storage (ingestion, auth, chart collection, queries) |
+| `storage/` | DuckDB warehouse, SQLite `app.db`, Supabase adapter + repositories |
+| `utils/` | Shared helpers — currently KST timestamps (`now_kst_iso`) |
 
-세부 가이드라인은 상위 [AGENTS.md](../AGENTS.md)의 **Repository Layout** 및 **Common Tasks** 섹션을 참고하세요.
+For detailed guidelines, see the **Repository Layout** and **Common Tasks** sections in the parent [AGENTS.md](../AGENTS.md).
 
 ## For AI Agents
 
 ### Working In This Directory
-- CLI 명령은 항상 `cli/<group>.py`에 둡니다. `app.py`는 root Typer 조립만 담당하고, 비즈니스 로직은 `services/`에 위임해야 합니다.
-- 마켓 데이터(`symbols`, `ohlcv_bars`, `overseas_minute_bars`, `realtime_ticks`)는 **반드시** DuckDB 웨어하우스로 라우팅합니다. SQLite `app.db`는 `api_logs`/`ingest_runs` 같은 운영 로그 전용입니다.
-- `kis_cli.core.*` 일부 모듈은 SDK로 이전 후 얇은 shim으로 남아있습니다. 새 코드는 `from kis import ...`를 직접 사용하세요.
-- `kis_cli`에서만 KST 타임스탬프(`now_kst_iso`)와 파일 경로(`config/paths.py`)를 알아야 합니다. SDK 쪽으로 새지 않도록 유의합니다.
-- 시크릿·토큰·DB 파일은 절대 패키지 소스 안에 두지 마세요. 모두 `platformdirs` 기반 OS 표준 경로로 가야 합니다.
+- CLI commands always go in `cli/<group>.py`. `app.py` only assembles the root Typer app; business logic must be delegated to `services/`.
+- Market data (`symbols`, `ohlcv_bars`, `overseas_minute_bars`, `realtime_ticks`) **must** be routed to the DuckDB warehouse. SQLite `app.db` is reserved for operational logs (`api_logs`/`ingest_runs`) only.
+- Some modules in `kis_cli.core.*` are thin shims left after migration to the SDK. New code should use `from kis import ...` directly.
+- KST timestamps (`now_kst_iso`) and file paths (`config/paths.py`) belong exclusively in `kis_cli`. Do not let them leak into the SDK.
+- Never place secrets, tokens, or DB files inside the package source. All such data must go to OS-standard paths via `platformdirs`.
 
 ### Testing Requirements
-- `tests/` 디렉토리에서 `pytest`로 검증. 실제 KIS API 호출 없이 mock 트랜스포트와 임시 SQLite/DuckDB 파일을 활용합니다.
-- 새 CLI 명령은 최소 success-path + failure-path 두 가지를 수동 검증하고, 가능한 한 `tests/test_<group>.py`에 단위 테스트를 추가합니다.
-- DuckDB unique 제약, `ON CONFLICT DO NOTHING`, KST 정렬을 회귀로 확인합니다.
+- Run tests with `pytest` from the `tests/` directory using mock transports and temporary SQLite/DuckDB files — no real KIS API calls.
+- New CLI commands require at least one manual success-path and one failure-path verification, plus unit tests in `tests/test_<group>.py` where feasible.
+- Regression-check DuckDB unique constraints, `ON CONFLICT DO NOTHING`, and KST ordering.
 
 ### Common Patterns
-- 모든 service 함수는 frozen `@dataclass`로 결과를 반환 (e.g. `ChartHistoryResult`, `AuthTestResult`).
-- 인제스트 흐름: `start_ingest_run` → 본문 → `record_api_log` → `finish_ingest_run(status="success|failed")`.
-- Supabase 의존은 옵션 — `KISCLI_SUPABASE_DB_DSN` 환경 변수가 있을 때만 활성화됩니다.
-- `cli/common.py`의 `result_table`, `cli_console()`, `console`을 통해 Rich 출력을 통일합니다.
+- All service functions return results as frozen `@dataclass` instances (e.g. `ChartHistoryResult`, `AuthTestResult`).
+- Ingestion flow: `start_ingest_run` → body → `record_api_log` → `finish_ingest_run(status="success|failed")`.
+- Supabase dependency is optional — activated only when the `KISCLI_SUPABASE_DB_DSN` environment variable is set.
+- Use `result_table`, `cli_console()`, and `console` from `cli/common.py` to unify Rich output.
 
 ## Dependencies
 
 ### Internal
-- `kis/` — 현재 FinLabs의 KIS SDK (`KisClient`, `Credentials`, 모델, 파서, 심볼 다운로더)
+- `kis/` — The current FinLabs KIS SDK (`KisClient`, `Credentials`, models, parsers, symbol downloader)
 
 ### External
-- `typer>=0.12.0` — CLI 프레임워크
-- `rich>=13.0.0` + `rich-inquirer>=0.1.8` — 콘솔 출력/프롬프트
-- `duckdb>=1.1.0` — 로컬 웨어하우스
-- `platformdirs>=4.0.0` — OS별 표준 경로
-- `psycopg>=3.3.4` (옵션, `[postgres]` extras) — Supabase 미러
+- `typer>=0.12.0` — CLI framework
+- `rich>=13.0.0` + `rich-inquirer>=0.1.8` — Console output/prompts
+- `duckdb>=1.1.0` — Local warehouse
+- `platformdirs>=4.0.0` — OS-standard paths
+- `psycopg>=3.3.4` (optional, `[postgres]` extras) — Supabase mirror
 
-<!-- MANUAL: 수동 메모는 이 라인 아래에 작성하면 재생성 시 보존됩니다 -->
+<!-- MANUAL: Manually added notes below this line are preserved on regeneration -->

@@ -27,7 +27,7 @@ README.md  User-facing usage docs
 pyproject.toml project metadata and dependencies
 ```
 
-세부 가이드라인은 각 디렉토리의 AGENTS.md를 참고하세요:
+For detailed guidelines, see the AGENTS.md in each directory:
 
 | Directory | AGENTS.md |
 |-----------|-----------|

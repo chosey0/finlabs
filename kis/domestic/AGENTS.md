@@ -1,18 +1,18 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-05-13 | Updated: 2026-05-13 -->
+<!-- Generated: 2026-05-13 | Updated: 2026-05-14 -->
 
 # domestic
 
 ## Purpose
-국내(KRX/NXT) REST API의 **고수준 클라이언트**입니다. `KisClient.domestic.price.current("005930")` 처럼 단일 호출로 endpoint 룩업 → 요청 → 파싱 → 모델 반환을 처리합니다. `_DomesticNamespace`가 `KisClient`에 attribute로 부착되어, 호출자가 `EndpointSpec`이나 raw 페이로드를 만질 필요 없이 사용할 수 있습니다.
+High-level client for domestic (KRX/NXT) REST APIs. A single call such as `KisClient.domestic.price.current("005930")` handles endpoint lookup → request → parsing → model return. `_DomesticNamespace` is attached as an attribute of `KisClient`, so callers never need to touch `EndpointSpec` or raw payloads.
 
 ## Key Files
 
 | File | Description |
 |------|-------------|
-| `__init__.py` | `_DomesticNamespace` — `KisClient.domestic` 진입점, 하위 API 인스턴스(`price`, `chart`, `symbols`, `rank`, `analysis`) 조립 |
+| `__init__.py` | `_DomesticNamespace` — `KisClient.domestic` entry point, assembles child API instances (`price`, `chart`, `symbols`, `rank`, `analysis`) |
 | `price.py` | `DomesticPriceAPI.current(symbol, *, market="KOSPI", market_div="J"|"NX"|"UN")` → `CurrentPrice` |
-| `chart.py` | `DomesticChartAPI.daily/weekly/monthly/yearly(symbol, *, start, end, market, adjusted, max_pages)` → `list[OhlcvBar]` (페이지네이션 자동) |
+| `chart.py` | `DomesticChartAPI.daily/weekly/monthly/yearly(symbol, *, start, end, market, adjusted, max_pages)` → `list[OhlcvBar]` (auto-pagination) |
 | `symbols.py` | `DomesticSymbolsAPI.product_info(symbol, *, product_type="300")` → `ProductInfo`, `financial_summary(symbol, *, fid_div_cls_code)` → `FinancialSummary` — Stage 5 |
 | `rank.py` | `DomesticRankAPI.volume(market_code, count, *, market=None)` → `list[DomesticVolumeRankItem]` — Stage 5 |
 | `analysis.py` | `DomesticAnalysisAPI.investor_flow(symbol, start, end, *, market, market_div, adjusted)` → `list[InvestorFlow]` — Stage 5 |
@@ -20,28 +20,28 @@
 ## For AI Agents
 
 ### Working In This Directory
-- 모든 메서드는 `async`입니다. `KisClient`가 async context manager 안에 있을 때만 호출 가능합니다.
-- 메서드 시그니처 컨벤션: `(symbol: str, *, <keyword-only options>)` — 첫 인자만 positional, 나머지는 모두 keyword.
-- `symbol`은 진입 시점에 `.strip().upper()`로 정규화하고 빈 문자열은 `ValueError`로 거부합니다.
-- 새 메서드를 추가하면 (1) `endpoints/domestic/<file>.py`에 EndpointSpec 등록 → (2) 이 폴더에 API 클래스 메서드 추가 → (3) `_DomesticNamespace.__init__`에서 인스턴스화.
-- 페이지네이션 구현은 `chart.py`의 패턴을 따르세요: 결과를 `dict[timestamp, OhlcvBar]`로 중복 제거 → `max_pages` 가드 → 마지막에 ascending sort.
+- All methods are `async`. They can only be called while `KisClient` is inside an async context manager.
+- Method signature convention: `(symbol: str, *, <keyword-only options>)` — first argument positional only, the rest keyword-only.
+- Normalize `symbol` with `.strip().upper()` on entry; reject empty strings with `ValueError`.
+- To add a new method: (1) register `EndpointSpec` in `endpoints/domestic/<file>.py` → (2) add API class method in this directory → (3) instantiate in `_DomesticNamespace.__init__`.
+- Follow the pagination pattern in `chart.py`: deduplicate results in `dict[timestamp, OhlcvBar]` → enforce `max_pages` guard → sort ascending at the end.
 
 ### Testing Requirements
-- `httpx.MockTransport`로 `KisClient.request()`가 호출하는 KIS 응답을 흉내내고, 반환된 모델 인스턴스의 모든 필드를 검증합니다 (`tests/test_stage5_facades.py`, `tests/test_chart.py`).
-- 페이지네이션 메서드는 (a) 한 페이지 결과, (b) 여러 페이지 결과, (c) `max_pages` 도달 시 조기 종료 세 케이스를 확인합니다.
+- Use `httpx.MockTransport` to simulate KIS responses for `KisClient.request()`, then assert every field of the returned model instance (`tests/test_stage5_facades.py`, `tests/test_chart.py`).
+- Paginating methods require three cases: (a) single-page result, (b) multi-page result, (c) early termination when `max_pages` is reached.
 
 ### Common Patterns
-- 모듈 상단에서 `_SPEC = lookup("domestic.price.current")` 패턴으로 import 시점에 spec을 한 번 조회 — 메서드 호출마다 룩업 비용을 줄입니다.
-- `market` 인자는 모델 라벨링용이고, 실제 KIS 분기는 `market_div` (`J`=KRX, `NX`=NXT, `UN`=통합)으로 제어합니다.
-- 모든 API 클래스는 `__init__(self, parent: "KisClient")` 패턴으로 부모를 보관하고 `self._parent.request(spec, params=...)`를 호출합니다.
+- Resolve spec at import time with `_SPEC = lookup("domestic.price.current")` — avoids repeated lookup overhead per call.
+- `market` is for model labeling; actual KIS branching uses `market_div` (`J`=KRX, `NX`=NXT, `UN`=unified).
+- All API classes follow `__init__(self, parent: "KisClient")` and call `self._parent.request(spec, params=...)`.
 
 ## Dependencies
 
 ### Internal
-- `kis.endpoints.registry.lookup` — spec 조회
-- `kis.models.*`, `kis.parsers.rest` — 파싱/모델
+- `kis.endpoints.registry.lookup` — spec lookup
+- `kis.models.*`, `kis.parsers.rest` — parsing/models
 
 ### External
-- 없음 (`KisClient`가 `httpx`를 소유).
+- None (`KisClient` owns `httpx`).
 
-<!-- MANUAL: 수동 메모는 이 라인 아래에 작성하면 재생성 시 보존됩니다 -->
+<!-- MANUAL: Manually added notes below this line are preserved on regeneration -->

@@ -1,39 +1,39 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-05-13 | Updated: 2026-05-13 -->
+<!-- Generated: 2026-05-13 | Updated: 2026-05-14 -->
 
 # overseas (endpoints)
 
 ## Purpose
-해외 거래소(NAS/NYS/AMS/HKS/TSE/SHS/SZS/HNX/HSX) KIS Open API의 **EndpointSpec 등록 모듈** 모음입니다. 국내와 달리 KIS는 해외 endpoint 대부분에 모의투자 TR ID를 제공하지 않으므로, 등록된 spec 대다수가 `tr_id_mock=None`이고 `environment="mock"` 사용 시 `MockNotSupportedError`가 자동 발생합니다.
+Collection of **EndpointSpec registration modules** for overseas exchange (NAS/NYS/AMS/HKS/TSE/SHS/SZS/HNX/HSX) KIS Open API. Unlike domestic endpoints, KIS does not provide paper-trading TR IDs for most overseas endpoints, so the majority of registered specs have `tr_id_mock=None` and will automatically raise `MockNotSupportedError` when used with `environment="mock"`.
 
 ## Key Files
 
 | File | Description |
 |------|-------------|
-| `__init__.py` | `analysis`, `basic_quote`, `realtime` 서브모듈을 import해 spec 등록 트리거 |
+| `__init__.py` | Imports `analysis`, `basic_quote`, and `realtime` submodules to trigger spec registration |
 | `basic_quote.py` | `[해외주식] 기본시세.xlsx` — `overseas.price.current` (HHDFS00000300, mock=None), `overseas.chart.ohlcv` (FHKST03030100, mock=None), `overseas.chart.dailyprice` (HHDFS76240000, `supports_tr_cont=True`), `overseas.chart.minute` (HHDFS76950200) |
-| `analysis.py` | `[해외주식] 시세분석.xlsx` — `overseas.analysis.price_fluct` (HHDFS76260000), `volume_surge` (HHDFS76270000), `volume_power`, `updown_rate`, `new_highlow`, `trade_vol` 등 (대량 spec, 모두 mock=None) |
+| `analysis.py` | `[해외주식] 시세분석.xlsx` — `overseas.analysis.price_fluct` (HHDFS76260000), `volume_surge` (HHDFS76270000), `volume_power`, `updown_rate`, `new_highlow`, `trade_vol`, etc. (bulk specs, all mock=None) |
 | `realtime.py` | `[해외주식] 실시간시세.xlsx` — `overseas.realtime.trades` (HDFSCNT0, WebSocket, mock=None), `overseas.realtime.orderbook` (HDFSASP0, mock=None) |
 
 ## For AI Agents
 
 ### Working In This Directory
-- **거의 모든 해외 endpoint는 `tr_id_mock=None`** 입니다. KIS 문서를 확인해서 진짜로 mock 미지원인지 확인 후 등록하세요 — 임의로 `None`을 채우면 안 됩니다.
-- 이름 컨벤션: `overseas.<group>.<action>` (e.g. `overseas.price.current`, `overseas.chart.minute`, `overseas.analysis.volume_surge`).
-- 등록 패턴은 국내와 동일:
-  - 핵심 endpoint는 모듈 변수로 노출 (`CURRENT_PRICE = register(EndpointSpec(...))`).
-  - 대량 spec은 `_SPECS = (...,)` 튜플 + 루프.
-- 해외 분석 endpoint는 `required_params`로 `AUTH`, `EXCD`, `GUBN`, `NDAY`, `VOL_RANG` 같은 KIS 특유 키를 받습니다. 키 이름 그대로 등록하세요 (KIS는 대소문자/언더스코어가 엄격합니다).
-- `overseas.chart.minute`처럼 페이지네이션이 KIS 응답 본문(`output1.next`)에 의존하는 경우는 `supports_tr_cont=False`로 두고, 호출자(`kis/overseas/chart.py`)에서 본문 기반 분기를 구현합니다.
+- **Nearly all overseas endpoints have `tr_id_mock=None`**. Verify against the KIS documentation that an endpoint is genuinely mock-unsupported before registering — do not fill in `None` arbitrarily.
+- Name convention: `overseas.<group>.<action>` (e.g. `overseas.price.current`, `overseas.chart.minute`, `overseas.analysis.volume_surge`).
+- Registration patterns are the same as for domestic:
+  - Core endpoints as module variables (`CURRENT_PRICE = register(EndpointSpec(...))`).
+  - Bulk specs as a `_SPECS = (...,)` tuple + loop.
+- Overseas analysis endpoints accept KIS-specific parameter keys such as `AUTH`, `EXCD`, `GUBN`, `NDAY`, `VOL_RANG` in `required_params`. Register the key names exactly as-is (KIS is strict about case and underscores).
+- For endpoints like `overseas.chart.minute` where pagination depends on the response body (`output1.next`) rather than the `tr_cont` header, set `supports_tr_cont=False` and implement body-based branching in the caller (`kis/overseas/chart.py`).
 
 ### Testing Requirements
-- mock-unsupported endpoint는 `tr_id_for("mock")` 호출 시 `MockNotSupportedError` 발생을 회귀 한 줄 확인 (`tests/test_kis_package.py`).
-- 핵심 endpoint(`overseas.price.current`, `overseas.chart.dailyprice`, `overseas.chart.minute`)는 `lookup(...)`로 메타데이터를 가져와 `tr_id_real`/`path` 일치 여부 검증.
+- For mock-unsupported endpoints, add a one-line regression in `tests/test_kis_package.py` verifying that `tr_id_for("mock")` raises `MockNotSupportedError`.
+- For core endpoints (`overseas.price.current`, `overseas.chart.dailyprice`, `overseas.chart.minute`), retrieve metadata via `lookup(...)` and assert `tr_id_real` / `path` match expected values.
 
 ### Common Patterns
-- 모듈 docstring 첫 줄에 원본 엑셀 워크북명을 명시 (`"""EndpointSpec registry for `[해외주식] 기본시세.xlsx`."""`).
-- WebSocket endpoint는 국내와 동일하게 `method="POST"` + WebSocket 헤더 5종 + `required_params=("tr_id", "tr_key")`.
-- 해외 거래소 코드(`EXCD`)는 KIS 정의대로 3글자 대문자 (`NAS`/`NYS`/`AMS`/`HKS`/`TSE`/`SHS`/`SZS`/`HNX`/`HSX`).
+- State the source Excel workbook in the first line of the module docstring (`"""EndpointSpec registry for '[해외주식] 기본시세.xlsx'."""`).
+- WebSocket endpoints follow the same pattern as domestic: `method="POST"` + 5 WebSocket headers + `required_params=("tr_id", "tr_key")`.
+- Overseas exchange codes (`EXCD`) are 3-character uppercase as defined by KIS (`NAS`/`NYS`/`AMS`/`HKS`/`TSE`/`SHS`/`SZS`/`HNX`/`HSX`).
 
 ## Dependencies
 
@@ -41,6 +41,6 @@
 - `kis.endpoints.registry` — `EndpointSpec`, `register`
 
 ### External
-- 없음.
+- None.
 
-<!-- MANUAL: 수동 메모는 이 라인 아래에 작성하면 재생성 시 보존됩니다 -->
+<!-- MANUAL: Manually added notes below this line are preserved on regeneration -->
