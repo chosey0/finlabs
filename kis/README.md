@@ -4,10 +4,11 @@
 REST/WebSocket 트랜스포트, 인증, 응답 정규화만 담당하며, 영속화·CLI·설정 파일 같은
 애플리케이션 레이어 책임은 포함하지 않습니다(그건 같은 저장소의 `kis_cli` 패키지가 맡습니다).
 
-> **Stage:** 5 완료. 국내/해외 현재가·차트 high-level facade, WebSocket
-> 실시간 체결/호가 스트리밍, 종목정보·순위분석·시세분석·업종/기타
-> EndpointSpec 등록과 주요 분석 facade를 사용할 수 있습니다. 자세한 상태는
-> [로드맵](#로드맵)을 참고하세요.
+> **Stage:** 5 완료. `.agents/kis-skill/resources/*.xlsx` 기준 219개 API 중
+> 116개를 `EndpointSpec`으로 등록했습니다. 주문/계좌와 일부 기본시세·실시간
+> 채널은 아직 제외되어 있으며, 실제 high-level facade/parser/model은 핵심
+> 데이터 수집 기능 위주로 제공됩니다. 자세한 상태는
+> [API 문서 대비 구현 현황](#api-문서-대비-구현-현황)을 참고하세요.
 
 ---
 
@@ -19,8 +20,9 @@ REST/WebSocket 트랜스포트, 인증, 응답 정규화만 담당하며, 영속
 - **트랜스포트와 파싱 분리.** `kis.parsers.rest.parse_*`는 모두 raw `dict`를 받아
   도메인 모델을 반환하는 순수 함수라, 네트워크 없이 단위 테스트가 가능합니다.
 - **모의투자 미지원 가드.** `tr_id_mock=None`으로 등록된 엔드포인트는
-  `spec.tr_id_for("mock")` 호출 시 `MockNotSupportedError`를 던집니다. 따라서
-  `client.overseas.chart.daily(...)`처럼 high-level 메서드에서도 자동으로 차단됩니다.
+  `spec.tr_id_for("mock")` 호출 시 `MockNotSupportedError`를 던집니다. 단, 현재
+  일부 해외 기본시세 EndpointSpec은 문서상 mock TR ID가 있는데도 `None`으로
+  등록된 불일치가 있어 [정합성 이슈](#정합성-이슈)를 별도 추적합니다.
 - **Async-first, sync wrapper.** REST 데이터 호출은 httpx async가 기본이며, OAuth
   토큰 발급은 sync/async 둘 다 제공합니다.
 - **외부 의존성 최소화.** runtime은 `httpx`, `websockets` 두 개만 필요합니다.
@@ -99,8 +101,9 @@ asyncio.run(main())
    `TokenCache`(기본 `MemoryTokenCache`)에 저장합니다. 같은 컨텍스트 안에서
    여러 번 호출해도 토큰 발급은 한 번만 일어납니다.
 3. **모의는 엔드포인트별로 검증.** `environment="mock"`으로 만든 클라이언트는
-   `tr_id_mock=None` 엔드포인트(해외 시세 등)를 호출하는 즉시
-   `MockNotSupportedError`를 던집니다.
+   `tr_id_mock=None` 엔드포인트를 호출하는 즉시 `MockNotSupportedError`를
+   던집니다. 현재 해외 기본시세 3개 EndpointSpec은 문서상 mock 지원으로
+   보이나 SDK에는 미지원으로 등록되어 있어 수정 후보입니다.
 
 ### 1-1) WebSocket 실시간 스트리밍
 
@@ -217,6 +220,102 @@ records[0].symbol, records[0].korean_name
 
 심볼 마스터는 KIS의 공개 정적 zip(인증 불필요)을 받아 cp949로 디코딩하므로
 `KisClient`나 토큰이 필요 없습니다.
+
+---
+
+## API 문서 대비 구현 현황
+
+기준 문서는 `.agents/kis-skill/resources/*.xlsx`의 각 워크북 `API 목록` 시트입니다.
+현재 SDK는 주문/계좌 기능을 의도적으로 제외하고, 시장 데이터 수집에 필요한
+시세·분석·종목정보 API를 우선 구현합니다.
+
+### 전체 커버리지
+
+| 구분 | 문서 API 수 | SDK EndpointSpec 등록 | 커버리지 |
+| --- | ---: | ---: | ---: |
+| 전체 API | 219 | 116 | 약 53% |
+| 비주문·비OAuth API | 174 | 116 | 약 67% |
+
+등록된 116개 EndpointSpec은 문서의 URL과 실전 TR ID가 모두 일치합니다.
+다만 EndpointSpec 등록은 low-level 호출 가능성을 뜻하며, high-level facade와
+전용 parser/model까지 모두 구현되었다는 의미는 아닙니다.
+
+### 워크북별 EndpointSpec 등록 현황
+
+| 문서 | 문서 API 수 | 등록 수 | 상태 |
+| --- | ---: | ---: | --- |
+| OAuth.xlsx | 4 | 0 | 토큰 발급/approval key는 EndpointSpec이 아닌 전용 함수로 구현 |
+| 국내주식 기본시세 | 21 | 2 | 현재가, 기간별 OHLCV만 등록 |
+| 국내주식 순위분석 | 22 | 22 | 전부 등록 |
+| 국내주식 시세분석 | 29 | 29 | 전부 등록 |
+| 국내주식 실시간시세 | 29 | 2 | KRX 체결/호가만 등록 |
+| 국내주식 업종/기타 | 14 | 14 | 전부 등록 |
+| 국내주식 종목정보 | 26 | 26 | 전부 등록 |
+| 국내주식 주문/계좌 | 23 | 0 | 의도적으로 제외 |
+| 해외주식 기본시세 | 14 | 4 | 현재체결가, 분봉, 기간별시세 2종 등록 |
+| 해외주식 시세분석 | 15 | 15 | 전부 등록 |
+| 해외주식 실시간시세 | 4 | 2 | 실시간호가/체결가 등록 |
+| 해외주식 주문/계좌 | 18 | 0 | 의도적으로 제외 |
+
+### high-level facade 구현 범위
+
+사용자가 별도 `EndpointSpec`과 raw payload를 다루지 않고 바로 호출할 수 있는
+메서드는 아래가 전부입니다. 즉, 현재 SDK는 “메타데이터 등록은 넓고,
+high-level API는 핵심 수집 기능 위주”인 상태입니다.
+
+```text
+client.domestic.price.current()
+client.domestic.chart.daily/weekly/monthly/yearly()
+client.domestic.symbols.product_info()
+client.domestic.symbols.financial_summary()
+client.domestic.rank.volume()
+client.domestic.analysis.investor_flow()
+
+client.overseas.price.current()
+client.overseas.chart.daily()
+client.overseas.chart.minute()
+client.overseas.analysis.volume_surge()
+
+client.realtime.session().subscribe_trades()
+client.realtime.session().subscribe_orderbook()
+```
+
+그 외 등록된 EndpointSpec은 `client.request(lookup("..."), params=...)`로
+low-level 호출할 수 있지만, 파라미터 구성과 응답 파싱은 호출자가 직접 처리해야
+합니다.
+
+### OAuth 구현 범위
+
+| OAuth API | 구현 상태 |
+| --- | --- |
+| 접근토큰발급(P) | `issue_access_token[_async]`로 구현 |
+| 실시간 웹소켓 접속키 발급 | `issue_websocket_approval_key[_async]`로 구현 |
+| 접근토큰폐기(P) | 미구현 |
+| Hashkey | 미구현 |
+
+현재 SDK는 주문 API를 지원하지 않으므로 Hashkey가 당장 필요하지 않습니다.
+향후 주문/계좌 API를 추가한다면 Hashkey 구현과 보안 검토가 선행되어야 합니다.
+
+### 정합성 이슈
+
+문서상 mock TR ID가 있으나 SDK에서 `tr_id_mock=None`으로 등록된 항목이 있습니다.
+이 상태에서는 `environment="mock"`에서 `MockNotSupportedError`가 발생합니다.
+
+| EndpointSpec | 문서상 mock TR ID | 현재 SDK |
+| --- | --- | --- |
+| `overseas.price.current` | `HHDFS00000300` | `None` |
+| `overseas.chart.dailyprice` | `HHDFS76240000` | `None` |
+| `overseas.chart.ohlcv` | `FHKST03030100` | `None` |
+
+### 우선 구현 후보
+
+1. 해외 기본시세 3개 EndpointSpec의 mock TR ID 정합성 수정
+2. 국내 기본시세의 분봉 API 추가
+   - `주식당일분봉조회`
+   - `주식일별분봉조회`
+3. 국내 현재가 체결/호가 REST API 추가
+4. 해외 기본시세의 현재가상세/호가/체결추이/상품기본정보 추가
+5. 주문/계좌 API는 현재 FinLabs 범위에서는 계속 제외
 
 ---
 
@@ -444,8 +543,8 @@ KisError                       # 모든 SDK 예외의 부모
 | 2 | ✅ | 기존 `kis_cli/core`의 auth·price·chart·symbol_master를 SDK로 이전, parser 정규화 |
 | 3 | ✅ | high-level facade: `domestic.price.current`, `domestic.chart.daily/.weekly/.monthly/.yearly`, `overseas.price.current`, `overseas.chart.daily/.minute`. 토큰 자동 발급/캐시 |
 | 4 | ✅ | WebSocket `RealtimeSession`: approval key 발급/캐시, 체결·호가 subscribe/unsubscribe, async generator 스트리밍 |
-| 5 | ✅ | 나머지 워크북 등록: 종목정보, 순위분석, 시세분석, 업종/기타 + 주요 facade 5개 |
-| 6 | ⏳ | sync wrapper 정식화, PyPI 분리 배포 |
+| 5 | ✅ | 종목정보, 순위분석, 시세분석, 업종/기타, 해외 시세분석 EndpointSpec 등록 + 주요 facade 5개 |
+| 6 | ⏳ | 문서 정합성 보정, 국내/해외 기본시세 확장, sync wrapper 정식화 |
 
 각 stage는 `.agents/kis-skill/resources/` 안의 KIS Excel API 문서를 단일 진실
 공급원으로 삼습니다.

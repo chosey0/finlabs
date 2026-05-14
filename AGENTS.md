@@ -22,9 +22,19 @@ Do **not** add UI, dashboards, chart rendering, trading/order execution, strateg
 kis/       KIS SDK: REST/WebSocket clients, endpoint specs, parsers, models
 kis_cli/   Current FinLabs KIS CLI application and storage workflows
 tests/     Focused unit tests
+exports/   CSV sample outputs
 README.md  User-facing usage docs
 pyproject.toml project metadata and dependencies
 ```
+
+세부 가이드라인은 각 디렉토리의 AGENTS.md를 참고하세요:
+
+| Directory | AGENTS.md |
+|-----------|-----------|
+| `kis/` | [kis/AGENTS.md](kis/AGENTS.md) |
+| `kis_cli/` | [kis_cli/AGENTS.md](kis_cli/AGENTS.md) |
+| `tests/` | [tests/AGENTS.md](tests/AGENTS.md) |
+| `exports/` | [exports/AGENTS.md](exports/AGENTS.md) |
 
 Do not create `docs/`, `examples/`, `LICENSE`, or `CHANGELOG.md` unless explicitly requested.
 
