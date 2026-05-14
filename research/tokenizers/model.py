@@ -87,7 +87,7 @@ if nn is not None:  # pragma: no cover - optional ML path
             indices = distances.argmin(dim=1)
             z_q = self.embedding(indices)
             z_q_st = z_e + (z_q - z_e).detach()
-            return z_q_st, indices
+            return z_q_st, z_q, indices
 
 
     class VQVAE(nn.Module):
@@ -101,9 +101,9 @@ if nn is not None:  # pragma: no cover - optional ML path
 
         def forward(self, inputs):
             z_e = self.encoder(inputs)
-            z_q, indices = self.quantizer(z_e)
-            reconstruction = self.decoder(z_q)
-            return reconstruction, z_e, z_q, indices
+            z_q_st, z_q, indices = self.quantizer(z_e)
+            reconstruction = self.decoder(z_q_st)
+            return reconstruction, z_e, z_q_st, z_q, indices
 
 else:
     Encoder = None

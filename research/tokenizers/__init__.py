@@ -1,6 +1,6 @@
 """Candlestick tokenizer research primitives."""
 
-from research.tokenizers.data import CandleBar, CandleSplit, load_candles, split_by_date
+from research.tokenizers.data import CandleBar, CandleSplit, load_candles, split_by_date, split_by_ratio
 from research.tokenizers.encode import Tokenizer
 from research.tokenizers.features import FeatureVector, VolumeContext, extract_features
 from research.tokenizers.model import VQVAEConfig
@@ -17,4 +17,5 @@ __all__ = [
     "extract_features",
     "load_candles",
     "split_by_date",
+    "split_by_ratio",
 ]

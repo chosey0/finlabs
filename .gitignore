@@ -225,3 +225,6 @@ exports/
 .claude/
 .omc/
 .omx/
+# Research experiment artifacts
+research/runs/
+research/notebooks/research/

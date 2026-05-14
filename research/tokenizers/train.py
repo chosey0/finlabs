@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Sequence
 
@@ -35,7 +35,7 @@ class TrainResult:
 
 
 def train(features: Sequence[FeatureVector], *, config: TrainConfig) -> TrainResult:
-    """Train a small VQ-VAE tokenizer and write a checkpoint."""
+    """Train a small VQ-VAE tokenizer and write a safe checkpoint."""
     config.validate()
     if not features:
         raise ValueError("features must not be empty")
@@ -58,7 +58,7 @@ def train(features: Sequence[FeatureVector], *, config: TrainConfig) -> TrainRes
         permutation = torch.randperm(inputs.size(0))
         for start in range(0, inputs.size(0), config.batch_size):
             batch = inputs[permutation[start : start + config.batch_size]]
-            reconstruction, z_e, z_q, _ = model(batch)
+            reconstruction, z_e, _z_q_st, z_q, _indices = model(batch)
             reconstruction_loss = torch.mean((reconstruction - batch) ** 2)
             codebook_loss = torch.mean((z_q - z_e.detach()) ** 2)
             commitment_loss = torch.mean((z_e - z_q.detach()) ** 2)
@@ -71,7 +71,8 @@ def train(features: Sequence[FeatureVector], *, config: TrainConfig) -> TrainRes
     checkpoint_path = config.output_dir / "tokenizer.pt"
     torch.save(
         {
-            "config": config.model,
+            "format_version": 2,
+            "config": asdict(config.model),
             "state_dict": model.state_dict(),
         },
         checkpoint_path,

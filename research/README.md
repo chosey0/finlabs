@@ -138,7 +138,8 @@ Phase 3는 아직 구현하지 않습니다. 별도 spec이 생기기 전까지�
 대상 테이블:
 
 ```text
-ohlcv_bars
+ohlcv_bars             # daily / weekly / monthly / yearly OHLCV
+overseas_minute_bars   # overseas minute OHLCV
 ```
 
 주요 key:
@@ -268,6 +269,9 @@ same checkpoint + same input
 research/
 ├── README.md
 ├── AGENTS.md
+├── notebooks/
+│   ├── README.md
+│   └── 01_shape_quantization_smoke.ipynb
 └── tokenizers/
     ├── __init__.py
     ├── AGENTS.md
@@ -296,7 +300,7 @@ from research.tokenizers import (
 예상 사용 흐름:
 
 ```python
-from research.tokenizers.data import load_candles, split_by_date
+from research.tokenizers.data import load_candles, split_by_date, split_by_ratio
 from research.tokenizers.features import build_volume_context, extract_features_batch
 from research.tokenizers.train import TrainConfig, train
 from research.tokenizers.encode import Tokenizer
@@ -307,14 +311,18 @@ candles = load_candles(
     warehouse_path="warehouse.duckdb",
     market="NASDAQ",
     symbol="AAPL",
-    interval="1d",
+    interval="1d",  # daily. Use "1m", "5m", "1min" for overseas minute bars.
 )
 
+# Daily data can use calendar boundaries.
 split = split_by_date(
     candles,
     train_end="2025-12-31",
     val_end="2026-03-31",
 )
+
+# Minute data can use chronological ratio split when date boundaries are unknown.
+# split = split_by_ratio(candles, train_ratio=0.7, val_ratio=0.15)
 
 volume_context = build_volume_context(split.train)
 train_features = extract_features_batch(split.train, volume_context)
@@ -325,6 +333,43 @@ tokens = tokenizer.encode(split.test)
 
 shape_report = token_utilization(tokens, codebook_size=32)
 sequence_report = transition_report(tokens)
+```
+
+## Notebook Workflow
+
+첫 exploratory notebook은 다음 파일입니다.
+
+```text
+research/notebooks/01_shape_quantization_smoke.ipynb
+```
+
+목표는 Phase 1 Shape Quantization smoke test입니다.
+
+```text
+OHLCV candle
+→ 7D feature vector
+→ VQ-VAE shape tokenizer
+→ shape token
+→ token utilization / semantic consistency
+→ prototype candle / feature heatmap / transition heatmap
+```
+
+실행 전 optional dependency를 설치합니다.
+
+```bash
+uv sync --extra tokenizers
+```
+
+Jupyter kernel이 필요하면 다음 명령을 사용합니다.
+
+```bash
+uv run --extra tokenizers --with ipykernel python -m ipykernel install --user --name finlabs-tokenizers --display-name "FinLabs Tokenizers"
+```
+
+시각화 결과는 화면 출력과 동시에 다음 위치에 PNG로 저장합니다.
+
+```text
+RUN_DIR / "figures"
 ```
 
 ## Dependency Policy
