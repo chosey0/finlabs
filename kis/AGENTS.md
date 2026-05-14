@@ -4,7 +4,7 @@
 # kis
 
 ## Purpose
-`kis` is a pure Python SDK package wrapping the Korea Investment & Securities Open API. It is responsible only for transport (REST via `httpx` / WebSocket via `websockets`) and payload normalization (frozen dataclass models + parsers). It contains no filesystem, DB, or CLI code. Persistence and user workflows are handled by the sibling package `kis_cli/`.
+`kis` is a pure Python SDK package wrapping overseas-stock data APIs from the Korea Investment & Securities Open API. It is responsible only for transport (REST via `httpx` / WebSocket via `websockets`) and payload normalization (frozen dataclass models + parsers). It contains no filesystem, DB, or CLI code. Persistence and user workflows are handled by the sibling package `kis_cli/`.
 
 ## Key Files
 
@@ -13,7 +13,7 @@
 | `__init__.py` | Public surface exports (`KisClient`, `Credentials`, models, parsers, symbols, exceptions) |
 | `client.py` | `KisClient` facade — async context manager, `request(spec, ...)`, `ensure_token()`, `ensure_approval_key()` |
 | `config.py` | `Credentials` (with `from_env()` helper), `rest_base_url()`, `websocket_url()` — environment-specific URL mapping |
-| `symbols.py` | Symbol master download/parsing (`download_symbol_master`, KOSPI/KOSDAQ fixed-width, overseas TSV) |
+| `symbols.py` | Overseas symbol master download/parsing (`download_symbol_master`, overseas TSV) |
 | `types.py` | Shared Literal types (`Environment`, `Market`, `Interval`, `HttpMethod`, `CustType`) |
 | `exceptions.py` | `KisError` hierarchy (`KisAuthError`, `KisApiError`, `KisConfigError`, `KisRealtimeError`, `MockNotSupportedError`) |
 
@@ -26,7 +26,6 @@
 | `endpoints/` | `EndpointSpec` registry and domain-specific registration modules (see `endpoints/AGENTS.md`) |
 | `models/` | Normalized response dataclass models (see `models/AGENTS.md`) |
 | `parsers/` | KIS payload → model conversion (REST + realtime, see `parsers/AGENTS.md`) |
-| `domestic/` | High-level client for domestic (KRX/NXT) APIs (see `domestic/AGENTS.md`) |
 | `overseas/` | High-level client for overseas exchange APIs (see `overseas/AGENTS.md`) |
 | `realtime/` | WebSocket realtime session (`RealtimeSession`) (see `realtime/AGENTS.md`) |
 
@@ -35,7 +34,7 @@
 ### Working In This Directory
 - This package is a **pure SDK**. Never add filesystem access, KST timestamping, DuckDB/SQLite logic here — those responsibilities belong in `kis_cli/`.
 - `KisClient` must always be used inside an `async with` context. Calling `request()` outside a context raises `RuntimeError`.
-- Adding a new endpoint follows this order: (1) register `EndpointSpec` in `endpoints/` → (2) add parser in `parsers/rest.py` → (3) add model in `models/` → (4) expose high-level method in `domestic/` or `overseas/`.
+- Adding a new endpoint follows this order: (1) register `EndpointSpec` in `endpoints/` → (2) add parser in `parsers/rest.py` → (3) add model in `models/` → (4) expose high-level method in `overseas/`.
 - All models are `@dataclass(frozen=True)` and include a `raw: dict[str, Any]` field to preserve the original payload.
 - Endpoints not supported in paper-trading are registered with `tr_id_mock=None` — `tr_id_for("mock")` automatically raises `MockNotSupportedError`.
 

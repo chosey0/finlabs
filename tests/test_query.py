@@ -62,8 +62,8 @@ def test_query_ohlcv_command_outputs_json(tmp_path) -> None:
     with connect(db_path) as connection:
         insert_ohlcv_bar(
             connection,
-            market="KOSPI",
-            symbol="005930",
+            market="NASDAQ",
+            symbol="AAPL",
             interval="1d",
             timestamp="2026-05-07",
             open=70000.0,
@@ -78,15 +78,15 @@ def test_query_ohlcv_command_outputs_json(tmp_path) -> None:
 
     result = runner.invoke(
         app,
-        ["query", "ohlcv", "--symbol", "005930", "--format", "json", "--db-path", str(db_path)],
+        ["query", "ohlcv", "--symbol", "AAPL", "--format", "json", "--db-path", str(db_path)],
     )
 
     assert result.exit_code == 0
     rows = json.loads(result.output)
     assert rows == [
         {
-            "market": "KOSPI",
-            "symbol": "005930",
+            "market": "NASDAQ",
+            "symbol": "AAPL",
             "interval": "1d",
             "timestamp": "2026-05-07",
             "open": 70000.0,
@@ -107,8 +107,8 @@ def test_query_ohlcv_command_table_includes_change_metrics(tmp_path) -> None:
     with connect(db_path) as connection:
         insert_ohlcv_bar(
             connection,
-            market="KOSPI",
-            symbol="005930",
+            market="NASDAQ",
+            symbol="AAPL",
             interval="1d",
             timestamp="2026-05-07",
             open=70000.0,
@@ -123,7 +123,7 @@ def test_query_ohlcv_command_table_includes_change_metrics(tmp_path) -> None:
 
     result = runner.invoke(
         app,
-        ["query", "ohlcv", "--symbol", "005930", "--db-path", str(db_path)],
+        ["query", "ohlcv", "--symbol", "AAPL", "--db-path", str(db_path)],
         env={"COLUMNS": "200"},
     )
 
@@ -143,8 +143,8 @@ def test_query_ohlcv_command_all_returns_every_matching_row(tmp_path) -> None:
         for day in range(1, 24):
             insert_ohlcv_bar(
                 connection,
-                market="KOSPI",
-                symbol="005930",
+                market="NASDAQ",
+                symbol="AAPL",
                 interval="1d",
                 timestamp=f"2026-05-{day:02d}",
                 open=70000.0,
@@ -156,7 +156,7 @@ def test_query_ohlcv_command_all_returns_every_matching_row(tmp_path) -> None:
 
     default_result = runner.invoke(
         app,
-        ["query", "ohlcv", "--symbol", "005930", "--format", "json", "--db-path", str(db_path)],
+        ["query", "ohlcv", "--symbol", "AAPL", "--format", "json", "--db-path", str(db_path)],
     )
     all_result = runner.invoke(
         app,
@@ -164,7 +164,7 @@ def test_query_ohlcv_command_all_returns_every_matching_row(tmp_path) -> None:
             "query",
             "ohlcv",
             "--symbol",
-            "005930",
+            "AAPL",
             "--all",
             "--format",
             "json",

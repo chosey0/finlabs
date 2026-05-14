@@ -10,21 +10,20 @@ Manages KIS REST/WebSocket endpoint metadata as a **data-driven registry**. `End
 
 | File | Description |
 |------|-------------|
-| `__init__.py` | Imports `domestic`/`overseas` submodules to trigger spec registration + re-exports `EndpointSpec`/`lookup`/`names`/`register` |
+| `__init__.py` | Imports `overseas` submodules to trigger spec registration + re-exports `EndpointSpec`/`lookup`/`names`/`register` |
 | `registry.py` | `EndpointSpec` frozen dataclass (`tr_id_for(env)` with `MockNotSupportedError` guard), `_EndpointRegistry` (rejects duplicate registrations), module-level helpers `register`/`lookup`/`names` |
 
 ## Subdirectories
 
 | Directory | Purpose |
 |-----------|---------|
-| `domestic/` | Domestic KRX/NXT endpoint registrations — basic_quote, analysis, rank, sector, symbol_info, realtime (see `domestic/AGENTS.md`) |
 | `overseas/` | Overseas exchange endpoint registrations — basic_quote, analysis, realtime (see `overseas/AGENTS.md`) |
 
 ## For AI Agents
 
 ### Working In This Directory
 - Create new endpoints as `EndpointSpec(name=..., method=..., path=..., tr_id_real=..., tr_id_mock=...)` and **call `register()`** to add them to the global registry.
-- Names follow the pattern `<domain>.<group>.<action>` (e.g. `domestic.price.current`, `overseas.chart.minute`) — duplicates raise `KisConfigError`.
+- Names follow the pattern `<domain>.<group>.<action>` (e.g. `overseas.chart.minute`) — duplicates raise `KisConfigError`.
 - Set `tr_id_mock=None` for endpoints not supported in paper-trading. `tr_id_for("mock")` will automatically raise `MockNotSupportedError`.
 - Mark paginating endpoints with `supports_tr_cont=True` — callers must pass the `tr_cont` response header to the next request header.
 - `required_params`/`required_headers` are documentation hints — the current transport does not enforce them at runtime, but populate them accurately from the KIS spec for each new endpoint.

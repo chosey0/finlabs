@@ -15,7 +15,6 @@ from kis.endpoints.registry import EndpointSpec
 from kis.types import Environment
 
 if TYPE_CHECKING:
-    from kis.domestic import _DomesticNamespace
     from kis.overseas import _OverseasNamespace
     from kis.realtime import _RealtimeNamespace
 
@@ -28,7 +27,7 @@ class KisClient:
     and token cache are scoped to a single block:
 
         async with KisClient(credentials=...) as client:
-            price = await client.domestic.price.current("005930")
+            price = await client.overseas.price.current("AAPL", exchange="NAS")
 
     The client lazily issues and caches access tokens. Construct it without
     a context manager only when you need to inspect non-network attributes
@@ -41,7 +40,6 @@ class KisClient:
     http_client: httpx.AsyncClient | None = None
     timeout_seconds: float = 30.0
 
-    domestic: "_DomesticNamespace" = field(init=False, repr=False)
     overseas: "_OverseasNamespace" = field(init=False, repr=False)
     realtime: "_RealtimeNamespace" = field(init=False, repr=False)
 
@@ -50,11 +48,9 @@ class KisClient:
     _transport: AsyncHttpTransport | None = field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
-        from kis.domestic import _DomesticNamespace
         from kis.overseas import _OverseasNamespace
         from kis.realtime import _RealtimeNamespace
 
-        self.domestic = _DomesticNamespace(self)
         self.overseas = _OverseasNamespace(self)
         self.realtime = _RealtimeNamespace(self)
 

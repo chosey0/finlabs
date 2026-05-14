@@ -82,7 +82,7 @@ Planned only; do not document as available unless implemented:
 
 ```bash
 python -m kis_cli price current --symbol AAPL --market NASDAQ
-python -m kis_cli stream trades --symbol 005930 --market KRX
+python -m kis_cli stream trades --symbol AAPL --market NAS
 python -m kis_cli stream quotes --symbol AAPL --market NAS
 ```
 

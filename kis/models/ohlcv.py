@@ -9,8 +9,8 @@ from typing import Any
 class OhlcvBar:
     """One OHLCV row for daily / weekly / monthly / yearly intervals.
 
-    Shared by domestic and overseas chart endpoints. The `interval` field
-    follows kis-cli's canonical labels: ``1d`` / ``1w`` / ``1mo`` / ``1y``.
+    Used by overseas chart endpoints. The `interval` field follows
+    kis-cli's canonical labels: ``1d`` / ``1w`` / ``1mo`` / ``1y``.
     """
 
     market: str

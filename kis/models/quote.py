@@ -9,8 +9,8 @@ from typing import Any
 class CurrentPrice:
     """Normalized snapshot of one symbol's current price.
 
-    Fields are intentionally generic so the same model serves both domestic
-    (KRX/NXT) and overseas markets. `raw` preserves the original KIS payload
+    Fields are intentionally generic for overseas markets. `raw` preserves
+    the original KIS payload
     for debugging or downstream re-parsing.
     """
 

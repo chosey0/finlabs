@@ -60,14 +60,14 @@ def chart_history(
     ] = "duckdb",
     adjusted: Annotated[
         bool,
-        typer.Option("--adjusted/--raw-price", help="Use adjusted prices for domestic history."),
+        typer.Option("--adjusted/--raw-price", help="Use adjusted prices where supported."),
     ] = True,
     max_pages: Annotated[
         int,
         typer.Option("--max-pages", min=1, max=1000, help="Maximum continuation requests."),
     ] = 100,
 ) -> None:
-    """Collect domestic or overseas OHLCV history with continuation support."""
+    """Collect overseas OHLCV history with continuation support."""
     _run_chart_history(
         symbol=symbol,
         start=start,

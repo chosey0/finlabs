@@ -18,10 +18,10 @@
 | `test_price.py` | Current price service function (`get_current_price`) |
 | `test_query.py` | `python -m kis_cli query ohlcv/minutes` — DuckDB query + CSV/JSON output |
 | `test_realtime.py` | Stage 4 WebSocket session — `RealtimeSession`, subscription messages, frame parsing |
-| `test_stage5_facades.py` | Stage 5 high-level methods — `domestic.rank`, `domestic.analysis`, `overseas.analysis`, `domestic.symbols` |
+| `test_stage5_facades.py` | Stage 5 high-level methods — `overseas.analysis` |
 | `test_storage.py` | DuckDB/SQLite schema creation, unique constraints, ingestion ordering |
 | `test_supabase_schema.py` | Supabase DDL SQL generation + `PRIMARY KEY` verification |
-| `test_symbols.py` | Symbol master parsing (KOSPI/KOSDAQ fixed-width, overseas TSV) + DuckDB upsert |
+| `test_symbols.py` | Overseas symbol master parsing (TSV) + DuckDB upsert |
 
 ## For AI Agents
 

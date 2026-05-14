@@ -278,20 +278,9 @@ async def _fetch_ohlcv_history_async(
     if parse_date(start) > parse_date(end):
         raise ValueError("start must be on or before end")
     if market in {"KOSPI", "KOSDAQ"}:
-        method = {
-            "D": client.domestic.chart.daily,
-            "W": client.domestic.chart.weekly,
-            "M": client.domestic.chart.monthly,
-            "Y": client.domestic.chart.yearly,
-        }[normalized_period]
-        return await method(
-            symbol,
-            start=start,
-            end=end,
-            market=market,
-            adjusted=adjusted,
-            max_pages=max_pages,
-        )
+        raise ValueError("KIS data queries support overseas stocks only; use Kiwoom for domestic stocks")
+    if market not in OVERSEAS_MARKET_CODES:
+        raise ValueError("KIS data queries support overseas stock markets only")
     if normalized_period == "Y":
         raise ValueError("overseas stock period price supports only D, W, or M")
     return await client.overseas.chart.daily(

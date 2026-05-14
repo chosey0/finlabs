@@ -11,12 +11,12 @@ Collection of **frozen dataclass models** that represent normalized KIS API resp
 | File | Description |
 |------|-------------|
 | `__init__.py` | Bulk export of all models — `CurrentPrice`, `OhlcvBar`, `OverseasMinuteBar`, `OrderBookLevel`, `OrderBookSnapshot`, `RealtimeTick`, `SymbolRecord`, reference models |
-| `quote.py` | `CurrentPrice` — unified domestic/overseas current price snapshot (market, symbol, price, change, OHLV, volume, raw) |
+| `quote.py` | `CurrentPrice` — overseas current price snapshot (market, symbol, price, change, OHLV, volume, raw) |
 | `ohlcv.py` | `OhlcvBar` (daily/weekly/monthly/yearly candles, interval labels `1d`/`1w`/`1mo`/`1y`), `OverseasMinuteBar` (overseas minute candles, preserves both local exchange time and KST) |
-| `symbol.py` | `SymbolRecord` — symbol master entry (shared domestic/overseas), `with_downloaded_at()` helper |
+| `symbol.py` | `SymbolRecord` — overseas symbol master entry, `with_downloaded_at()` helper |
 | `orderbook.py` | `OrderBookLevel` (single order book level), `OrderBookSnapshot` (full limit order book with exchange_ts/seq) — added in Stage 4 |
 | `tick.py` | `RealtimeTick` — WebSocket trade tick (price, volume, bid/ask) + `exchange_ts`/`seq` — added in Stage 4 |
-| `reference.py` | `ProductInfo`, `FinancialSummary`, `DomesticVolumeRankItem`, `OverseasVolumeSurgeItem`, `InvestorFlow` — Stage 5 reference/analysis/ranking models |
+| `reference.py` | `OverseasVolumeSurgeItem` — overseas analysis/ranking model |
 
 ## For AI Agents
 
@@ -33,7 +33,7 @@ Collection of **frozen dataclass models** that represent normalized KIS API resp
 
 ### Common Patterns
 - Model names are semantic (`CurrentPrice`, `OhlcvBar`); paginated lists are returned as plain `list[Model]` without a separate container model.
-- Shared domestic/overseas models (`CurrentPrice`, `OhlcvBar`, `SymbolRecord`) include a `market` field to indicate origin.
+- Shared overseas models (`CurrentPrice`, `OhlcvBar`, `SymbolRecord`) include a `market` field to indicate origin.
 - Realtime models (`RealtimeTick`, `OrderBookSnapshot`) hold both `received_seq` and `seq` to preserve queue ordering.
 
 ## Dependencies

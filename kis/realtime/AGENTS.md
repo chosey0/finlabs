@@ -18,9 +18,9 @@ Provides a KIS WebSocket realtime quote session. `RealtimeSession`, returned by 
 ### Working In This Directory
 - Retrieve the WebSocket URL from `kis.config.websocket_url(environment)`. KIS provides both real and paper-trading on the same domain with different ports.
 - The approval key uses a **separate cache key** (`f"ws:{environment}:{app_key}"`) from the REST token, assumed valid for 24 hours (`KisClient.ensure_approval_key()`).
-- Subscriptions use `EndpointSpec` (e.g. `domestic.realtime.trades`, `overseas.realtime.orderbook`) to retrieve `tr_id`/`path`, then build messages via `build_websocket_subscribe_message(tr_type="1")`. Unsubscription uses `tr_type="2"`.
+- Subscriptions use `EndpointSpec` (e.g. `overseas.realtime.orderbook`) to retrieve `tr_id`/`path`, then build messages via `build_websocket_subscribe_message(tr_type="1")`. Unsubscription uses `tr_type="2"`.
 - Incoming frames are split by `parse_realtime_frame(text)`, then dispatched to `parse_trade_payload` / `parse_orderbook_payload` based on `tr_id`.
-- To add a new realtime channel: (1) register spec in `endpoints/domestic/realtime.py` or `endpoints/overseas/realtime.py` → (2) add `subscribe_*` method to `RealtimeSession` → (3) add payload parser in `parsers/realtime.py`.
+- To add a new realtime channel: (1) register spec in `endpoints/overseas/realtime.py` → (2) add `subscribe_*` method to `RealtimeSession` → (3) add payload parser in `parsers/realtime.py`.
 - Never log raw WebSocket messages — they may contain quote or account information.
 
 ### Testing Requirements

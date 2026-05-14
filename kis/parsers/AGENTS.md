@@ -11,7 +11,7 @@ Converts KIS REST responses (JSON dicts) or WebSocket frames (pipe-delimited str
 | File | Description |
 |------|-------------|
 | `__init__.py` | Shared helpers (`output_dict`, `output_rows`, `decimal_or_none`, `int_or_none`, `required_decimal`, `format_date`, `parse_date`, `parse_minute_datetime`) + bulk export of all `parse_*` functions |
-| `rest.py` | REST payload parsers — `parse_domestic_current_price`, `parse_overseas_current_price`, `parse_domestic_ohlcv_bar`, `parse_overseas_ohlcv_bar`, `parse_overseas_minute_bar`, `parse_domestic_volume_rank_item`, `parse_overseas_volume_surge_item`, `parse_financial_summary`, `parse_investor_flow`, `parse_product_info` |
+| `rest.py` | REST payload parsers — `parse_overseas_current_price`, `parse_overseas_ohlcv_bar`, `parse_overseas_minute_bar`, `parse_overseas_volume_surge_item` |
 | `realtime.py` | WebSocket frame parsers — `parse_realtime_frame` (header + body split), `parse_realtime_frame_header`, `parse_trade_payload` (trade tick → `RealtimeTick`), `parse_orderbook_payload` (order book → `OrderBookSnapshot`) — added in Stage 4 |
 
 ## For AI Agents

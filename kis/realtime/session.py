@@ -207,13 +207,10 @@ def _subscription_for(*, channel: str, symbol: str, venue: str) -> RealtimeSubsc
     if channel not in {"trades", "orderbook"}:
         raise ValueError("channel must be one of: trades, orderbook")
     if normalized_venue in {"KRX", "KOSPI", "KOSDAQ"}:
-        tr_id = lookup(f"domestic.realtime.{channel}").tr_id_real
-        tr_key = normalized_symbol
-        market = "KRX"
-    else:
-        tr_id = lookup(f"overseas.realtime.{channel}").tr_id_for("real")
-        tr_key = f"D{normalized_venue}{normalized_symbol}"
-        market = normalized_venue
+        raise ValueError("KIS SDK only supports overseas realtime data; use Kiwoom for domestic stocks")
+    tr_id = lookup(f"overseas.realtime.{channel}").tr_id_for("real")
+    tr_key = f"D{normalized_venue}{normalized_symbol}"
+    market = normalized_venue
     return RealtimeSubscription(
         channel=channel,
         tr_id=tr_id,

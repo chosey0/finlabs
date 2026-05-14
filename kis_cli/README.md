@@ -26,7 +26,7 @@ python -m kis_cli db counts
 python -m kis_cli logs runs
 python -m kis_cli logs api
 
-python -m kis_cli symbols download --market KOSPI
+python -m kis_cli symbols download --market NASDAQ
 python -m kis_cli symbols download --all
 python -m kis_cli symbols search --query apple
 

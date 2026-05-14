@@ -4,9 +4,7 @@ from typing import Literal
 
 Environment = Literal["real", "mock"]
 
-Market = Literal["KRX", "NXT", "UN", "NAS", "NYS", "AMS", "HKS", "TSE", "SHS", "SZS"]
-
-DomesticMarketDiv = Literal["J", "NX", "UN"]
+Market = Literal["NAS", "NYS", "AMS", "HKS", "TSE", "SHS", "SZS"]
 
 Interval = Literal["1d", "1w", "1m", "1y", "1min"]
 

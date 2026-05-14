@@ -53,7 +53,7 @@ from kis_cli.services.price import get_current_price
 
 ## 차트/OHLCV 서비스
 
-`chart.py`는 국내/해외 OHLCV 이력 수집과 선택 저장을 담당합니다.
+`chart.py`는 해외 OHLCV 이력 수집과 선택 저장을 담당합니다.
 
 주요 함수:
 
@@ -110,7 +110,7 @@ from kis_cli.services.symbols import download_and_store_symbols, search_stored_s
 CLI 예:
 
 ```bash
-python -m kis_cli symbols download --market KOSPI
+python -m kis_cli symbols download --market NASDAQ
 python -m kis_cli symbols download --market NASDAQ --db-path ./warehouse.duckdb
 python -m kis_cli symbols download --market NASDAQ --store supabase
 python -m kis_cli symbols search --query apple

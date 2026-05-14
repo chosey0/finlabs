@@ -24,7 +24,7 @@ runner = CliRunner()
 def test_logs_runs_command_prints_recent_ingest_runs(tmp_path) -> None:
     app_db_path = tmp_path / "app.db"
     init_app_database(app_db_path)
-    first_id = start_ingest_run(app_db_path, kind="symbols", market="KOSPI")
+    first_id = start_ingest_run(app_db_path, kind="symbols", market="NASDAQ")
     finish_ingest_run(app_db_path, first_id, status="success", rows_written=10)
     second_id = start_ingest_run(
         app_db_path,
@@ -49,7 +49,7 @@ def test_logs_runs_command_prints_recent_ingest_runs(tmp_path) -> None:
 def test_logs_runs_command_filters_and_prints_json(tmp_path) -> None:
     app_db_path = tmp_path / "app.db"
     init_app_database(app_db_path)
-    first_id = start_ingest_run(app_db_path, kind="symbols", market="KOSPI")
+    first_id = start_ingest_run(app_db_path, kind="symbols", market="NASDAQ")
     finish_ingest_run(app_db_path, first_id, status="success", rows_written=10)
     second_id = start_ingest_run(
         app_db_path,
@@ -92,7 +92,7 @@ def test_logs_runs_command_filters_and_prints_json(tmp_path) -> None:
 def test_logs_runs_command_prints_csv(tmp_path) -> None:
     app_db_path = tmp_path / "app.db"
     init_app_database(app_db_path)
-    run_id = start_ingest_run(app_db_path, kind="symbols", market="KOSDAQ")
+    run_id = start_ingest_run(app_db_path, kind="symbols", market="NYSE")
     finish_ingest_run(app_db_path, run_id, status="success", rows_written=3)
 
     result = runner.invoke(
@@ -103,14 +103,14 @@ def test_logs_runs_command_prints_csv(tmp_path) -> None:
     assert result.exit_code == 0
     rows = list(csv.DictReader(StringIO(result.output)))
     assert rows[0]["kind"] == "symbols"
-    assert rows[0]["market"] == "KOSDAQ"
+    assert rows[0]["market"] == "NYSE"
     assert rows[0]["status"] == "success"
 
 
 def test_logs_api_command_prints_recent_api_logs(tmp_path) -> None:
     app_db_path = tmp_path / "app.db"
     init_app_database(app_db_path)
-    record_api_log(app_db_path, endpoint="symbol_master:KOSPI", status_code=200)
+    record_api_log(app_db_path, endpoint="symbol_master:NASDAQ", status_code=200)
     record_api_log(
         app_db_path,
         endpoint="ohlcv:NASDAQ:1d",
@@ -125,13 +125,13 @@ def test_logs_api_command_prints_recent_api_logs(tmp_path) -> None:
     assert "ohlcv:NASDAQ:1d" in result.output
     assert "HHDFS76240000" in result.output
     assert "timeout" in result.output
-    assert "symbol_master:KOSPI" not in result.output
+    assert "symbol_master:NASDAQ" not in result.output
 
 
 def test_logs_api_command_filters_and_prints_json(tmp_path) -> None:
     app_db_path = tmp_path / "app.db"
     init_app_database(app_db_path)
-    record_api_log(app_db_path, endpoint="symbol_master:KOSPI", status_code=200)
+    record_api_log(app_db_path, endpoint="symbol_master:NASDAQ", status_code=200)
     record_api_log(
         app_db_path,
         endpoint="ohlcv:NASDAQ:1d",
@@ -171,13 +171,13 @@ def test_logs_api_command_filters_and_prints_json(tmp_path) -> None:
 def test_logs_api_command_prints_csv(tmp_path) -> None:
     app_db_path = tmp_path / "app.db"
     init_app_database(app_db_path)
-    record_api_log(app_db_path, endpoint="ohlcv:KOSPI:1d", status_code=200)
+    record_api_log(app_db_path, endpoint="ohlcv:NASDAQ:1d", status_code=200)
 
     result = runner.invoke(app, ["logs", "api", "--path", str(app_db_path), "--format", "csv"])
 
     assert result.exit_code == 0
     rows = list(csv.DictReader(StringIO(result.output)))
-    assert rows[0]["endpoint"] == "ohlcv:KOSPI:1d"
+    assert rows[0]["endpoint"] == "ohlcv:NASDAQ:1d"
     assert rows[0]["status_code"] == "200"
 
 
@@ -194,7 +194,7 @@ def test_logs_commands_do_not_create_missing_app_database(tmp_path) -> None:
 def test_app_log_repositories_return_recent_rows_first(tmp_path) -> None:
     app_db_path = tmp_path / "app.db"
     init_app_database(app_db_path)
-    first_id = start_ingest_run(app_db_path, kind="symbols", market="KOSPI")
+    first_id = start_ingest_run(app_db_path, kind="symbols", market="NASDAQ")
     finish_ingest_run(app_db_path, first_id, status="success", rows_written=1)
     second_id = start_ingest_run(app_db_path, kind="symbols", market="NASDAQ")
     finish_ingest_run(app_db_path, second_id, status="success", rows_written=2)
@@ -221,7 +221,7 @@ def test_app_log_repositories_filter_rows(tmp_path) -> None:
                 kind, market, symbol, started_at, finished_at, status, rows_written, error
             )
             VALUES
-                ('symbols', 'KOSPI', NULL, '2026-05-07T09:00:00+09:00', '2026-05-07T09:01:00+09:00', 'success', 10, NULL),
+                ('symbols', 'NASDAQ', NULL, '2026-05-07T09:00:00+09:00', '2026-05-07T09:01:00+09:00', 'success', 10, NULL),
                 ('ohlcv:1d', 'NASDAQ', 'AAPL', '2026-05-08T09:00:00+09:00', '2026-05-08T09:01:00+09:00', 'failed', 0, 'boom')
             """
         )
@@ -231,7 +231,7 @@ def test_app_log_repositories_filter_rows(tmp_path) -> None:
                 endpoint, tr_id, status_code, requested_at, elapsed_ms, error
             )
             VALUES
-                ('symbol_master:KOSPI', NULL, 200, '2026-05-07T09:00:00+09:00', 10, NULL),
+                ('symbol_master:NASDAQ', NULL, 200, '2026-05-07T09:00:00+09:00', 10, NULL),
                 ('ohlcv:NASDAQ:1d', 'HHDFS76240000', 500, '2026-05-08T09:00:00+09:00', 20, 'timeout')
             """
         )

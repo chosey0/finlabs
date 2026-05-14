@@ -6,8 +6,6 @@ from io import BytesIO
 from typer.testing import CliRunner
 
 from kis import SymbolRecord, parse_symbol_master
-from kis.symbols import KOSPI_PART2_COLUMNS, KOSPI_WIDTHS
-
 from kis_cli.cli.app import app
 from kis_cli.services.symbols import SymbolDownloadResult
 from kis_cli.storage import connect
@@ -15,36 +13,6 @@ from kis_cli.storage.app_repositories import list_api_logs, list_ingest_runs
 from kis_cli.storage.mappers import record_to_db_values
 
 runner = CliRunner()
-
-
-def test_parse_kospi_master_normalizes_fixed_width_record() -> None:
-    part2_values = {column: "" for column in KOSPI_PART2_COLUMNS}
-    part2_values.update(
-        {
-            "group_code": "ST",
-            "base_price": "000010000",
-            "regular_lot_size": "00010",
-            "listed_date": "20200102",
-        }
-    )
-    part2 = _fixed_width_row(KOSPI_WIDTHS, KOSPI_PART2_COLUMNS, part2_values)
-    content = "005930   KR7005930003삼성전자".ljust(30) + part2 + "\n"
-    archive = _zip_bytes("kospi_code.mst", content)
-
-    records = parse_symbol_master("KOSPI", archive)
-
-    assert len(records) == 1
-    record = records[0]
-    assert record.market == "KOSPI"
-    assert record.symbol == "005930"
-    assert record.standard_code == "KR7005930003"
-    assert record.korean_name == "삼성전자"
-    assert record.currency == "KRW"
-    assert record.country_code == "KR"
-    assert record.base_price == 10000
-    assert record.lot_size == 10
-    assert record.listed_date == "20200102"
-    assert record.raw["group_code"] == "ST"
 
 
 def test_parse_overseas_master_normalizes_tab_separated_record() -> None:
@@ -165,7 +133,7 @@ def test_symbols_download_all_uses_progressbar(tmp_path, monkeypatch) -> None:
             stored=1,
         )
 
-    monkeypatch.setattr("kis_cli.cli.symbols.ALL_SYMBOL_MARKETS", ("KOSPI", "NASDAQ"))
+    monkeypatch.setattr("kis_cli.cli.symbols.ALL_SYMBOL_MARKETS", ("NASDAQ", "NYSE"))
     monkeypatch.setattr(
         "kis_cli.cli.symbols.download_and_store_symbols",
         fake_download_and_store_symbols,
@@ -177,7 +145,7 @@ def test_symbols_download_all_uses_progressbar(tmp_path, monkeypatch) -> None:
     )
 
     assert result.exit_code == 0
-    assert calls == ["KOSPI", "NASDAQ"]
+    assert calls == ["NASDAQ", "NYSE"]
     assert "Downloading symbol masters" in result.output
     assert "Symbols downloaded" in result.output
 
@@ -218,17 +186,6 @@ def test_symbols_download_supabase_prompts_for_missing_dsn(tmp_path, monkeypatch
     }
     assert "Supabase PostgreSQL DSN" in result.output
     assert "postgresql://prompted" not in result.output
-
-
-def _fixed_width_row(
-    widths: list[int],
-    columns: list[str],
-    values: dict[str, str],
-) -> str:
-    parts = []
-    for width, column in zip(widths, columns, strict=True):
-        parts.append(values[column].ljust(width)[:width])
-    return "".join(parts)
 
 
 def _zip_bytes(name: str, content: str) -> bytes:

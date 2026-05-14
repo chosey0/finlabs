@@ -106,7 +106,7 @@ python -m kis_cli db counts --path ./warehouse.duckdb
 python -m kis_cli logs runs
 python -m kis_cli logs runs --limit 50
 python -m kis_cli logs runs --status failed
-python -m kis_cli logs runs --kind symbols --market KOSPI
+python -m kis_cli logs runs --kind symbols --market NASDAQ
 python -m kis_cli logs runs --symbol AAPL --since 2026-05-08
 python -m kis_cli logs runs --path ./app.db
 ```
@@ -125,8 +125,8 @@ python -m kis_cli logs api --path ./app.db
 KIS 심볼 마스터 파일을 다운로드해 DuckDB warehouse 또는 Supabase/PostgreSQL에 저장하고, 저장된 심볼을 검색합니다.
 
 ```bash
-python -m kis_cli symbols download --market KOSPI
-python -m kis_cli symbols download --market KOSDAQ
+python -m kis_cli symbols download --market NASDAQ
+python -m kis_cli symbols download --market NYSE
 python -m kis_cli symbols download --market NASDAQ
 python -m kis_cli symbols download --all
 python -m kis_cli symbols download --market NASDAQ --db-path ./warehouse.duckdb
@@ -166,7 +166,7 @@ python -m kis_cli chart history --profile csq1404 --symbol 005930 --period W --s
 `chart` 명령은 로컬 DuckDB `symbols` 테이블에서 `--symbol`의 market을 해석합니다. 먼저 `python -m kis_cli symbols download`로 대상 시장의 심볼을 저장해두세요. `--save --store supabase`는 Supabase/PostgreSQL `ohlcv_bars` 테이블에 저장합니다. `--end`를 생략하면 오늘 날짜까지 조회합니다.
 환경변수가 없고 `profiles.env`에도 값이 없으면 DSN을 비공개 입력으로 요청한 뒤 저장합니다.
 
-국내 OHLCV는 응답 제한에 맞춰 가장 오래된 수집일 이전 구간을 이어 조회합니다. 해외 개별주식의 일/주/월 OHLCV는 `[해외주식] 해외주식 기간별시세` API(`/dailyprice`)를 사용합니다. 1회 최대 100건을 기준으로, 응답에 다음 `KEYB`가 있으면 같은 `BYMD`에서 다음 묶음을 이어 조회하고, `KEYB`가 없더라도 100건이 꽉 찬 응답이면 가장 오래된 응답일 이전으로 `BYMD`를 이동해 이어 조회합니다. 해외 개별주식 연봉(`Y`)은 지원하지 않습니다.
+해외 개별주식의 일/주/월 OHLCV는 `[해외주식] 해외주식 기간별시세` API(`/dailyprice`)를 사용합니다. 1회 최대 100건을 기준으로, 응답에 다음 `KEYB`가 있으면 같은 `BYMD`에서 다음 묶음을 이어 조회하고, `KEYB`가 없더라도 100건이 꽉 찬 응답이면 가장 오래된 응답일 이전으로 `BYMD`를 이동해 이어 조회합니다. 해외 개별주식 연봉(`Y`)은 지원하지 않습니다.
 
 ## query 명령
 

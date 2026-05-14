@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 class SymbolRecord:
     """Normalized symbol master entry for one listing.
 
-    Covers both domestic (KOSPI/KOSDAQ) and overseas listings. The `raw`
+    Covers overseas listings from KIS symbol master files. The `raw`
     field preserves the source row so cli/services can re-serialize or
     diff against the upstream master.
     """

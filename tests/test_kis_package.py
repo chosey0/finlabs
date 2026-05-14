@@ -11,7 +11,6 @@ from kis import (
     KisClient,
     KisConfigError,
     MockNotSupportedError,
-    parse_domestic_current_price,
     parse_overseas_minute_bar,
 )
 from kis.auth import IssuedToken, parse_token_response
@@ -24,7 +23,7 @@ def test_kis_package_exports_core_sdk_api() -> None:
     assert kis.Credentials is Credentials
     assert kis.IssuedToken is IssuedToken
     assert kis.__version__ == "0.1.0"
-    assert "domestic.price.current" in kis.names()
+    assert not any(name.startswith("domestic.") for name in kis.names())
     assert "overseas.chart.minute" in kis.names()
 
 
@@ -40,7 +39,7 @@ def test_endpoint_registry_rejects_mock_for_unsupported_endpoint() -> None:
 
 
 def test_endpoint_registry_rejects_invalid_environment() -> None:
-    spec = kis.lookup("domestic.price.current")
+    spec = kis.lookup("overseas.chart.minute")
 
     try:
         spec.tr_id_for("dev")  # type: ignore[arg-type]
@@ -51,19 +50,10 @@ def test_endpoint_registry_rejects_invalid_environment() -> None:
 
 
 def test_kis_parsers_normalize_rest_payloads() -> None:
-    price = parse_domestic_current_price(
-        market="KOSPI",
-        symbol="005930",
-        output={
-            "hts_kor_isnm": "삼성전자",
-            "stck_prpr": "70000",
-            "prdy_vrss": "-100",
-            "prdy_ctrt": "-0.14",
-            "stck_oprc": "70100",
-            "stck_hgpr": "70500",
-            "stck_lwpr": "69900",
-            "acml_vol": "1,234",
-        },
+    price = kis.parse_overseas_current_price(
+        market="NASDAQ",
+        symbol="AAPL",
+        output={"name": "Apple Inc.", "last": "190.25", "curr": "USD", "tvol": "1,234"},
     )
     minute = parse_overseas_minute_bar(
         market="NASDAQ",
@@ -84,8 +74,8 @@ def test_kis_parsers_normalize_rest_payloads() -> None:
         },
     )
 
-    assert price.name == "삼성전자"
-    assert price.price == Decimal("70000")
+    assert price.name == "Apple Inc."
+    assert price.price == Decimal("190.25")
     assert price.volume == 1234
     assert minute.local_date == "2024-02-22"
     assert minute.korea_time == "06:00:00"

@@ -29,10 +29,9 @@ async def _get_current_price_async(
 ) -> CurrentPrice:
     normalized_market = market.strip().upper().replace("-", "_")
     if normalized_market in {"KOSPI", "KOSDAQ"}:
-        return await client.domestic.price.current(
-            symbol,
-            market=normalized_market,  # type: ignore[arg-type]
-        )
+        raise ValueError("KIS data queries support overseas stocks only; use Kiwoom for domestic stocks")
+    if normalized_market not in OVERSEAS_MARKET_CODES:
+        raise ValueError("KIS data queries support overseas stock markets only")
     return await client.overseas.price.current(
         symbol,
         exchange=OVERSEAS_MARKET_CODES[normalized_market].upper(),  # type: ignore[arg-type]

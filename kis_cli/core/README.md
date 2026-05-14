@@ -74,13 +74,7 @@ KIS 응답의 `rt_cd`가 `0`이 아니면 `KisApiError`를 발생시킵니다. �
 
 ## 현재가 조회
 
-`price.py`는 국내/해외 현재가 조회와 응답 정규화를 담당합니다.
-
-국내 현재가:
-
-- Path: `/uapi/domestic-stock/v1/quotations/inquire-price`
-- TR ID: `FHKST01010100`
-- 주요 파라미터: `FID_COND_MRKT_DIV_CODE=J`, `FID_INPUT_ISCD`
+`price.py`는 해외 현재가 조회와 응답 정규화를 담당합니다.
 
 해외 현재가:
 
@@ -92,7 +86,7 @@ KIS 응답의 `rt_cd`가 `0`이 아니면 `KisApiError`를 발생시킵니다. �
 
 ## OHLCV 이력 조회
 
-`chart.py`는 국내/해외 OHLCV 이력 조회, 연속 조회, 파싱을 담당합니다.
+`chart.py`는 해외 OHLCV 이력 조회, 연속 조회, 파싱을 담당합니다.
 
 지원 period:
 
@@ -102,12 +96,6 @@ W -> 1w
 M -> 1mo
 Y -> 1y
 ```
-
-국내 OHLCV:
-
-- Path: `/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice`
-- TR ID: `FHKST03010100`
-- 응답 제한에 맞춰 가장 오래된 수집일 이전 구간을 이어 조회
 
 해외 개별주식 OHLCV:
 
@@ -142,17 +130,17 @@ python -m kis_cli chart history --profile csq1404 --symbol 005930 --period W --s
 지원 시장:
 
 ```text
-KOSPI, KOSDAQ, NASDAQ, NYSE, AMEX,
+NASDAQ, NYSE, AMEX,
 SHANGHAI, SHANGHAI_INDEX, SHENZHEN, SHENZHEN_INDEX,
 TOKYO, HONGKONG, HANOI, HOCHIMINH
 ```
 
-국내는 fixed-width `.mst`, 해외는 tab-separated `.cod`를 파싱합니다.
+해외 tab-separated `.cod`를 파싱합니다.
 
 CLI 예:
 
 ```bash
-python -m kis_cli symbols download --market KOSPI
+python -m kis_cli symbols download --market NASDAQ
 python -m kis_cli symbols download --market NASDAQ
 python -m kis_cli symbols download --all
 ```

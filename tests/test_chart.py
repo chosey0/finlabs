@@ -10,7 +10,6 @@ from typer.testing import CliRunner
 from kis import (
     KisAuthError,
     OhlcvBar,
-    parse_domestic_ohlcv_bar,
     parse_overseas_minute_bar,
     parse_overseas_ohlcv_bar,
 )
@@ -18,7 +17,6 @@ from kis._internal.pacing import (
     KIS_CONTINUATION_MIN_INTERVAL_SECONDS,
     ContinuationPacer,
 )
-from kis.domestic.chart import DomesticChartAPI
 from kis.endpoints.registry import lookup
 from kis.overseas.chart import OverseasChartAPI
 
@@ -72,25 +70,6 @@ class FakeResponse:
     def __init__(self, payload, headers) -> None:
         self.payload = payload
         self.headers = headers
-
-
-def test_parse_domestic_ohlcv_bar() -> None:
-    bar = parse_domestic_ohlcv_bar(
-        market="KOSPI",
-        symbol="005930",
-        interval="1d",
-        row=_domestic_row("20260507", "107"),
-    )
-
-    assert bar.timestamp == "2026-05-07"
-    assert bar.open == Decimal("100")
-    assert bar.high == Decimal("110")
-    assert bar.low == Decimal("90")
-    assert bar.close == Decimal("107")
-    assert bar.volume == 1000
-    assert bar.change == Decimal("7")
-    assert bar.change_rate == Decimal("7.00")
-    assert bar.amount == Decimal("107000")
 
 
 def test_parse_overseas_ohlcv_bar() -> None:
@@ -203,30 +182,6 @@ def test_continuation_pacer_waits_between_request_starts(monkeypatch) -> None:
     assert abs(sleep_delays[0] - (KIS_CONTINUATION_MIN_INTERVAL_SECONDS - 0.01)) < 1e-9
 
 
-def test_domestic_history_continues_by_moving_end_date() -> None:
-    client = FakeClient()
-
-    bars = asyncio.run(
-        DomesticChartAPI(client).daily(
-            market="KOSPI",
-            symbol="005930",
-            start=__import__("datetime").date(2026, 5, 4),
-            end=__import__("datetime").date(2026, 5, 7),
-            adjusted=True,
-            max_pages=10,
-        )
-    )
-
-    assert [bar.timestamp for bar in bars] == [
-        "2026-05-04",
-        "2026-05-05",
-        "2026-05-06",
-        "2026-05-07",
-    ]
-    assert client.calls[0][2]["FID_INPUT_DATE_2"] == "20260507"
-    assert client.calls[1][2]["FID_INPUT_DATE_2"] == "20260505"
-
-
 def test_overseas_stock_period_history_uses_dailyprice_keyb() -> None:
     client = FakeClient()
 
@@ -329,8 +284,8 @@ def test_insert_ohlcv_bars_ignores_duplicates(tmp_path: Path) -> None:
     db_path = tmp_path / "chart.db"
     init_database(db_path)
     bar = OhlcvBar(
-        market="KOSPI",
-        symbol="005930",
+        market="NASDAQ",
+        symbol="AAPL",
         interval="1d",
         timestamp="2026-05-07",
         open=Decimal("100"),
@@ -365,7 +320,7 @@ def test_insert_ohlcv_bars_ignores_duplicates(tmp_path: Path) -> None:
             """
             SELECT change, change_rate, amount
             FROM ohlcv_bars
-            WHERE symbol = '005930'
+            WHERE symbol = 'AAPL'
             """
         ).fetchone()
 
@@ -523,21 +478,21 @@ def test_collect_ohlcv_history_records_saved_ingest_run(monkeypatch, tmp_path: P
 
 def test_chart_daily_command_prints_summary(monkeypatch, tmp_path: Path) -> None:
     def fake_collect_ohlcv_history(**kwargs):
-        assert kwargs["symbol"] == "005930"
+        assert kwargs["symbol"] == "AAPL"
         assert "market" not in kwargs
         assert kwargs["period"] == "D"
         assert kwargs["end"] is None
         return __import__("kis_cli.services.chart").services.chart.ChartHistoryResult(
             db_path=tmp_path / "chart.db",
-            market="KOSPI",
-            symbol="005930",
+            market="NASDAQ",
+            symbol="AAPL",
             interval="1d",
             fetched=1,
             stored=1,
             bars=[
                 OhlcvBar(
-                    market="KOSPI",
-                    symbol="005930",
+                    market="NASDAQ",
+                    symbol="AAPL",
                     interval="1d",
                     timestamp="2026-05-07",
                     open=Decimal("100"),
@@ -557,7 +512,7 @@ def test_chart_daily_command_prints_summary(monkeypatch, tmp_path: Path) -> None
             "chart",
             "daily",
             "--symbol",
-            "005930",
+            "AAPL",
             "--start",
             "2026-05-01",
             "--save",

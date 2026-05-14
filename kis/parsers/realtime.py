@@ -8,81 +8,6 @@ from kis.exceptions import KisRealtimeError
 from kis.models.orderbook import OrderBookLevel, OrderBookSnapshot
 from kis.models.tick import RealtimeTick
 
-DOMESTIC_TRADE_FIELDS = (
-    "MKSC_SHRN_ISCD",
-    "STCK_CNTG_HOUR",
-    "STCK_PRPR",
-    "PRDY_VRSS_SIGN",
-    "PRDY_VRSS",
-    "PRDY_CTRT",
-    "WGHN_AVRG_STCK_PRC",
-    "STCK_OPRC",
-    "STCK_HGPR",
-    "STCK_LWPR",
-    "ASKP1",
-    "BIDP1",
-    "CNTG_VOL",
-    "ACML_VOL",
-    "ACML_TR_PBMN",
-    "SELN_CNTG_CSNU",
-    "SHNU_CNTG_CSNU",
-    "NTBY_CNTG_CSNU",
-    "CTTR",
-    "SELN_CNTG_SMTN",
-    "SHNU_CNTG_SMTN",
-    "CCLD_DVSN",
-    "SHNU_RATE",
-    "PRDY_VOL_VRSS_ACML_VOL_RATE",
-    "OPRC_HOUR",
-    "OPRC_VRSS_PRPR_SIGN",
-    "OPRC_VRSS_PRPR",
-    "HGPR_HOUR",
-    "HGPR_VRSS_PRPR_SIGN",
-    "HGPR_VRSS_PRPR",
-    "LWPR_HOUR",
-    "LWPR_VRSS_PRPR_SIGN",
-    "LWPR_VRSS_PRPR",
-    "BSOP_DATE",
-    "NEW_MKOP_CLS_CODE",
-    "TRHT_YN",
-    "ASKP_RSQN1",
-    "BIDP_RSQN1",
-    "TOTAL_ASKP_RSQN",
-    "TOTAL_BIDP_RSQN",
-    "VOL_TNRT",
-    "PRDY_SMNS_HOUR_ACML_VOL",
-    "PRDY_SMNS_HOUR_ACML_VOL_RATE",
-    "HOUR_CLS_CODE",
-    "MRKT_TRTM_CLS_CODE",
-    "VI_STND_PRC",
-)
-
-DOMESTIC_ORDERBOOK_FIELDS = (
-    "MKSC_SHRN_ISCD",
-    "BSOP_HOUR",
-    "HOUR_CLS_CODE",
-    *(f"ASKP{i}" for i in range(1, 11)),
-    *(f"BIDP{i}" for i in range(1, 11)),
-    *(f"ASKP_RSQN{i}" for i in range(1, 11)),
-    *(f"BIDP_RSQN{i}" for i in range(1, 11)),
-    "TOTAL_ASKP_RSQN",
-    "TOTAL_BIDP_RSQN",
-    "OVTM_TOTAL_ASKP_RSQN",
-    "OVTM_TOTAL_BIDP_RSQN",
-    "ANTC_CNPR",
-    "ANTC_CNQN",
-    "ANTC_VOL",
-    "ANTC_CNTG_VRSS",
-    "ANTC_CNTG_VRSS_SIGN",
-    "ANTC_CNTG_PRDY_CTRT",
-    "ACML_VOL",
-    "TOTAL_ASKP_RSQN_ICDC",
-    "TOTAL_BIDP_RSQN_ICDC",
-    "OVTM_TOTAL_ASKP_ICDC",
-    "OVTM_TOTAL_BIDP_ICDC",
-    "STCK_DEAL_CLS_CODE",
-)
-
 OVERSEAS_TRADE_FIELDS = (
     "RSYM",
     "SYMB",
@@ -138,14 +63,8 @@ OVERSEAS_ORDERBOOK_FIELDS = (
     ),
 )
 
-TRADE_FIELDS_BY_TR_ID = {
-    "H0STCNT0": DOMESTIC_TRADE_FIELDS,
-    "HDFSCNT0": OVERSEAS_TRADE_FIELDS,
-}
-ORDERBOOK_FIELDS_BY_TR_ID = {
-    "H0STASP0": DOMESTIC_ORDERBOOK_FIELDS,
-    "HDFSASP0": OVERSEAS_ORDERBOOK_FIELDS,
-}
+TRADE_FIELDS_BY_TR_ID = {"HDFSCNT0": OVERSEAS_TRADE_FIELDS}
+ORDERBOOK_FIELDS_BY_TR_ID = {"HDFSASP0": OVERSEAS_ORDERBOOK_FIELDS}
 
 
 def parse_realtime_frame(
@@ -245,26 +164,6 @@ def _trade_from_raw(
     received_seq: int,
     seq: int,
 ) -> RealtimeTick:
-    if tr_id == "H0STCNT0":
-        return RealtimeTick(
-            market="KRX",
-            symbol=raw.get("MKSC_SHRN_ISCD", ""),
-            tr_id=tr_id,
-            tr_key=raw.get("MKSC_SHRN_ISCD", ""),
-            exchange_ts=_combine_date_time(
-                raw.get("BSOP_DATE", ""), raw.get("STCK_CNTG_HOUR", "")
-            ),
-            received_at=received_at,
-            received_seq=received_seq,
-            seq=seq,
-            price=_decimal(raw.get("STCK_PRPR")),
-            volume=_int(raw.get("CNTG_VOL")),
-            total_volume=_int(raw.get("ACML_VOL")),
-            amount=_decimal(raw.get("ACML_TR_PBMN")),
-            bid_price=_decimal(raw.get("BIDP1")),
-            ask_price=_decimal(raw.get("ASKP1")),
-            raw=raw,
-        )
     return RealtimeTick(
         market=_overseas_market(raw.get("RSYM", "")),
         symbol=raw.get("SYMB", ""),
@@ -292,32 +191,6 @@ def _orderbook_from_raw(
     received_seq: int,
     seq: int,
 ) -> OrderBookSnapshot:
-    if tr_id == "H0STASP0":
-        asks = tuple(
-            OrderBookLevel(
-                level=level,
-                ask_price=_decimal(raw.get(f"ASKP{level}")),
-                bid_price=_decimal(raw.get(f"BIDP{level}")),
-                ask_volume=_int(raw.get(f"ASKP_RSQN{level}")),
-                bid_volume=_int(raw.get(f"BIDP_RSQN{level}")),
-            )
-            for level in range(1, 11)
-        )
-        return OrderBookSnapshot(
-            market="KRX",
-            symbol=raw.get("MKSC_SHRN_ISCD", ""),
-            tr_id=tr_id,
-            tr_key=raw.get("MKSC_SHRN_ISCD", ""),
-            exchange_ts=raw.get("BSOP_HOUR", ""),
-            received_at=received_at,
-            received_seq=received_seq,
-            seq=seq,
-            asks=asks,
-            bids=asks,
-            total_ask_volume=_int(raw.get("TOTAL_ASKP_RSQN")),
-            total_bid_volume=_int(raw.get("TOTAL_BIDP_RSQN")),
-            raw=raw,
-        )
     levels = tuple(
         OrderBookLevel(
             level=level,

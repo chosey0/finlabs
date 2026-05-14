@@ -6,37 +6,10 @@ from pathlib import Path
 from kis import (
     CurrentPrice,
     KisAuthError,
-    parse_domestic_current_price,
     parse_overseas_current_price,
 )
 from kis_cli.config.resolver import ResolvedProfile
 from kis_cli.services.auth import call_with_sdk_client
-
-
-def test_parse_domestic_current_price_normalizes_common_fields() -> None:
-    price = parse_domestic_current_price(
-        market="KOSPI",
-        symbol="005930",
-        output={
-            "hts_kor_isnm": "삼성전자",
-            "stck_prpr": "70000",
-            "prdy_vrss": "-100",
-            "prdy_ctrt": "-0.14",
-            "stck_oprc": "70100",
-            "stck_hgpr": "70500",
-            "stck_lwpr": "69900",
-            "acml_vol": "1234567",
-        },
-    )
-
-    assert price.market == "KOSPI"
-    assert price.symbol == "005930"
-    assert price.name == "삼성전자"
-    assert price.price == Decimal("70000")
-    assert price.currency == "KRW"
-    assert price.change == Decimal("-100")
-    assert price.change_rate == Decimal("-0.14")
-    assert price.volume == 1234567
 
 
 def test_parse_overseas_current_price_normalizes_common_fields() -> None:

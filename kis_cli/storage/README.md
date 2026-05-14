@@ -210,8 +210,8 @@ query_daily_ohlcv_bars(connection, symbol="AAPL", start="2026-04-01", end="2026-
 ```python
 insert_realtime_tick(
     connection,
-    market="KOSPI",
-    symbol="005930",
+    market="NASDAQ",
+    symbol="AAPL",
     exchange_ts="2026-05-07T09:00:00Z",
     received_at="2026-05-07T09:00:01Z",
     received_seq=1,

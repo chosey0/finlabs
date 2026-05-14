@@ -12,7 +12,7 @@ from kis_cli.cli.query import query_app
 from kis_cli.cli.symbols import symbols_app
 
 app = typer.Typer(
-    help="Collect domestic and overseas stock data with the KIS Open API.",
+    help="Collect overseas stock data with the KIS Open API.",
     no_args_is_help=True,
 )
 app.add_typer(config_app, name="config")

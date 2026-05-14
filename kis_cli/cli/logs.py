@@ -47,7 +47,7 @@ def logs_runs(
     ] = None,
     market: Annotated[
         str | None,
-        typer.Option("--market", help="Filter by market, for example KOSPI or NASDAQ."),
+        typer.Option("--market", help="Filter by market, for example NASDAQ or NYSE."),
     ] = None,
     symbol: Annotated[
         str | None,
