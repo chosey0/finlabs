@@ -163,7 +163,7 @@ OHLC candle
 → discrete shape-scale token
 ```
 
-하지만 `runs/phase_1b_shape_range_NASDAQ_1m_k12` 결과에서는 range scale이 token assignment를 강하게 지배했고, held-out symbol token distribution이 Phase 1A보다 크게 불안정해졌습니다.
+하지만 `runs/phase_1b/shape_range_NASDAQ_1m_k12` ablation 결과에서는 range scale이 token assignment에 강하게 반영되었고, test split의 token distribution이 Phase 1A보다 크게 흔들렸습니다.
 
 따라서 Phase 1B의 기본 방향은 다음 revised design으로 변경합니다.
 
@@ -492,44 +492,148 @@ market state를 발견했다.
 
 ## Current Step
 
-완료된 실험:
+현재 `01_shape_quantization/`은 notebook, 실행 스크립트, 사람이 읽는 결과 문서, CSV 집계 산출물, 개별 run artifact를 역할별로 분리해 관리합니다.
+
+```text
+01_shape_quantization/
+  00_smoke.ipynb
+  01_phase_1a_price_shape_only.ipynb
+  02_phase_1b_shape_plus_range_scale.ipynb
+  02_phase_1b_shape_token_plus_range_bucket.ipynb
+  03_symbol_split_protocol.md
+  README.md
+  AGENTS.md
+
+  scripts/
+    collect_metrics.py          # metrics.json 재귀 집계 + split_family별 CSV 생성
+    run_repeated_splits.py      # Phase 1B 반복 split 실험 runner
+
+  results/
+    01_phase_1a_result.md       # Phase 1A 해석 문서
+    02_phase_1b_result.md       # Phase 1B ablation/revised 해석 문서
+
+  summaries/
+    summary.csv                 # 전체 Phase 1B 집계
+    summary_unknown.csv         # split_family가 없는 notebook run 집계
+    summary_manual_stress.csv   # legacy manual_stress split family snapshot
+    summary_random.csv          # random split 실행 후 자동 생성 예정
+    summary_vol_strat.csv       # vol_strat split 실행 후 자동 생성 예정
+    summary_vol_holdout.csv     # vol_holdout split 실행 후 자동 생성 예정
+
+  runs/
+    phase_1a/                   # Phase 1A price-shape only run artifacts
+    phase_1b/                   # Phase 1B revised run artifacts 및 반복 실험 결과
+    deprecated/                 # 폐기/격리된 ablation 또는 비표준 run
+```
+
+### Completed Runs
 
 ```text
 Phase 1A (완료)
-  runs/phase_1a_price_shape_NASDAQ_1m_k8
-  runs/phase_1a_price_shape_NASDAQ_1m_k12   ← K=12 best (dead token 없음)
-  runs/phase_1a_price_shape_NASDAQ_1m_k16
-  결과: 01_phase_1a_result.md
+  runs/phase_1a/price_shape_NASDAQ_1m_k8
+  runs/phase_1a/price_shape_NASDAQ_1m_k12   ← K=12 best (dead token 없음)
+  runs/phase_1a/price_shape_NASDAQ_1m_k16
+  결과: results/01_phase_1a_result.md
 
-Phase 1B ablation (완료 — held-out 불안정, deprecated)
-  runs/deprecated/phase_1b_shape_range_NASDAQ_1m_k12
-  runs/deprecated/phase_1b_shape_range_NASDAQ_1m_k16
-  - range_scale_z를 encoder input에 직접 넣은 실험
-  - 결과: val-train L1 = 0.8648 (shape token 안정성 크게 악화)
+Deprecated / quarantined (집계 제외)
+  runs/phase_1b/shape_range_NASDAQ_1m_k12
+  - Phase 1B ablation: range_scale_z를 encoder input에 직접 넣은 실험
+  - 결과: test-train L1 = 0.627 (shape token drift 증가)
+  - 설계상 deprecated이지만 최신 notebook 비교용 artifact로 유지
 
-Phase 1B revised (완료)
-  runs/phase_1b_shape_token_range_bucket_NASDAQ_1m_k12    (split_family: manual_stress)
-  runs/phase_1b_shape_token_range_bucket_NASDAQ_1m_k12_a  (split_family: manual_stress)
-  runs/phase_1b_shape_token_range_bucket_NASDAQ_1m_k12_b  (split_family: manual_stress)
+  runs/deprecated/phase_1b_shape_token_range_bucket_NASDAQ_1m_k12*
+  - legacy 10-symbol manual stress runs 또는 비표준 universe run
+  - 반복 split protocol의 표준 비교군이 아니므로 집계에서 제외 (격리)
+
+Phase 1B revised (완료 — current notebook run)
+  runs/phase_1b/shape_token_range_bucket_NASDAQ_1m_k12
   - shape token + separate range bucket
-  - shape test-train L1: 0.060 ~ 0.113 (Phase 1A 수준 회복)
-  결과: 02_phase_1b_result.md
+  - shape test-train L1: 0.108 (Phase 1A K=12와 동일)
+  - range test-train L1: 0.674
+  - pair test-train L1: 0.712
+  결과: results/02_phase_1b_result.md
 ```
 
-다음 단계:
+`runs/deprecated/` 아래의 모든 run은 `scripts/collect_metrics.py`가 명시적으로 집계에서 제외합니다. 구조적으로 유효한 Phase 1B run이라도 deprecated 경로 아래에 있으면 summary에 포함하지 않습니다.
+
+### Repeated Split Runner
+
+Phase 1B 반복 실험은 다음 runner를 사용합니다.
+
+```bash
+uv run python research/notebooks/01_shape_quantization/scripts/run_repeated_splits.py \
+  --split-family random \
+  --n-runs 5 \
+  --seed-start 0
+```
+
+지원하는 split family:
 
 ```text
-03_symbol_split_protocol.md에 따라 반복 symbol split 실험 수행
-  - random split:           최소 5 runs
-  - volatility-stratified:  최소 3 runs
-  - volatility-held-out:    최소 2 runs
-
-집계:
-  python research/notebooks/01_shape_quantization/collect_metrics.py
+random       일반 held-out symbol split
+vol_strat    volatility tertile별 stratified split
+vol_holdout  high-volatility group held-out split
+stress       연구자가 직접 지정하는 고정 split
 ```
+
+기본 run 출력 위치는 다음입니다.
+
+```text
+runs/phase_1b/
+```
+
+`--dry-run`을 사용하면 run directory를 만들지 않고 계획된 split만 확인합니다.
+
+```bash
+uv run python research/notebooks/01_shape_quantization/scripts/run_repeated_splits.py \
+  --split-family random \
+  --n-runs 5 \
+  --seed-start 0 \
+  --dry-run
+```
+
+### Aggregation
+
+집계는 `scripts/collect_metrics.py`가 담당합니다.
+
+```bash
+uv run python research/notebooks/01_shape_quantization/scripts/collect_metrics.py
+```
+
+기본 동작:
+
+```text
+input : runs/ 이하 metrics.json 재귀 스캔
+output: summaries/summary.csv
+        summaries/summary_{split_family}.csv
+```
+
+예상 출력:
+
+```text
+summaries/summary.csv               전체 Phase 1B revised 집계
+summaries/summary_unknown.csv       split_family가 없는 notebook run
+summaries/summary_manual_stress.csv legacy manual_stress split family snapshot
+summaries/summary_random.csv        random split family
+summaries/summary_vol_strat.csv     volatility-stratified split family
+summaries/summary_vol_holdout.csv   volatility-held-out split family
+```
+
+### Minimum Next Experiment Set
+
+다음 단계는 `03_symbol_split_protocol.md`에 정의된 반복 symbol split 실험입니다.
+
+```text
+random split:              최소 5 runs
+volatility-stratified:     최소 3 runs
+volatility-held-out:       최소 2 runs
+```
+
+즉, 최소 10개 run을 추가로 실행한 뒤 `summaries/summary*.csv`와 새 반복 실험 결과 문서를 기반으로 Phase 1B 통과 여부를 판단합니다. 현재 notebook 직접 실행 run은 `split_family`가 없어 `summary_unknown.csv`로 분리됩니다.
 
 ```text
 Phase 1A: shape only
 Phase 1B ablation: shape + range scale as encoder input (deprecated)
 Phase 1B revised: shape token + separate range bucket  ← current
+Next: Phase 1B repeated split validation
 ```
