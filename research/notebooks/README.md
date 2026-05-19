@@ -7,6 +7,7 @@
 | Notebook | Phase | Purpose |
 |----------|-------|---------|
 | `01_shape_quantization_smoke.ipynb` | Phase 1 — Shape Quantization | 단일 market/symbol/timeframe의 OHLCV candle을 7D feature로 변환하고, VQ-VAE shape tokenizer를 학습한 뒤 token utilization, semantic consistency, prototype candle, transition heatmap을 시각적으로 확인합니다. |
+| `01_shape_quantization/01_phase_1a_price_shape_only.ipynb` | Phase 1A — Price-Shape Only Quantization | single market × multiple symbols × single timeframe 데이터셋에서 4D price-shape feature를 VQ-VAE로 token화하고, per-symbol metric과 KMeans baseline을 비교합니다. |
 
 ## 실행 전 준비
 
