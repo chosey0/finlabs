@@ -273,7 +273,7 @@ single market × multiple symbols × single timeframe
 예시:
 
 ```text
-NASDAQ × [AAPL, MSFT, NVDA, TSLA, AMZN, META, GOOGL, AMD, INTC, NFLX] × 1m
+NASDAQ × [AAPL, MSFT, NVDA, TSLA, AMZN, META, GOOGL, AMD, INTC, RKLB] × 1m
 ```
 
 목표는 다음과 같습니다.
@@ -321,10 +321,12 @@ MSFT: train 70% → val 15% → test 15%
 종목 자체를 train / val / test로 나눕니다.
 
 ```text
-train symbols: AAPL, MSFT, NVDA, TSLA, AMZN, META
-val symbols:   GOOGL, AMD
-test symbols:  INTC, NFLX
+train symbols: AAPL, MSFT, NVDA, TSLA, AMZN, META, GOOGL
+val symbols:   AMD
+test symbols:  INTC, RKLB
 ```
+
+(Phase 1A k12 run 실제 split 기준. `auto_symbol_split`으로 70/15/15 비율 적용.)
 
 이 split은 학습에 사용하지 않은 종목에서도 token vocabulary가 작동하는지 확인합니다.
 
@@ -490,33 +492,44 @@ market state를 발견했다.
 
 ## Current Step
 
-현재 작업 흐름은 다음과 같습니다.
+완료된 실험:
 
 ```text
-1. 01_phase_1a_price_shape_only.ipynb
-   - price-shape only tokenization
-   - VQ-VAE vs KMeans baseline
-   - Phase 1A 기본 비교 기준
+Phase 1A (완료)
+  runs/phase_1a_price_shape_NASDAQ_1m_k8
+  runs/phase_1a_price_shape_NASDAQ_1m_k12   ← K=12 best (dead token 없음)
+  runs/phase_1a_price_shape_NASDAQ_1m_k16
+  결과: 01_phase_1a_result.md
 
-2. 02_phase_1b_shape_plus_range_scale.ipynb
-   - price-shape + range scale을 encoder input으로 직접 추가한 ablation
-   - 결과: range가 token assignment를 강하게 지배하고 held-out symbol 안정성이 악화됨
+Phase 1B ablation (완료 — held-out 불안정, deprecated)
+  runs/deprecated/phase_1b_shape_range_NASDAQ_1m_k12
+  runs/deprecated/phase_1b_shape_range_NASDAQ_1m_k16
+  - range_scale_z를 encoder input에 직접 넣은 실험
+  - 결과: val-train L1 = 0.8648 (shape token 안정성 크게 악화)
 
-3. 02_phase_1b_shape_token_plus_range_bucket.ipynb
-   - price-shape token과 range bucket을 분리
-   - final representation: (shape_token, range_bucket)
+Phase 1B revised (완료)
+  runs/phase_1b_shape_token_range_bucket_NASDAQ_1m_k12    (split_family: manual_stress)
+  runs/phase_1b_shape_token_range_bucket_NASDAQ_1m_k12_a  (split_family: manual_stress)
+  runs/phase_1b_shape_token_range_bucket_NASDAQ_1m_k12_b  (split_family: manual_stress)
+  - shape token + separate range bucket
+  - shape test-train L1: 0.060 ~ 0.113 (Phase 1A 수준 회복)
+  결과: 02_phase_1b_result.md
 ```
 
-다음으로는 revised Phase 1B bucket 방식을 Phase 1A와 같은 symbol set, timeframe, `CODEBOOK_SIZE` 기준으로 실행한 뒤 결과를 비교합니다.
-
-여러 held-out symbol 조합에 대한 반복 평가는 다음 프로토콜을 따릅니다.
+다음 단계:
 
 ```text
-03_symbol_split_protocol.md
+03_symbol_split_protocol.md에 따라 반복 symbol split 실험 수행
+  - random split:           최소 5 runs
+  - volatility-stratified:  최소 3 runs
+  - volatility-held-out:    최소 2 runs
+
+집계:
+  python research/notebooks/01_shape_quantization/collect_metrics.py
 ```
 
 ```text
 Phase 1A: shape only
-Phase 1B ablation: shape + range scale as encoder input
-Phase 1B revised: shape token + separate range bucket
+Phase 1B ablation: shape + range scale as encoder input (deprecated)
+Phase 1B revised: shape token + separate range bucket  ← current
 ```

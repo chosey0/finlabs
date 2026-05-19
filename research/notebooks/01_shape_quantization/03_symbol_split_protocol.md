@@ -134,6 +134,31 @@ range bucket drift가 특정 volatility group holdout 때문인지 확인
 3. 각 tertile에서 train / val / test를 샘플링
 ```
 
+**주의 — 데이터 누수 방지:**
+
+volatility profile 계산은 symbol이 가진 **전체 candle 데이터**로 수행합니다.
+`RangeBucketizer` (quantile threshold fit)와는 달리 stratification step은 split을 결정하는 단계이므로,
+어떤 split의 candle만 사용할지 아직 정해지지 않았습니다.
+따라서 stratification용 volatility 측정값은 **symbol 단위 요약 통계** (예: 전체 candle의 median log_range_pct)를 사용하는 것이 맞습니다.
+
+금지 패턴:
+
+```text
+✗ train split이 확정된 후 train candle만으로 volatility를 재계산하고 stratification 재적용
+  → train에 저변동 종목이 몰리도록 사후적으로 조작하는 것과 같음
+✗ 미래 candle (백테스트 기간 등)을 포함해 volatility 계산
+  → 실제 운영 환경에서 재현 불가능한 split 기준이 됨
+```
+
+올바른 패턴:
+
+```text
+✓ 가용 candle 전체 (cap 적용 후)의 median log_range_pct를 symbol별로 계산
+✓ 이 값으로 tertile 경계를 결정한 후 symbol을 그룹화
+✓ 각 그룹에서 random으로 train/val/test 심볼을 선택
+✓ 그룹화 기준(tertile boundaries)과 사용된 candle 범위를 experiment_config.json에 저장
+```
+
 ---
 
 ### 4.3 Volatility-held-out Split
@@ -330,6 +355,16 @@ phase_1b_shape_token_range_bucket_NASDAQ_1m_k12_a
 
 반복 실험 결과는 `summary.csv` 또는 `summary.jsonl`로 모읍니다.
 
+집계는 `collect_metrics.py`로 자동화할 수 있습니다.
+
+```bash
+python research/notebooks/01_shape_quantization/collect_metrics.py \
+    --runs-dir research/notebooks/01_shape_quantization/runs \
+    --out research/notebooks/01_shape_quantization/summary.csv
+```
+
+Phase 1A run 및 ablation run (`phase_1b_shape_range_*`)은 `range_bucket` 키가 없어 자동 스킵됩니다.
+
 권장 CSV columns:
 
 ```text
@@ -394,9 +429,15 @@ semantic consistency가 split별로 크게 악화되지 않는다.
 초기 기준값은 임시로 다음처럼 둡니다.
 
 ```text
-random split shape_test_train_l1 mean < 0.15
-random split shape_test_train_l1 max  < 0.30
+random split shape_test_train_l1 mean  < 0.15
+random split shape_test_train_l1 std   < 0.05
+random split shape_test_train_l1 max   < 0.30
 ```
+
+**N이 충분하지 않으면 mean/std 보고가 무의미합니다.**
+N < 5이면 std를 보고하지 않거나, "N이 부족하여 std 신뢰 불가" 주석을 붙여야 합니다.
+현재 k12 revised run은 3개(k12/k12_a/k12_b)로, 이 기준을 충족하지 못합니다.
+반복 실험을 최소 5 runs 이상 수행한 뒤 mean/std를 보고하세요.
 
 이 기준은 더 많은 run이 쌓이면 조정합니다.
 
@@ -440,10 +481,13 @@ pair drift가 크고 shape drift도 크다:
 random split:              5 runs
 volatility-stratified:     3 runs
 volatility-held-out:       2 runs
-manual stress split:       2 runs
 ```
 
-총 최소 12 runs입니다.
+총 최소 10 runs입니다.
+
+**manual stress split은 최소 run set에 포함하지 않습니다.**
+stress split은 특정 held-out 조합에 대한 worst-case 탐색 목적이므로, 집계 통계를 왜곡할 수 있습니다.
+stress split 결과는 별도 섹션에서 해석하고, mean/std 집계에서는 제외합니다.
 
 더 안정적인 결론을 위해서는 다음을 권장합니다.
 
@@ -451,8 +495,9 @@ manual stress split:       2 runs
 random split:              20 runs
 volatility-stratified:     10 runs
 volatility-held-out:       5 runs
-manual stress split:       5 runs
 ```
+
+stress split은 위 결론이 나온 후 추가로 수행할 수 있습니다 (선택 사항, 권장 5 runs).
 
 ---
 
@@ -481,6 +526,18 @@ B. shape token vocabulary requires more symbols or different K
 C. range bucket design should be revised
 D. VQ-VAE should be replaced by KMeans for Phase 2 baseline
 ```
+
+**Phase 2 진입 조건 (metric threshold → decision 매핑):**
+
+| Condition | Decision |
+|-----------|----------|
+| random split `shape_test_train_l1` mean < 0.15 AND std < 0.05 AND max < 0.30 | **A** — Phase 2 진입 |
+| random split mean ≥ 0.15 또는 max ≥ 0.30, BUT vol-held-out에서 shape drift < range drift | **B** — K 또는 symbol universe 재검토 |
+| range_test_train_l1이 항상 높고 train range bucket이 특정 bucket에 집중 | **C** — quantile 수 또는 bucketizer 재설계 |
+| VQ-VAE `shape_test_train_l1` > KMeans `shape_test_train_l1` across majority of runs | **D** — KMeans를 Phase 2 기본 모델로 채택 |
+
+단, A/B/C/D는 상호 배타적이지 않습니다 (예: B + C 동시 가능).
+최종 결정 전에 반드시 split family별 집계 결과를 기반으로 판단하세요.
 
 ---
 

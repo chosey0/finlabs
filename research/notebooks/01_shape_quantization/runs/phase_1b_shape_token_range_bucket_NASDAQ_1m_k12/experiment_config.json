@@ -43,5 +43,24 @@
   ],
   "warehouse_path": "/Users/choeseoggyu/Library/Application Support/kis-cli/warehouse.duckdb",
   "run_dir": "/Users/choeseoggyu/portfolio/finlabs/research/notebooks/01_shape_quantization/runs/phase_1b_shape_token_range_bucket_NASDAQ_1m_k12",
-  "created_at_utc": "2026-05-19T08:52:06.425514+00:00"
+  "created_at_utc": "2026-05-19T08:52:06.425514+00:00",
+  "split_family": "manual_stress",
+  "split_index": 0,
+  "split_seed": 42,
+  "train_symbols": [
+    "AAPL",
+    "MSFT",
+    "NVDA",
+    "TSLA",
+    "AMZN",
+    "META",
+    "GOOGL"
+  ],
+  "val_symbols": [
+    "AMD"
+  ],
+  "test_symbols": [
+    "INTC",
+    "RKLB"
+  ]
 }

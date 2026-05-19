@@ -15,7 +15,11 @@
     "RKLB",
     "AVGO",
     "NFLX",
-    "PLTR"
+    "PLTR",
+    "MU",
+    "SOXX",
+    "QQQ",
+    "ARKK"
   ],
   "interval": "1m",
   "max_candles_per_symbol": 12000,
@@ -45,10 +49,10 @@
     "extreme"
   ],
   "warehouse_path": "/Users/choeseoggyu/Library/Application Support/kis-cli/warehouse.duckdb",
-  "run_dir": "/Users/choeseoggyu/portfolio/finlabs/research/notebooks/01_shape_quantization/runs/phase_1b_shape_token_range_bucket_NASDAQ_1m_k12_b",
-  "created_at_utc": "2026-05-19T09:13:30.251985+00:00",
-  "split_family": "manual_stress",
-  "split_index": 2,
+  "run_dir": "/Users/choeseoggyu/portfolio/finlabs/research/notebooks/01_shape_quantization/runs/phase_1b_shape_token_range_bucket_NASDAQ_1m_k12_c",
+  "created_at_utc": "2026-05-19T09:36:27.086889+00:00",
+  "split_family": null,
+  "split_index": null,
   "split_seed": 42,
   "train_symbols": [
     "AAPL",
@@ -59,14 +63,17 @@
     "META",
     "GOOGL",
     "AMD",
-    "INTC"
-  ],
-  "val_symbols": [
+    "INTC",
     "RKLB",
     "AVGO"
   ],
-  "test_symbols": [
+  "val_symbols": [
     "NFLX",
     "PLTR"
+  ],
+  "test_symbols": [
+    "MU",
+    "SOXX",
+    "QQQ"
   ]
 }

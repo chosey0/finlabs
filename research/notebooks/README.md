@@ -6,7 +6,7 @@
 
 | Notebook | Phase | Purpose |
 |----------|-------|---------|
-| `01_shape_quantization_smoke.ipynb` | Phase 1 — Shape Quantization | 단일 market/symbol/timeframe의 OHLCV candle을 7D feature로 변환하고, VQ-VAE shape tokenizer를 학습한 뒤 token utilization, semantic consistency, prototype candle, transition heatmap을 시각적으로 확인합니다. |
+| `01_shape_quantization/00_smoke.ipynb` | Phase 1 — Shape Quantization | 단일 market/symbol/timeframe의 OHLCV candle을 7D feature로 변환하고, VQ-VAE shape tokenizer를 학습한 뒤 token utilization, semantic consistency, prototype candle, transition heatmap을 시각적으로 확인합니다. |
 | `01_shape_quantization/01_phase_1a_price_shape_only.ipynb` | Phase 1A — Price-Shape Only Quantization | single market × multiple symbols × single timeframe 데이터셋에서 4D price-shape feature를 VQ-VAE로 token화하고, per-symbol metric과 KMeans baseline을 비교합니다. |
 | `01_shape_quantization/02_phase_1b_shape_plus_range_scale.ipynb` | Phase 1B — Shape + Range Scale Ablation | Phase 1A의 4D price-shape feature에 `range_scale_z`를 encoder input으로 직접 추가했을 때의 영향을 확인합니다. |
 | `01_shape_quantization/02_phase_1b_shape_token_plus_range_bucket.ipynb` | Phase 1B — Shape Token + Range Bucket | 4D price-shape token은 유지하고 range context는 train quantile 기반 bucket으로 별도 분리해 `(shape_token, range_bucket)` representation을 실험합니다. |
@@ -29,7 +29,7 @@ uv run --extra tokenizers --with ipykernel python -m ipykernel install --user --
 
 ## Figure Outputs
 
-`01_shape_quantization_smoke.ipynb`의 시각화 셀은 모든 figure를 화면에 표시하는 동시에 아래 디렉터리에 PNG로 저장합니다.
+`01_shape_quantization/00_smoke.ipynb`의 시각화 셀은 모든 figure를 화면에 표시하는 동시에 아래 디렉터리에 PNG로 저장합니다.
 
 ```text
 RUN_DIR / "figures"
