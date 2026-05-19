@@ -228,3 +228,5 @@ exports/
 # Research experiment artifacts
 research/runs/
 research/notebooks/research/
+*.pt
+.DS_Store
