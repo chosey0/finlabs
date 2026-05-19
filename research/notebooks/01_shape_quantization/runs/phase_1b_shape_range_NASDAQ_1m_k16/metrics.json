@@ -1,0 +1,540 @@
+{
+  "config": {
+    "phase": "1B",
+    "experiment": "shape_plus_range_scale_quantization",
+    "market": "NASDAQ",
+    "symbols": [
+      "AAPL",
+      "MSFT",
+      "NVDA",
+      "TSLA",
+      "AMZN",
+      "META",
+      "GOOGL",
+      "AMD",
+      "INTC",
+      "RKLB"
+    ],
+    "interval": "1m",
+    "max_candles_per_symbol": 12000,
+    "min_candles_per_symbol": 500,
+    "codebook_size": 16,
+    "latent_dim": 16,
+    "hidden_dim": 64,
+    "epochs": 25,
+    "batch_size": 256,
+    "learning_rate": 0.001,
+    "seed": 42,
+    "kmeans_n_init": 20,
+    "kmeans_max_iter": 300,
+    "range_scale_clip": 5.0,
+    "warehouse_path": "/Users/choeseoggyu/Library/Application Support/kis-cli/warehouse.duckdb",
+    "run_dir": "/Users/choeseoggyu/portfolio/finlabs/research/notebooks/01_shape_quantization/runs/phase_1b_shape_range_NASDAQ_1m_k16",
+    "created_at_utc": "2026-05-19T08:32:07.782899+00:00"
+  },
+  "feature": {
+    "names": [
+      "signed_body_ratio",
+      "upper_ratio",
+      "lower_ratio",
+      "body_center_location",
+      "range_scale_z"
+    ],
+    "range_scale_stats": {
+      "mean": 0.0008782067908062132,
+      "std": 0.0008006768598024162
+    }
+  },
+  "split": {
+    "train_symbols": [
+      "AAPL",
+      "MSFT",
+      "NVDA",
+      "TSLA",
+      "AMZN",
+      "META",
+      "GOOGL"
+    ],
+    "val_symbols": [
+      "AMD"
+    ],
+    "test_symbols": [
+      "INTC",
+      "RKLB"
+    ],
+    "train_candles": 84000,
+    "val_candles": 12000,
+    "test_candles": 24000
+  },
+  "vqvae": {
+    "train_result": {
+      "checkpoint_path": "/Users/choeseoggyu/portfolio/finlabs/research/notebooks/01_shape_quantization/runs/phase_1b_shape_range_NASDAQ_1m_k16/tokenizer.pt",
+      "epochs": 25,
+      "final_loss": 0.19233152270317078
+    },
+    "rows": [
+      {
+        "model": "vqvae",
+        "split": "train",
+        "count": 84000,
+        "utilized_count": 15,
+        "dead_count": 1,
+        "dead_ratio": 0.0625,
+        "entropy": 3.73961,
+        "mean_semantic_consistency": 0.48665,
+        "reconstruction_mse": 0.043751,
+        "inertia": null,
+        "histogram": {
+          "0": 5253,
+          "1": 5097,
+          "2": 3027,
+          "3": 1878,
+          "4": 3151,
+          "5": 3880,
+          "6": 9022,
+          "7": 7600,
+          "9": 6641,
+          "10": 9684,
+          "11": 6124,
+          "12": 8914,
+          "13": 5484,
+          "14": 1038,
+          "15": 7207
+        }
+      },
+      {
+        "model": "vqvae",
+        "split": "val",
+        "count": 12000,
+        "utilized_count": 15,
+        "dead_count": 1,
+        "dead_ratio": 0.0625,
+        "entropy": 3.63908,
+        "mean_semantic_consistency": 0.492481,
+        "reconstruction_mse": 0.080905,
+        "inertia": null,
+        "histogram": {
+          "0": 254,
+          "1": 1070,
+          "2": 1579,
+          "3": 1457,
+          "4": 1134,
+          "5": 1324,
+          "6": 556,
+          "7": 1145,
+          "9": 442,
+          "10": 415,
+          "11": 227,
+          "12": 805,
+          "13": 233,
+          "14": 1123,
+          "15": 236
+        }
+      },
+      {
+        "model": "vqvae",
+        "split": "test",
+        "count": 24000,
+        "utilized_count": 15,
+        "dead_count": 1,
+        "dead_ratio": 0.0625,
+        "entropy": 3.456697,
+        "mean_semantic_consistency": 0.504936,
+        "reconstruction_mse": 0.099213,
+        "inertia": null,
+        "histogram": {
+          "0": 357,
+          "1": 1900,
+          "2": 3307,
+          "3": 3749,
+          "4": 1878,
+          "5": 2474,
+          "6": 696,
+          "7": 1892,
+          "9": 492,
+          "10": 617,
+          "11": 378,
+          "12": 1389,
+          "13": 328,
+          "14": 4156,
+          "15": 387
+        }
+      }
+    ],
+    "val_train_ratio_diff": {
+      "l1": 0.8607857142857143,
+      "max": 0.09905952380952382
+    },
+    "test_train_ratio_diff": {
+      "l1": 1.0250714285714286,
+      "max": 0.16080952380952382
+    }
+  },
+  "kmeans": {
+    "params": {
+      "algorithm": "lloyd",
+      "copy_x": true,
+      "init": "k-means++",
+      "max_iter": 300,
+      "n_clusters": 16,
+      "n_init": 20,
+      "random_state": 42,
+      "tol": 0.0001,
+      "verbose": 0
+    },
+    "inertia_total": 16659.05078125,
+    "inertia_per_sample": 0.19832203311011906,
+    "rows": [
+      {
+        "model": "kmeans",
+        "split": "train",
+        "count": 84000,
+        "utilized_count": 16,
+        "dead_count": 0,
+        "dead_ratio": 0.0,
+        "entropy": 3.894532,
+        "mean_semantic_consistency": 0.462613,
+        "reconstruction_mse": null,
+        "inertia": 0.198322,
+        "histogram": {
+          "0": 5789,
+          "1": 6243,
+          "2": 6787,
+          "3": 3611,
+          "4": 5871,
+          "5": 975,
+          "6": 6521,
+          "7": 2088,
+          "8": 7152,
+          "9": 4757,
+          "10": 7522,
+          "11": 7007,
+          "12": 5688,
+          "13": 3342,
+          "14": 5752,
+          "15": 4895
+        }
+      },
+      {
+        "model": "kmeans",
+        "split": "val",
+        "count": 12000,
+        "utilized_count": 16,
+        "dead_count": 0,
+        "dead_ratio": 0.0,
+        "entropy": 3.67104,
+        "mean_semantic_consistency": 0.463935,
+        "reconstruction_mse": null,
+        "inertia": null,
+        "histogram": {
+          "0": 281,
+          "1": 846,
+          "2": 349,
+          "3": 1505,
+          "4": 293,
+          "5": 1110,
+          "6": 254,
+          "7": 1639,
+          "8": 780,
+          "9": 1083,
+          "10": 282,
+          "11": 268,
+          "12": 325,
+          "13": 1501,
+          "14": 265,
+          "15": 1219
+        }
+      },
+      {
+        "model": "kmeans",
+        "split": "test",
+        "count": 24000,
+        "utilized_count": 16,
+        "dead_count": 0,
+        "dead_ratio": 0.0,
+        "entropy": 3.474067,
+        "mean_semantic_consistency": 0.476131,
+        "reconstruction_mse": null,
+        "inertia": null,
+        "histogram": {
+          "0": 399,
+          "1": 1419,
+          "2": 436,
+          "3": 2970,
+          "4": 384,
+          "5": 4092,
+          "6": 411,
+          "7": 4153,
+          "8": 1374,
+          "9": 1900,
+          "10": 459,
+          "11": 463,
+          "12": 368,
+          "13": 3040,
+          "14": 404,
+          "15": 1728
+        }
+      }
+    ],
+    "val_train_ratio_diff": {
+      "l1": 0.874547619047619,
+      "max": 0.11172619047619048
+    },
+    "test_train_ratio_diff": {
+      "l1": 1.0219642857142857,
+      "max": 0.15889285714285717
+    }
+  },
+  "per_symbol": [
+    {
+      "symbol": "AAPL",
+      "count": 12000,
+      "utilized_count": 15,
+      "dead_ratio": 0.0625,
+      "entropy": 3.617337,
+      "mean_semantic_consistency": 0.488239,
+      "histogram": {
+        "0": 812,
+        "1": 592,
+        "2": 245,
+        "3": 154,
+        "4": 346,
+        "5": 408,
+        "6": 1527,
+        "7": 902,
+        "9": 812,
+        "10": 1816,
+        "11": 1021,
+        "12": 1129,
+        "13": 796,
+        "14": 112,
+        "15": 1328
+      }
+    },
+    {
+      "symbol": "AMD",
+      "count": 12000,
+      "utilized_count": 15,
+      "dead_ratio": 0.0625,
+      "entropy": 3.63908,
+      "mean_semantic_consistency": 0.492481,
+      "histogram": {
+        "0": 254,
+        "1": 1070,
+        "2": 1579,
+        "3": 1457,
+        "4": 1134,
+        "5": 1324,
+        "6": 556,
+        "7": 1145,
+        "9": 442,
+        "10": 415,
+        "11": 227,
+        "12": 805,
+        "13": 233,
+        "14": 1123,
+        "15": 236
+      }
+    },
+    {
+      "symbol": "AMZN",
+      "count": 12000,
+      "utilized_count": 15,
+      "dead_ratio": 0.0625,
+      "entropy": 3.72854,
+      "mean_semantic_consistency": 0.490991,
+      "histogram": {
+        "0": 713,
+        "1": 821,
+        "2": 393,
+        "3": 259,
+        "4": 595,
+        "5": 511,
+        "6": 1378,
+        "7": 1044,
+        "9": 794,
+        "10": 1420,
+        "11": 854,
+        "12": 1322,
+        "13": 702,
+        "14": 135,
+        "15": 1059
+      }
+    },
+    {
+      "symbol": "GOOGL",
+      "count": 12000,
+      "utilized_count": 15,
+      "dead_ratio": 0.0625,
+      "entropy": 3.677161,
+      "mean_semantic_consistency": 0.488041,
+      "histogram": {
+        "0": 901,
+        "1": 681,
+        "2": 296,
+        "3": 181,
+        "4": 367,
+        "5": 433,
+        "6": 1363,
+        "7": 1047,
+        "9": 950,
+        "10": 1478,
+        "11": 897,
+        "12": 1373,
+        "13": 820,
+        "14": 133,
+        "15": 1080
+      }
+    },
+    {
+      "symbol": "INTC",
+      "count": 12000,
+      "utilized_count": 15,
+      "dead_ratio": 0.0625,
+      "entropy": 3.504484,
+      "mean_semantic_consistency": 0.480696,
+      "histogram": {
+        "0": 190,
+        "1": 997,
+        "2": 1690,
+        "3": 1743,
+        "4": 1010,
+        "5": 1385,
+        "6": 355,
+        "7": 1034,
+        "9": 354,
+        "10": 278,
+        "11": 155,
+        "12": 784,
+        "13": 217,
+        "14": 1652,
+        "15": 156
+      }
+    },
+    {
+      "symbol": "META",
+      "count": 12000,
+      "utilized_count": 15,
+      "dead_ratio": 0.0625,
+      "entropy": 3.699194,
+      "mean_semantic_consistency": 0.496179,
+      "histogram": {
+        "0": 851,
+        "1": 716,
+        "2": 368,
+        "3": 184,
+        "4": 434,
+        "5": 506,
+        "6": 1272,
+        "7": 994,
+        "9": 927,
+        "10": 1458,
+        "11": 995,
+        "12": 1209,
+        "13": 813,
+        "14": 92,
+        "15": 1181
+      }
+    },
+    {
+      "symbol": "MSFT",
+      "count": 12000,
+      "utilized_count": 15,
+      "dead_ratio": 0.0625,
+      "entropy": 3.649077,
+      "mean_semantic_consistency": 0.481599,
+      "histogram": {
+        "0": 893,
+        "1": 672,
+        "2": 319,
+        "3": 180,
+        "4": 319,
+        "5": 392,
+        "6": 1478,
+        "7": 955,
+        "9": 1039,
+        "10": 1530,
+        "11": 924,
+        "12": 1260,
+        "13": 818,
+        "14": 75,
+        "15": 1146
+      }
+    },
+    {
+      "symbol": "NVDA",
+      "count": 12000,
+      "utilized_count": 15,
+      "dead_ratio": 0.0625,
+      "entropy": 3.796643,
+      "mean_semantic_consistency": 0.476584,
+      "histogram": {
+        "0": 571,
+        "1": 821,
+        "2": 668,
+        "3": 454,
+        "4": 486,
+        "5": 830,
+        "6": 895,
+        "7": 1398,
+        "9": 1139,
+        "10": 980,
+        "11": 761,
+        "12": 1330,
+        "13": 788,
+        "14": 238,
+        "15": 641
+      }
+    },
+    {
+      "symbol": "RKLB",
+      "count": 12000,
+      "utilized_count": 15,
+      "dead_ratio": 0.0625,
+      "entropy": 3.381611,
+      "mean_semantic_consistency": 0.501757,
+      "histogram": {
+        "0": 167,
+        "1": 903,
+        "2": 1617,
+        "3": 2006,
+        "4": 868,
+        "5": 1089,
+        "6": 341,
+        "7": 858,
+        "9": 138,
+        "10": 339,
+        "11": 223,
+        "12": 605,
+        "13": 111,
+        "14": 2504,
+        "15": 231
+      }
+    },
+    {
+      "symbol": "TSLA",
+      "count": 12000,
+      "utilized_count": 15,
+      "dead_ratio": 0.0625,
+      "entropy": 3.813821,
+      "mean_semantic_consistency": 0.477774,
+      "histogram": {
+        "0": 512,
+        "1": 794,
+        "2": 738,
+        "3": 466,
+        "4": 604,
+        "5": 800,
+        "6": 1109,
+        "7": 1260,
+        "9": 980,
+        "10": 1002,
+        "11": 672,
+        "12": 1291,
+        "13": 747,
+        "14": 253,
+        "15": 772
+      }
+    }
+  ]
+}

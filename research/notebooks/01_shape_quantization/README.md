@@ -135,9 +135,121 @@ future return predictor
 
 ```text
 Phase 1A: price-shape only
-Phase 1B: price-shape + volatility scale
+Phase 1B: price-shape + range / volatility scale
 Phase 1C: price-shape + volume context
 Phase 1D: price-shape + market session context
+```
+
+---
+
+## Phase 1B — Shape + Range Scale Quantization
+
+Phase 1B는 Phase 1A의 price-shape only token에 candle의 range / volatility scale 정보를 추가로 연결합니다.
+
+핵심 질문은 다음과 같습니다.
+
+> **price-shape token에 range scale 정보를 추가하면 더 풍부하고 안정적인 shape-scale token vocabulary를 만들 수 있는가?**
+
+Phase 1A가 candle의 상대적 모양만 본다면, Phase 1B는 같은 모양이라도 작은 range에서 발생했는지, 큰 range에서 발생했는지를 함께 구분합니다.
+
+초기 ablation에서는 `range_scale_z`를 VQ-VAE encoder 입력 feature에 직접 추가했습니다.
+
+```text
+OHLC candle
+→ price-shape feature
+→ range scale feature
+→ VQ-VAE encoder
+→ learned codebook
+→ discrete shape-scale token
+```
+
+하지만 `runs/phase_1b_shape_range_NASDAQ_1m_k12` 결과에서는 range scale이 token assignment를 강하게 지배했고, held-out symbol token distribution이 Phase 1A보다 크게 불안정해졌습니다.
+
+따라서 Phase 1B의 기본 방향은 다음 revised design으로 변경합니다.
+
+```text
+shape_token  = 4D price-shape only feature에서 학습
+range_bucket = train range distribution 기준 별도 bucketizer로 계산
+
+final representation = (shape_token, range_bucket)
+```
+
+이 방식은 shape vocabulary의 안정성을 유지하면서 range / volatility context를 잃지 않기 위한 설계입니다.
+
+### Phase 1B Feature Set
+
+초기 ablation의 5D encoder-input feature set은 다음과 같습니다.
+
+| Feature | 의미 |
+|---------|------|
+| `signed_body_ratio` | 전체 range 대비 candle body 비율에 bullish / bearish 방향을 결합한 값 |
+| `upper_ratio` | 전체 range 대비 upper wick 비율 |
+| `lower_ratio` | 전체 range 대비 lower wick 비율 |
+| `body_center_location` | candle body 중심이 `[low, high]` 구간 안에서 어디에 위치하는지 나타낸 값 |
+| `range_scale_z` | candle range가 train distribution 대비 얼마나 큰지 나타내는 z-score |
+
+`range_scale_z`는 raw 가격 차이를 그대로 쓰지 않습니다. 종목별 가격 수준 차이가 token을 지배하지 않도록 range를 가격 대비 비율로 바꾼 뒤, train split 기준 통계로 정규화합니다.
+
+```text
+range_pct = (high - low) / reference_price
+log_range_pct = log1p(range_pct)
+range_scale_z = train log_range_pct 기준 z-score
+```
+
+revised design에서는 `range_scale_z`를 encoder 입력으로 쓰지 않고, train quantile 기준 `range_bucket`으로 분리합니다.
+
+예시 bucket:
+
+```text
+very_low
+low
+normal
+high
+very_high
+extreme
+```
+
+### Leakage Control
+
+Phase 1B에서 중요한 점은 range scale normalization이 미래 정보를 사용하지 않아야 한다는 것입니다.
+
+따라서 notebook은 다음 원칙을 따릅니다.
+
+```text
+train candles로만 range scaler fit
+val/test candles는 train scaler로 transform
+held-out symbol의 test 분포를 scaler fit에 사용하지 않음
+```
+
+range bucket 방식에서도 동일합니다.
+
+```text
+train candles로만 bucket threshold fit
+val/test candles는 train thresholds로 bucket assignment
+```
+
+### Phase 1A와 비교할 질문
+
+Phase 1B 결과는 단독으로 해석하지 않고 Phase 1A와 비교해야 합니다.
+
+- range scale을 추가했을 때 token utilization이 개선되는가?
+- held-out symbol에서 token distribution이 더 안정적인가, 아니면 더 symbol-specific해지는가?
+- `range_bucket`이 실제로 low-range / high-range candle을 구분하는가?
+- KMeans baseline과 비교했을 때 VQ-VAE를 쓸 이유가 있는가?
+- price-shape vocabulary의 해석 가능성을 유지하면서 더 많은 정보를 담는가?
+
+Phase 1B의 token은 다음처럼 부를 수 있습니다.
+
+```text
+shape token + range bucket
+```
+
+아직 다음처럼 해석하면 안 됩니다.
+
+```text
+market state token
+future return predictor
+trading signal
 ```
 
 ---
@@ -152,7 +264,7 @@ single market × single symbol × single timeframe
 
 이 설정은 코드가 정상 동작하는지 확인하는 smoke test로는 충분하지만, 연구 결론을 내리기에는 약합니다. 종목마다 candle 분포가 다르기 때문에 단일 종목 tokenizer는 특정 종목의 local distribution에 과적합될 수 있습니다.
 
-Phase 1A의 본 실험 데이터셋은 다음 방향으로 설계합니다.
+Shape Quantization의 본 실험 데이터셋은 다음 방향으로 설계합니다.
 
 ```text
 single market × multiple symbols × single timeframe
@@ -171,7 +283,7 @@ NASDAQ × [AAPL, MSFT, NVDA, TSLA, AMZN, META, GOOGL, AMD, INTC, NFLX] × 1m
 ### Dataset Rules
 
 - **market은 섞지 않습니다.**
-  - NASDAQ, NYSE, KRX 등은 시장 구조와 microstructure가 다르므로 Phase 1A에서는 하나의 market만 사용합니다.
+  - NASDAQ, NYSE, KRX 등은 시장 구조와 microstructure가 다르므로 하나의 실험에서는 하나의 market만 사용합니다.
 - **timeframe은 섞지 않습니다.**
   - `1m`, `5m`, `1d` candle은 의미가 다르므로 하나의 실험에서는 하나의 timeframe만 사용합니다.
 - **symbol은 여러 개 사용합니다.**
@@ -216,7 +328,7 @@ test symbols:  INTC, NFLX
 
 이 split은 학습에 사용하지 않은 종목에서도 token vocabulary가 작동하는지 확인합니다.
 
-Phase 1A에서는 최종적으로 두 관점을 모두 확인해야 합니다.
+Shape Quantization에서는 최종적으로 두 관점을 모두 확인해야 합니다.
 
 ```text
 primary: held-out symbol generalization
@@ -233,12 +345,19 @@ secondary: within-symbol time generalization
 
 ```text
 01_phase_1a_price_shape_only.ipynb
-02_phase_1b_shape_plus_range_scale.ipynb
+02_phase_1b_shape_plus_range_scale.ipynb              # range를 encoder input에 직접 추가한 ablation
+02_phase_1b_shape_token_plus_range_bucket.ipynb       # revised design: shape token + separate range bucket
 03_phase_1c_shape_plus_volume_context.ipynb
 04_phase_1d_shape_plus_session_context.ipynb
 ```
 
-초기에는 `01_phase_1a_price_shape_only.ipynb`만 작성합니다.
+현재 작성된 notebook:
+
+```text
+01_phase_1a_price_shape_only.ipynb
+02_phase_1b_shape_plus_range_scale.ipynb
+02_phase_1b_shape_token_plus_range_bucket.ipynb
+```
 
 ---
 
@@ -369,20 +488,35 @@ market state를 발견했다.
 
 ---
 
-## Next Step
+## Current Step
 
-이 폴더의 첫 작업은 다음 notebook을 만드는 것입니다.
+현재 작업 흐름은 다음과 같습니다.
 
 ```text
-01_phase_1a_price_shape_only.ipynb
+1. 01_phase_1a_price_shape_only.ipynb
+   - price-shape only tokenization
+   - VQ-VAE vs KMeans baseline
+   - Phase 1A 기본 비교 기준
+
+2. 02_phase_1b_shape_plus_range_scale.ipynb
+   - price-shape + range scale을 encoder input으로 직접 추가한 ablation
+   - 결과: range가 token assignment를 강하게 지배하고 held-out symbol 안정성이 악화됨
+
+3. 02_phase_1b_shape_token_plus_range_bucket.ipynb
+   - price-shape token과 range bucket을 분리
+   - final representation: (shape_token, range_bucket)
 ```
 
-이 notebook은 기존 smoke notebook을 그대로 복사하기보다 다음 차이를 반영해야 합니다.
+다음으로는 revised Phase 1B bucket 방식을 Phase 1A와 같은 symbol set, timeframe, `CODEBOOK_SIZE` 기준으로 실행한 뒤 결과를 비교합니다.
+
+여러 held-out symbol 조합에 대한 반복 평가는 다음 프로토콜을 따릅니다.
 
 ```text
-feature set: signed_body_ratio, upper_ratio, lower_ratio, body_center_location
-dataset: single market × multiple symbols × single timeframe
-sampling: symbol-balanced sampling
-validation: global metrics + per-symbol metrics + held-out symbol check
-baseline: KMeans comparison
+03_symbol_split_protocol.md
+```
+
+```text
+Phase 1A: shape only
+Phase 1B ablation: shape + range scale as encoder input
+Phase 1B revised: shape token + separate range bucket
 ```
