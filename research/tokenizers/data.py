@@ -71,6 +71,21 @@ def load_candles(
     return tuple(rows)
 
 
+def filter_by_min_volume(
+    candles: Iterable[CandleBar],
+    *,
+    min_volume: int,
+) -> tuple[CandleBar, ...]:
+    """Keep candles whose volume is greater than or equal to ``min_volume``.
+
+    Phase 1 shape experiments use this to remove illiquid / placeholder candles.
+    For example, ``min_volume=2`` excludes candles with volume ``0`` or ``1``.
+    """
+    if min_volume < 0:
+        raise ValueError("min_volume must be non-negative")
+    return tuple(candle for candle in candles if candle.volume >= min_volume)
+
+
 def split_by_date(
     candles: Iterable[CandleBar],
     *,

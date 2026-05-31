@@ -1,6 +1,11 @@
 import duckdb
 
-from research.tokenizers.data import CandleBar, load_candles, split_by_date
+from research.tokenizers.data import (
+    CandleBar,
+    filter_by_min_volume,
+    load_candles,
+    split_by_date,
+)
 
 
 def test_load_candles_filters_and_orders(tmp_path):
@@ -122,6 +127,28 @@ def test_load_candles_accepts_minute_interval_aliases(tmp_path):
 
     assert len(candles) == 1
     assert candles[0].interval == "5m"
+
+
+def test_filter_by_min_volume_excludes_low_volume_candles():
+    candles = tuple(
+        CandleBar("NASDAQ", "AAPL", "1m", f"2026-01-01 09:3{i}:00", 1.0, 2.0, 0.5, 1.5, volume)
+        for i, volume in enumerate((0, 1, 2, 100))
+    )
+
+    filtered = filter_by_min_volume(candles, min_volume=2)
+
+    assert [candle.volume for candle in filtered] == [2, 100]
+
+
+def test_filter_by_min_volume_rejects_negative_threshold():
+    candles = (CandleBar("NASDAQ", "AAPL", "1m", "2026-01-01 09:30:00", 1.0, 2.0, 0.5, 1.5, 1),)
+
+    try:
+        filter_by_min_volume(candles, min_volume=-1)
+    except ValueError as exc:
+        assert "min_volume" in str(exc)
+    else:  # pragma: no cover - assertion guard
+        raise AssertionError("negative min_volume should fail")
 
 
 def test_split_by_ratio_preserves_time_order_without_shuffle():

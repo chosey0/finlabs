@@ -59,7 +59,7 @@ except ImportError as exc:  # pragma: no cover - environment dependent
     ) from exc
 
 from kis_cli.storage.warehouse import default_warehouse_file  # noqa: E402
-from research.tokenizers.data import CandleBar, load_candles  # noqa: E402
+from research.tokenizers.data import CandleBar, filter_by_min_volume, load_candles  # noqa: E402
 from research.tokenizers.model import VQVAE, VQVAEConfig  # noqa: E402
 from research.tokenizers.train import TrainConfig, train  # noqa: E402
 
@@ -154,6 +154,7 @@ class RunnerConfig:
     codebook_size: int
     max_candles_per_symbol: int
     min_candles_per_symbol: int
+    min_volume: int
     train_symbol_ratio: float
     val_symbol_ratio: float
     symbol_universe: list[str]
@@ -274,10 +275,16 @@ def encode_range_buckets(
 
 def load_symbol_candles(
     config: RunnerConfig,
-) -> tuple[dict[str, tuple[CandleBar, ...]], list[str], list[tuple[str, int]]]:
+) -> tuple[
+    dict[str, tuple[CandleBar, ...]],
+    list[str],
+    list[tuple[str, int]],
+    dict[str, int],
+]:
     candles_by_symbol: dict[str, tuple[CandleBar, ...]] = {}
     missing_symbols: list[str] = []
     skipped_symbols: list[tuple[str, int]] = []
+    volume_filtered_counts: dict[str, int] = {}
 
     for symbol in config.symbol_universe:
         candles = load_candles(
@@ -286,10 +293,14 @@ def load_symbol_candles(
             symbol=symbol,
             interval=config.interval,
         )
+        raw_count = len(candles)
+        candles = filter_by_min_volume(candles, min_volume=config.min_volume)
+        volume_filtered_counts[symbol] = raw_count - len(candles)
         candles = cap_recent(candles, config.max_candles_per_symbol)
         if not candles:
             warnings.warn(
-                f"{symbol}: DuckDB에서 candle을 찾지 못해 skip합니다.", stacklevel=2
+                f"{symbol}: volume filter 이후 사용할 candle을 찾지 못해 skip합니다.",
+                stacklevel=2,
             )
             missing_symbols.append(symbol)
             continue
@@ -307,7 +318,7 @@ def load_symbol_candles(
         raise RuntimeError(
             "반복 split 실험에는 load 가능한 symbol이 최소 3개 필요합니다."
         )
-    return candles_by_symbol, missing_symbols, skipped_symbols
+    return candles_by_symbol, missing_symbols, skipped_symbols, volume_filtered_counts
 
 
 def split_counts(
@@ -821,7 +832,8 @@ def per_symbol_rows(
 def run_id_for(plan: SplitPlan, config: RunnerConfig) -> str:
     return (
         f"shape_token_range_bucket_"
-        f"{config.market}_{config.interval}_k{config.codebook_size}_{plan.family}_{plan.index:02d}"
+        f"{config.market}_{config.interval}_k{config.codebook_size}_"
+        f"vge{config.min_volume}_{plan.family}_{plan.index:02d}"
     )
 
 
@@ -832,6 +844,7 @@ def experiment_config_for(
     run_dir: Path,
     missing_symbols: Sequence[str],
     skipped_symbols: Sequence[tuple[str, int]],
+    volume_filtered_counts: dict[str, int],
     volatility_profile: VolatilityProfile | None,
 ) -> dict[str, object]:
     exp_config: dict[str, object] = {
@@ -849,6 +862,13 @@ def experiment_config_for(
         "interval": config.interval,
         "max_candles_per_symbol": config.max_candles_per_symbol,
         "min_candles_per_symbol": config.min_candles_per_symbol,
+        "min_volume": config.min_volume,
+        "volume_filter": f"volume >= {config.min_volume}",
+        "volume_filtered_counts": {
+            symbol: count
+            for symbol, count in sorted(volume_filtered_counts.items())
+            if count > 0
+        },
         "codebook_size": config.codebook_size,
         "latent_dim": config.latent_dim,
         "hidden_dim": config.hidden_dim,
@@ -888,6 +908,7 @@ def run_experiment(
     candles_by_symbol: dict[str, tuple[CandleBar, ...]],
     missing_symbols: Sequence[str],
     skipped_symbols: Sequence[tuple[str, int]],
+    volume_filtered_counts: dict[str, int],
     volatility_profile: VolatilityProfile | None,
 ) -> dict[str, object]:
     validate_plan_symbols(plan, candles_by_symbol)
@@ -909,6 +930,7 @@ def run_experiment(
         run_dir=run_dir,
         missing_symbols=missing_symbols,
         skipped_symbols=skipped_symbols,
+        volume_filtered_counts=volume_filtered_counts,
         volatility_profile=volatility_profile,
     )
     (run_dir / "experiment_config.json").write_text(
@@ -1365,13 +1387,18 @@ def print_dry_run(
     *,
     config: RunnerConfig,
     candles_by_symbol: dict[str, tuple[CandleBar, ...]],
+    volume_filtered_counts: dict[str, int],
     volatility_profile: VolatilityProfile | None,
     plans: Sequence[SplitPlan],
 ) -> None:
     print("DRY RUN — training을 실행하지 않고 run directory도 생성하지 않습니다.")
-    print("Symbol universe after min-candle filtering:")
+    print(f"Volume filter: volume >= {config.min_volume}")
+    print("Symbol universe after volume/min-candle filtering:")
     for symbol in sorted(candles_by_symbol):
-        print(f"  {symbol:6s} candles={len(candles_by_symbol[symbol])}")
+        print(
+            f"  {symbol:6s} candles={len(candles_by_symbol[symbol])} "
+            f"volume_filtered={volume_filtered_counts.get(symbol, 0)}"
+        )
 
     if volatility_profile is not None:
         print("Volatility tertile boundaries:")
@@ -1420,6 +1447,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--codebook-size", type=int, default=12)
     parser.add_argument("--max-candles-per-symbol", type=int, default=12_000)
     parser.add_argument("--min-candles-per-symbol", type=int, default=500)
+    parser.add_argument(
+        "--min-volume",
+        type=int,
+        default=2,
+        help="Keep candles with volume >= this value. Default 2 excludes volume <= 1.",
+    )
     parser.add_argument("--train-symbol-ratio", type=float, default=0.70)
     parser.add_argument("--val-symbol-ratio", type=float, default=0.15)
     parser.add_argument("--symbol-universe", nargs="+", default=DEFAULT_SYMBOL_UNIVERSE)
@@ -1456,6 +1489,8 @@ def validate_args(args: argparse.Namespace) -> None:
         raise ValueError("--codebook-size must be greater than 1")
     if args.max_candles_per_symbol <= 0 or args.min_candles_per_symbol <= 0:
         raise ValueError("candle count limits must be positive")
+    if args.min_volume < 0:
+        raise ValueError("--min-volume must be non-negative")
 
 
 def main() -> None:
@@ -1468,6 +1503,7 @@ def main() -> None:
         codebook_size=args.codebook_size,
         max_candles_per_symbol=args.max_candles_per_symbol,
         min_candles_per_symbol=args.min_candles_per_symbol,
+        min_volume=args.min_volume,
         train_symbol_ratio=args.train_symbol_ratio,
         val_symbol_ratio=args.val_symbol_ratio,
         symbol_universe=list(args.symbol_universe),
@@ -1484,7 +1520,12 @@ def main() -> None:
         range_bucket_labels=DEFAULT_RANGE_BUCKET_LABELS,
     )
 
-    candles_by_symbol, missing_symbols, skipped_symbols = load_symbol_candles(config)
+    (
+        candles_by_symbol,
+        missing_symbols,
+        skipped_symbols,
+        volume_filtered_counts,
+    ) = load_symbol_candles(config)
     volatility_profile = (
         compute_volatility_profile(candles_by_symbol)
         if args.split_family in {"vol_strat", "vol_holdout"}
@@ -1508,6 +1549,7 @@ def main() -> None:
         print_dry_run(
             config=config,
             candles_by_symbol=candles_by_symbol,
+            volume_filtered_counts=volume_filtered_counts,
             volatility_profile=volatility_profile,
             plans=plans,
         )
@@ -1531,6 +1573,7 @@ def main() -> None:
             candles_by_symbol=candles_by_symbol,
             missing_symbols=missing_symbols,
             skipped_symbols=skipped_symbols,
+            volume_filtered_counts=volume_filtered_counts,
             volatility_profile=volatility_profile,
         )
 

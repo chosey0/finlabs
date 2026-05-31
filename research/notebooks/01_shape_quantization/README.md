@@ -499,26 +499,31 @@ market state를 발견했다.
   00_smoke.ipynb
   01_phase_1a_price_shape_only.ipynb
   02_phase_1b_shape_plus_range_scale.ipynb
-  02_phase_1b_shape_token_plus_range_bucket.ipynb
+  03_phase_1b_shape_token_plus_range_bucket.ipynb
   03_symbol_split_protocol.md
   README.md
   AGENTS.md
 
   scripts/
-    collect_metrics.py          # metrics.json 재귀 집계 + split_family별 CSV 생성
+    collect_metrics.py          # metrics.json 재귀 집계 + split_family/volume filter별 CSV 생성
     run_repeated_splits.py      # Phase 1B 반복 split 실험 runner
 
   results/
     01_phase_1a_result.md       # Phase 1A 해석 문서
     02_phase_1b_result.md       # Phase 1B ablation/revised 해석 문서
+    03_phase_1b_volume_filter_result.md  # volume <= 1 제외 rerun 해석 문서
 
   summaries/
     summary.csv                 # 전체 Phase 1B 집계
     summary_unknown.csv         # split_family가 없는 notebook run 집계
     summary_manual_stress.csv   # legacy manual_stress split family snapshot
-    summary_random.csv          # random split 실행 후 자동 생성 예정
-    summary_vol_strat.csv       # vol_strat split 실행 후 자동 생성 예정
-    summary_vol_holdout.csv     # vol_holdout split 실행 후 자동 생성 예정
+    summary_random.csv          # random split 집계
+    summary_vol_strat.csv       # vol_strat split 집계
+    summary_vol_holdout.csv     # vol_holdout split 집계
+    summary_vge2.csv            # volume >= 2 전체 집계
+    summary_random_vge2.csv     # volume >= 2 random split 집계
+    summary_vol_strat_vge2.csv  # volume >= 2 vol_strat split 집계
+    summary_vol_holdout_vge2.csv # volume >= 2 vol_holdout split 집계
 
   runs/
     phase_1a/                   # Phase 1A price-shape only run artifacts
@@ -552,6 +557,16 @@ Phase 1B revised (완료 — current notebook run)
   - range test-train L1: 0.674
   - pair test-train L1: 0.712
   결과: results/02_phase_1b_result.md
+
+Phase 1B repeated split validation (완료 — volume-filtered rerun)
+  runs/phase_1b/shape_token_range_bucket_NASDAQ_1m_k12_vge2_random_00..19
+  runs/phase_1b/shape_token_range_bucket_NASDAQ_1m_k12_vge2_vol_strat_00..09
+  runs/phase_1b/shape_token_range_bucket_NASDAQ_1m_k12_vge2_vol_holdout_00..04
+  - volume <= 1 candle 제외, 즉 volume >= 2만 사용
+  - random shape test-train L1 mean: 0.085
+  - vol_strat shape test-train L1 mean: 0.081
+  - vol_holdout shape test-train L1 mean: 0.074
+  결과: results/03_phase_1b_volume_filter_result.md
 ```
 
 `runs/deprecated/` 아래의 모든 run은 `scripts/collect_metrics.py`가 명시적으로 집계에서 제외합니다. 구조적으로 유효한 Phase 1B run이라도 deprecated 경로 아래에 있으면 summary에 포함하지 않습니다.
@@ -606,6 +621,8 @@ uv run python research/notebooks/01_shape_quantization/scripts/collect_metrics.p
 input : runs/ 이하 metrics.json 재귀 스캔
 output: summaries/summary.csv
         summaries/summary_{split_family}.csv
+        summaries/summary_vge{min_volume}.csv
+        summaries/summary_{split_family}_vge{min_volume}.csv
 ```
 
 예상 출력:
@@ -617,23 +634,28 @@ summaries/summary_manual_stress.csv legacy manual_stress split family snapshot
 summaries/summary_random.csv        random split family
 summaries/summary_vol_strat.csv     volatility-stratified split family
 summaries/summary_vol_holdout.csv   volatility-held-out split family
+summaries/summary_vge2.csv          volume >= 2 전체 Phase 1B rerun
+summaries/summary_random_vge2.csv   volume >= 2 random split family
+summaries/summary_vol_strat_vge2.csv volume >= 2 volatility-stratified split family
+summaries/summary_vol_holdout_vge2.csv volume >= 2 volatility-held-out split family
 ```
 
-### Minimum Next Experiment Set
+### Current Status
 
-다음 단계는 `03_symbol_split_protocol.md`에 정의된 반복 symbol split 실험입니다.
+`03_symbol_split_protocol.md`에 정의한 반복 symbol split validation은 volume-filtered 기준으로 완료했습니다.
 
 ```text
-random split:              최소 5 runs
-volatility-stratified:     최소 3 runs
-volatility-held-out:       최소 2 runs
+random split:              20 runs
+volatility-stratified:     10 runs
+volatility-held-out:        5 runs
 ```
 
-즉, 최소 10개 run을 추가로 실행한 뒤 `summaries/summary*.csv`와 새 반복 실험 결과 문서를 기반으로 Phase 1B 통과 여부를 판단합니다. 현재 notebook 직접 실행 run은 `split_family`가 없어 `summary_unknown.csv`로 분리됩니다.
+Phase 1B는 volume-filtered 기준에서도 Phase 2 진입 조건을 통과했습니다. 현재 notebook 직접 실행 run은 `split_family`가 없어 `summary_unknown.csv`로 분리됩니다.
 
 ```text
 Phase 1A: shape only
 Phase 1B ablation: shape + range scale as encoder input (deprecated)
-Phase 1B revised: shape token + separate range bucket  ← current
-Next: Phase 1B repeated split validation
+Phase 1B revised: shape token + separate range bucket
+Phase 1B repeated split validation: volume >= 2 기준 통과
+Next: Phase 2 Sequential Dynamics
 ```

@@ -16,6 +16,10 @@ range_bucket key) are skipped with a warning.
 In addition to the combined summary.csv, one CSV per split_family is written
 next to it (e.g. summary_random.csv, summary_manual_stress.csv) so that
 protocol section 10 — separate aggregation per split family — is satisfied.
+
+When runs record ``min_volume`` in experiment_config.json, additional
+volume-filter-specific CSVs are written as well (e.g. summary_vge2.csv and
+summary_random_vge2.csv).
 """
 
 from __future__ import annotations
@@ -96,6 +100,8 @@ def _extract_row(run_dir: Path, metrics: dict, experiment_config: dict) -> dict 
         "market": _safe(cfg.get("market"), experiment_config.get("market")),
         "interval": _safe(cfg.get("interval"), experiment_config.get("interval")),
         "codebook_size": _safe(cfg.get("codebook_size"), experiment_config.get("codebook_size")),
+        "min_volume": _safe(experiment_config.get("min_volume"), cfg.get("min_volume")),
+        "volume_filter": _safe(experiment_config.get("volume_filter"), cfg.get("volume_filter")),
         "split_family": _safe(experiment_config.get("split_family")),
         "split_index": _safe(experiment_config.get("split_index")),
         "split_seed": _safe(experiment_config.get("split_seed"), cfg.get("seed")),
@@ -147,6 +153,7 @@ def _extract_row(run_dir: Path, metrics: dict, experiment_config: dict) -> dict 
 
 COLUMNS = [
     "run_id", "run_dir", "phase", "market", "interval", "codebook_size",
+    "min_volume", "volume_filter",
     "split_family", "split_index", "split_seed",
     "train_symbols", "val_symbols", "test_symbols",
     "train_candles", "val_candles", "test_candles",
@@ -221,6 +228,31 @@ def main(runs_dir: Path, out_path: Path) -> None:
         family_path = out_path.with_name(f"{out_path.stem}_{family}{out_path.suffix}")
         _write_csv(family_path, family_rows)
         print(f"Wrote {len(family_rows)} run(s) to {family_path}")
+
+    # Also write filter-specific summaries so volume-filtered reruns can be
+    # reviewed without mixing them with earlier unfiltered experiments.
+    by_volume: dict[str, list[dict]] = {}
+    by_family_volume: dict[tuple[str, str], list[dict]] = {}
+    for row in rows:
+        min_volume = row.get("min_volume")
+        if min_volume in (None, ""):
+            continue
+        volume_key = f"vge{min_volume}"
+        family = row.get("split_family") or "unknown"
+        by_volume.setdefault(volume_key, []).append(row)
+        by_family_volume.setdefault((family, volume_key), []).append(row)
+
+    for volume_key, volume_rows in sorted(by_volume.items()):
+        volume_path = out_path.with_name(f"{out_path.stem}_{volume_key}{out_path.suffix}")
+        _write_csv(volume_path, volume_rows)
+        print(f"Wrote {len(volume_rows)} run(s) to {volume_path}")
+
+    for (family, volume_key), family_volume_rows in sorted(by_family_volume.items()):
+        family_volume_path = out_path.with_name(
+            f"{out_path.stem}_{family}_{volume_key}{out_path.suffix}"
+        )
+        _write_csv(family_volume_path, family_volume_rows)
+        print(f"Wrote {len(family_volume_rows)} run(s) to {family_volume_path}")
 
     for row in rows:
         family = row.get("split_family")
