@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from kis.realtime.session import RealtimeSession
+from kis.realtime.subscription import RealtimeSubscription
 
 if TYPE_CHECKING:
     from kis.client import KisClient
@@ -22,4 +23,4 @@ class _RealtimeNamespace:
         return RealtimeSession(self._parent)
 
 
-__all__ = ["RealtimeSession"]
+__all__ = ["RealtimeSession", "RealtimeSubscription"]

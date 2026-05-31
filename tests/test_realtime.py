@@ -107,7 +107,7 @@ def test_realtime_rejects_domestic_subscription(monkeypatch) -> None:
     async def fake_approval(self):
         return "approval-key"
 
-    monkeypatch.setattr("kis.realtime.session.websockets.connect", fake_connect)
+    monkeypatch.setattr("kis.realtime.connection.websockets.connect", fake_connect)
     monkeypatch.setattr("kis.client.KisClient.ensure_approval_key", fake_approval)
 
     async def run() -> None:
@@ -133,7 +133,7 @@ def test_realtime_subscribe_unsubscribe_state_machine(monkeypatch) -> None:
     async def fake_approval(self):
         return "approval-key"
 
-    monkeypatch.setattr("kis.realtime.session.websockets.connect", fake_connect)
+    monkeypatch.setattr("kis.realtime.connection.websockets.connect", fake_connect)
     monkeypatch.setattr("kis.client.KisClient.ensure_approval_key", fake_approval)
 
     async def run() -> None:
@@ -172,7 +172,7 @@ def test_realtime_quick_start_with_mock_websocket(monkeypatch) -> None:
     async def fake_approval(self):
         return "approval-key"
 
-    monkeypatch.setattr("kis.realtime.session.websockets.connect", fake_connect)
+    monkeypatch.setattr("kis.realtime.connection.websockets.connect", fake_connect)
     monkeypatch.setattr("kis.client.KisClient.ensure_approval_key", fake_approval)
 
     async def run() -> RealtimeTick:
@@ -208,7 +208,7 @@ def test_realtime_received_seq_does_not_overlap_across_multi_record_frames(monke
     async def fake_approval(self):
         return "approval-key"
 
-    monkeypatch.setattr("kis.realtime.session.websockets.connect", fake_connect)
+    monkeypatch.setattr("kis.realtime.connection.websockets.connect", fake_connect)
     monkeypatch.setattr("kis.client.KisClient.ensure_approval_key", fake_approval)
 
     async def run() -> list[int]:

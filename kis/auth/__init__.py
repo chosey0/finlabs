@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from kis.auth.cache import MemoryTokenCache, TokenCache, TokenRecord
+from kis.auth.manager import TokenProvider
 from kis.auth.oauth import (
     IssuedToken,
     SECRET_PATTERNS,
@@ -23,6 +24,7 @@ __all__ = [
     "SECRET_PATTERNS",
     "TOKEN_PATH",
     "TokenCache",
+    "TokenProvider",
     "TokenRecord",
     "approval_url",
     "issue_access_token",

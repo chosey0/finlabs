@@ -1,15 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 import httpx
 
 from kis._internal.headers import build_rest_headers
 from kis._internal.http import AsyncHttpTransport
-from kis.auth.cache import MemoryTokenCache, TokenCache, TokenRecord
-from kis.auth.oauth import issue_access_token_async, issue_websocket_approval_key_async
+from kis.auth.cache import MemoryTokenCache, TokenCache
+from kis.auth.manager import TokenProvider
 from kis.config import Credentials, rest_base_url
 from kis.endpoints.registry import EndpointSpec
 from kis.types import Environment
@@ -46,11 +45,18 @@ class KisClient:
     _owns_client: bool = field(default=False, init=False, repr=False)
     _entered: bool = field(default=False, init=False, repr=False)
     _transport: AsyncHttpTransport | None = field(default=None, init=False, repr=False)
+    _token_provider: TokenProvider = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         from kis.overseas import _OverseasNamespace
         from kis.realtime import _RealtimeNamespace
 
+        self._token_provider = TokenProvider(
+            credentials=self.credentials,
+            environment=self.environment,
+            token_cache=self.token_cache,
+            http_client_factory=self._require_http_client,
+        )
         self.overseas = _OverseasNamespace(self)
         self.realtime = _RealtimeNamespace(self)
 
@@ -103,12 +109,6 @@ class KisClient:
             )
         return self.http_client
 
-    def _token_cache_key(self) -> str:
-        return f"{self.environment}:{self.credentials.app_key}"
-
-    def _approval_cache_key(self) -> str:
-        return f"ws:{self.environment}:{self.credentials.app_key}"
-
     async def request(
         self,
         spec: EndpointSpec,
@@ -147,50 +147,9 @@ class KisClient:
         return response.payload
 
     async def ensure_token(self) -> str:
-        """Return a valid access_token string, fetching one if needed.
-
-        Cache hit → returned immediately. Cache miss or expired → issue a
-        new token via `issue_access_token_async`, store it, and return.
-        """
-        key = self._token_cache_key()
-        cached = self.token_cache.get(key)
-        if cached is not None:
-            return cached.access_token
-
-        client = self._require_http_client()
-        issued = await issue_access_token_async(
-            environment=self.environment,
-            app_key=self.credentials.app_key,
-            app_secret=self.credentials.app_secret,
-            client=client,
-        )
-        record = TokenRecord(
-            access_token=issued.access_token,
-            token_type=issued.token_type,
-            expires_at=issued.expires_at,
-        )
-        self.token_cache.set(key, record)
-        return issued.access_token
+        """Return a valid REST access token, fetching one if needed."""
+        return await self._token_provider.ensure_token()
 
     async def ensure_approval_key(self) -> str:
-        key = self._approval_cache_key()
-        cached = self.token_cache.get(key)
-        if cached is not None:
-            return cached.access_token
-
-        client = self._require_http_client()
-        approval_key = await issue_websocket_approval_key_async(
-            environment=self.environment,
-            app_key=self.credentials.app_key,
-            app_secret=self.credentials.app_secret,
-            client=client,
-        )
-        self.token_cache.set(
-            key,
-            TokenRecord(
-                access_token=approval_key,
-                token_type="approval_key",
-                expires_at=datetime.now(UTC) + timedelta(hours=24),
-            ),
-        )
-        return approval_key
+        """Return a valid WebSocket approval key, fetching one if needed."""
+        return await self._token_provider.ensure_approval_key()
