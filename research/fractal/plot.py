@@ -35,6 +35,20 @@ class FractalSegmentFigure:
     figure: Any
 
 
+@dataclass(frozen=True, slots=True)
+class FractalSegmentSelection:
+    raw_event_count: int
+    filtered_event_count: int
+    candidate_segment_count: int
+    skipped_by_gap: int
+    skipped_by_change_pct: int
+    segments: tuple[FractalEventSegment, ...]
+
+    @property
+    def saved_segment_count(self) -> int:
+        return len(self.segments)
+
+
 def plot_fractal_events(
     candles: Sequence[Candle],
     *,
@@ -207,7 +221,25 @@ def fractal_event_segments(
     max_gap_seconds: float | None = None,
     min_segment_change_pct: float = 3.0,
 ) -> tuple[FractalEventSegment, ...]:
-    """Return all adjacent high→low and low→high confirmed fractal segments.
+    """Return all accepted adjacent high→low and low→high fractal segments."""
+    return select_fractal_event_segments(
+        candles,
+        events=events,
+        label_config=label_config,
+        max_gap_seconds=max_gap_seconds,
+        min_segment_change_pct=min_segment_change_pct,
+    ).segments
+
+
+def select_fractal_event_segments(
+    candles: Sequence[Candle],
+    *,
+    events: Sequence[FractalEvent] | None = None,
+    label_config: FractalLabelConfig | None = None,
+    max_gap_seconds: float | None = None,
+    min_segment_change_pct: float = 3.0,
+) -> FractalSegmentSelection:
+    """Build segments and return selection diagnostics.
 
     The returned sequence is chronological. ``ordinal`` is counted separately
     per transition type so callers can build stable filenames such as
@@ -223,23 +255,29 @@ def fractal_event_segments(
     cfg = label_config or FractalLabelConfig()
     cfg.validate()
     ordered = tuple(candles)
-    resolved_events = tuple(events) if events is not None else _compute_segment_events(ordered, cfg)
+    resolved_events, raw_event_count, filtered_event_count = _resolve_segment_events(ordered, cfg, events)
     confirmed_events = tuple(event for event in resolved_events if _is_confirmed_direction_event(event))
 
     segments: list[FractalEventSegment] = []
     ordinal_by_transition: dict[TransitionType, int] = {"high_to_low": 0, "low_to_high": 0}
+    candidate_segment_count = 0
+    skipped_by_gap = 0
+    skipped_by_change_pct = 0
     for start_event, end_event in zip(confirmed_events, confirmed_events[1:], strict=False):
         transition = _transition_type(start_event, end_event)
         if transition is None:
             continue
+        candidate_segment_count += 1
         if _has_large_time_gap(
             ordered,
             start_index=min(start_event.index, end_event.index),
             end_index=max(start_event.index, end_event.index),
             max_gap_seconds=max_gap_seconds,
         ):
+            skipped_by_gap += 1
             continue
         if _segment_change_pct(start_event, end_event) < min_segment_change_pct:
+            skipped_by_change_pct += 1
             continue
         ordinal_by_transition[transition] += 1
         segments.append(
@@ -253,7 +291,14 @@ def fractal_event_segments(
             )
         )
 
-    return tuple(segments)
+    return FractalSegmentSelection(
+        raw_event_count=raw_event_count,
+        filtered_event_count=filtered_event_count,
+        candidate_segment_count=candidate_segment_count,
+        skipped_by_gap=skipped_by_gap,
+        skipped_by_change_pct=skipped_by_change_pct,
+        segments=tuple(segments),
+    )
 
 
 def plot_fractal_event_segments(
@@ -266,7 +311,7 @@ def plot_fractal_event_segments(
     show_filtered: bool = False,
 ) -> tuple[FractalSegmentFigure, ...]:
     """Plot every high→low and low→high confirmed fractal segment."""
-    segments = fractal_event_segments(
+    selection = select_fractal_event_segments(
         candles,
         events=events,
         label_config=label_config,
@@ -274,7 +319,7 @@ def plot_fractal_event_segments(
         min_segment_change_pct=min_segment_change_pct,
     )
     figures: list[FractalSegmentFigure] = []
-    for segment in segments:
+    for segment in selection.segments:
         title = f"{segment.transition.replace('_', ' ')} segment #{segment.ordinal:03d}"
         figure = plot_fractal_events(
             segment.candles,
@@ -318,6 +363,33 @@ def plot_fractal_event_segments_from_warehouse(
     if not figures:
         raise RuntimeError("no confirmed high-to-low or low-to-high fractal segments found")
     return figures
+
+
+def select_fractal_event_segments_from_warehouse(
+    warehouse_path: str | Path,
+    *,
+    market: str,
+    symbol: str,
+    interval: str,
+    limit: int | None = None,
+    label_config: FractalLabelConfig | None = None,
+    max_gap_seconds: float | None = None,
+    min_segment_change_pct: float = 3.0,
+) -> FractalSegmentSelection:
+    """Load candles and select all accepted high→low and low→high segments."""
+    candles = load_fractal_candles_from_warehouse(
+        warehouse_path,
+        market=market,
+        symbol=symbol,
+        interval=interval,
+        limit=limit,
+    )
+    return select_fractal_event_segments(
+        candles,
+        label_config=label_config,
+        max_gap_seconds=max_gap_seconds,
+        min_segment_change_pct=min_segment_change_pct,
+    )
 
 
 def plot_latest_fractal_event_segments(
@@ -403,6 +475,28 @@ def _compute_segment_events(candles: Sequence[Candle], config: FractalLabelConfi
         config=config,
         apply_ma_filter=False,
     )
+
+
+def _resolve_segment_events(
+    candles: Sequence[Candle],
+    config: FractalLabelConfig,
+    events: Sequence[FractalEvent] | None,
+) -> tuple[tuple[FractalEvent, ...], int, int]:
+    if events is not None:
+        resolved_events = tuple(events)
+        return resolved_events, len(resolved_events), len(resolved_events)
+
+    highs = tuple(candle.high for candle in candles)
+    lows = tuple(candle.low for candle in candles)
+    raw_events = detect_fractal_events(highs, lows, config=config)
+    filtered_events = filter_fractal_events(
+        raw_events,
+        highs=highs,
+        lows=lows,
+        config=config,
+        apply_ma_filter=False,
+    )
+    return filtered_events, len(raw_events), len(filtered_events)
 
 
 def _is_confirmed_direction_event(event: FractalEvent) -> bool:

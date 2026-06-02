@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import webbrowser
 from pathlib import Path
 from typing import Any, Literal, cast
@@ -8,7 +9,7 @@ from typing import Any, Literal, cast
 from kis_cli.storage.warehouse import default_warehouse_file
 
 from .labels import FractalLabelConfig
-from .plot import FractalEventSegment, plot_fractal_event_segments_from_warehouse
+from .plot import FractalEventSegment, FractalSegmentSelection, plot_fractal_events, select_fractal_event_segments_from_warehouse
 
 EVENT_PLOTS_DIR = Path(__file__).resolve().parent / "event_plots"
 OutputType = Literal["svg", "png", "html", "pdf"]
@@ -74,24 +75,50 @@ def main() -> None:
     if args.min_segment_change_pct < 0:
         raise ValueError("--min-segment-change-pct must be non-negative")
 
-    segment_figures = plot_fractal_event_segments_from_warehouse(
+    max_gap_seconds = _resolve_max_gap_seconds(args)
+    selection = select_fractal_event_segments_from_warehouse(
         args.warehouse_path,
         market=args.market,
         symbol=args.symbol,
         interval=args.interval,
         limit=args.limit,
         label_config=label_config,
-        max_gap_seconds=_resolve_max_gap_seconds(args),
+        max_gap_seconds=max_gap_seconds,
         min_segment_change_pct=args.min_segment_change_pct,
-        show_filtered=args.show_filtered,
     )
+    if not selection.segments:
+        _print_summary(selection)
+        raise RuntimeError("no confirmed high-to-low or low-to-high fractal segments found")
 
-    for segment_figure in segment_figures:
-        out_path = _with_segment_suffix(output_base, segment=segment_figure.segment, output_type=output_type)
-        save_figure(segment_figure.figure, out_path, output_type=output_type)
+    saved_segments: list[dict[str, Any]] = []
+    for segment in selection.segments:
+        out_path = _with_segment_suffix(output_base, segment=segment, output_type=output_type)
+        figure = plot_fractal_events(
+            segment.candles,
+            events=segment.events,
+            label_config=label_config,
+            title=f"{args.market.upper()} {args.symbol.upper()} {args.interval} {segment.transition} #{segment.ordinal:03d}",
+            max_candles=None,
+            show_filtered=args.show_filtered,
+        )
+        save_figure(figure, out_path, output_type=output_type)
+        saved_segments.append(_segment_manifest_entry(segment, out_path=out_path))
         if args.open:
             webbrowser.open(out_path.resolve().as_uri())
         print(out_path)
+
+    manifest_path = _with_manifest_suffix(output_base)
+    _write_manifest(
+        manifest_path,
+        args=args,
+        output_type=output_type,
+        max_gap_seconds=max_gap_seconds,
+        label_config=label_config,
+        selection=selection,
+        saved_segments=saved_segments,
+    )
+    _print_summary(selection)
+    print(manifest_path)
 
 
 def save_figure(fig: Any, out_path: Path, *, output_type: OutputType) -> None:
@@ -144,6 +171,97 @@ def _resolve_output_base(args: argparse.Namespace, *, output_type: OutputType) -
 
 def _with_segment_suffix(path: Path, *, segment: FractalEventSegment, output_type: OutputType) -> Path:
     return path.with_name(f"{path.stem}_{segment.transition}_{segment.ordinal:03d}.{output_type}")
+
+
+def _with_manifest_suffix(path: Path) -> Path:
+    return path.with_name(f"{path.stem}_manifest.json")
+
+
+def _write_manifest(
+    path: Path,
+    *,
+    args: argparse.Namespace,
+    output_type: OutputType,
+    max_gap_seconds: float | None,
+    label_config: FractalLabelConfig,
+    selection: FractalSegmentSelection,
+    saved_segments: list[dict[str, Any]],
+) -> None:
+    payload = {
+        "market": args.market,
+        "symbol": args.symbol,
+        "interval": args.interval,
+        "warehouse_path": str(args.warehouse_path),
+        "limit": args.limit,
+        "output_type": output_type,
+        "label_config": {
+            "window": label_config.window,
+            "short_ma": label_config.short_ma,
+            "long_ma": label_config.long_ma,
+            "filtered_when_short_below_long": label_config.filtered_when_short_below_long,
+            "min_window_range_pct": label_config.min_window_range_pct,
+        },
+        "segment_filters": {
+            "max_gap_minutes": None if max_gap_seconds is None else max_gap_seconds / 60,
+            "min_segment_change_pct": args.min_segment_change_pct,
+        },
+        "summary": _summary_payload(selection),
+        "saved_segments": saved_segments,
+    }
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _segment_manifest_entry(segment: FractalEventSegment, *, out_path: Path) -> dict[str, Any]:
+    return {
+        "transition": segment.transition,
+        "ordinal": segment.ordinal,
+        "output_path": str(out_path),
+        "start": {
+            "index": segment.start_event.index,
+            "timestamp": segment.candles[0].timestamp,
+            "kind": segment.start_event.kind,
+            "price": segment.start_event.price,
+        },
+        "end": {
+            "index": segment.end_event.index,
+            "timestamp": segment.candles[-1].timestamp,
+            "kind": segment.end_event.kind,
+            "price": segment.end_event.price,
+        },
+        "candle_count": len(segment.candles),
+        "change_pct": _segment_change_pct(segment),
+    }
+
+
+def _segment_change_pct(segment: FractalEventSegment) -> float:
+    denominator = abs(segment.start_event.price)
+    if denominator == 0:
+        return float("inf") if segment.end_event.price != 0 else 0.0
+    return abs(segment.end_event.price - segment.start_event.price) / denominator * 100.0
+
+
+def _summary_payload(selection: FractalSegmentSelection) -> dict[str, int]:
+    return {
+        "raw_events": selection.raw_event_count,
+        "filtered_events": selection.filtered_event_count,
+        "candidate_segments": selection.candidate_segment_count,
+        "saved_segments": selection.saved_segment_count,
+        "skipped_by_gap": selection.skipped_by_gap,
+        "skipped_by_change_pct": selection.skipped_by_change_pct,
+    }
+
+
+def _print_summary(selection: FractalSegmentSelection) -> None:
+    summary = _summary_payload(selection)
+    print(
+        "summary "
+        f"raw_events={summary['raw_events']} "
+        f"filtered_events={summary['filtered_events']} "
+        f"candidate_segments={summary['candidate_segments']} "
+        f"saved_segments={summary['saved_segments']} "
+        f"skipped_by_gap={summary['skipped_by_gap']} "
+        f"skipped_by_change_pct={summary['skipped_by_change_pct']}"
+    )
 
 
 def _with_output_suffix(path: Path, *, output_type: OutputType) -> Path:

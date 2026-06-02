@@ -167,11 +167,12 @@ Use `--interval 1m` for minute bars or `--interval 1d` for daily bars. Use
 `--window 21` or another odd value. Even windows are rejected because fractal
 labels use a centered window.
 
-Supported `--type` values: `svg`, `png`, `html`, `pdf`. If `--out` has a different suffix, the selected `--type` wins and the suffix is normalized. The command appends `_high_to_low` and `_low_to_high` to the output base name.
 Supported `--type` values: `svg`, `png`, `html`, `pdf`. If `--out` has a
 different suffix, the selected `--type` wins and the suffix is normalized. The
 command appends `_{transition}_{ordinal:03d}` to the output base name. The ordinal
-is counted separately per transition type.
+is counted separately per transition type. A companion manifest is also written
+with the same base name and `_manifest.json` suffix. It records the CLI
+configuration, selection summary, skip counts, and saved segment metadata.
 
 Example outputs:
 
@@ -179,4 +180,11 @@ Example outputs:
 research/fractal/event_plots/fractal_AAPL_1m_high_to_low_001.svg
 research/fractal/event_plots/fractal_AAPL_1m_high_to_low_002.svg
 research/fractal/event_plots/fractal_AAPL_1m_low_to_high_001.svg
+research/fractal/event_plots/fractal_AAPL_1m_manifest.json
+```
+
+Console summary:
+
+```text
+summary raw_events=120 filtered_events=108 candidate_segments=77 saved_segments=12 skipped_by_gap=4 skipped_by_change_pct=61
 ```

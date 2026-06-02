@@ -7,6 +7,7 @@ from research.fractal.plot import (
     plot_fractal_events,
     plot_fractal_events_from_warehouse,
     plot_latest_fractal_event_segments,
+    select_fractal_event_segments,
 )
 
 
@@ -172,6 +173,24 @@ def test_fractal_event_segments_skips_segments_below_min_change_pct():
     segments = fractal_event_segments(candles, events=events, min_segment_change_pct=3)
 
     assert [(segment.transition, segment.ordinal) for segment in segments] == [("high_to_low", 1)]
+
+
+def test_select_fractal_event_segments_returns_selection_summary():
+    candles = _candles()
+    events = (
+        FractalEvent(index=0, label=FractalLabel.LOW, price=100, kind="low"),
+        FractalEvent(index=1, label=FractalLabel.HIGH, price=102.9, kind="high"),
+        FractalEvent(index=2, label=FractalLabel.LOW, price=96, kind="low"),
+    )
+
+    selection = select_fractal_event_segments(candles, events=events, min_segment_change_pct=3)
+
+    assert selection.raw_event_count == 3
+    assert selection.filtered_event_count == 3
+    assert selection.candidate_segment_count == 2
+    assert selection.skipped_by_gap == 0
+    assert selection.skipped_by_change_pct == 1
+    assert selection.saved_segment_count == 1
 
 
 def test_plot_latest_fractal_event_segments_returns_one_figure_per_transition():

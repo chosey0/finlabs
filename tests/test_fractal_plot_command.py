@@ -1,8 +1,9 @@
 import argparse
+import json
 
 from research.fractal.data import Candle
 from research.fractal.labels import FractalEvent, FractalLabel
-from research.fractal.plot import FractalEventSegment, FractalSegmentFigure
+from research.fractal.plot import FractalEventSegment, FractalSegmentSelection
 from research.fractal import plot_command
 
 
@@ -17,11 +18,11 @@ class FakeFigure:
         self.saved.append(("html", path, auto_open))
 
 
-def _fake_segment_figure(transition: str, ordinal: int) -> FractalSegmentFigure:
+def _fake_segment(transition: str, ordinal: int) -> FractalEventSegment:
     candle = Candle(timestamp="2026-01-01", open=1, high=2, low=0.5, close=1.5)
     start_event = FractalEvent(index=0, label=FractalLabel.HIGH, price=2, kind="high")
     end_event = FractalEvent(index=0, label=FractalLabel.LOW, price=0.5, kind="low")
-    segment = FractalEventSegment(
+    return FractalEventSegment(
         transition=transition,
         ordinal=ordinal,
         start_event=start_event,
@@ -29,21 +30,35 @@ def _fake_segment_figure(transition: str, ordinal: int) -> FractalSegmentFigure:
         candles=(candle,),
         events=(start_event, end_event),
     )
-    return FractalSegmentFigure(segment=segment, figure=FakeFigure())
 
 
-def _fake_segment_figures() -> tuple[FractalSegmentFigure, ...]:
-    return (
-        _fake_segment_figure("high_to_low", 1),
-        _fake_segment_figure("high_to_low", 2),
-        _fake_segment_figure("low_to_high", 1),
+def _fake_selection() -> FractalSegmentSelection:
+    return FractalSegmentSelection(
+        raw_event_count=5,
+        filtered_event_count=4,
+        candidate_segment_count=3,
+        skipped_by_gap=0,
+        skipped_by_change_pct=0,
+        segments=(
+            _fake_segment("high_to_low", 1),
+            _fake_segment("high_to_low", 2),
+            _fake_segment("low_to_high", 1),
+        ),
     )
 
 
+def _install_fake_plotting(monkeypatch, selection: FractalSegmentSelection) -> list[FakeFigure]:
+    figures = [FakeFigure() for _ in selection.segments]
+    remaining = iter(figures)
+    monkeypatch.setattr(plot_command, "select_fractal_event_segments_from_warehouse", lambda *args, **kwargs: selection)
+    monkeypatch.setattr(plot_command, "plot_fractal_events", lambda *args, **kwargs: next(remaining))
+    return figures
+
+
 def test_plot_command_writes_one_svg_file_per_segment_by_default(monkeypatch, tmp_path):
-    segment_figures = _fake_segment_figures()
+    selection = _fake_selection()
+    figures = _install_fake_plotting(monkeypatch, selection)
     monkeypatch.setattr(plot_command, "EVENT_PLOTS_DIR", tmp_path / "event_plots")
-    monkeypatch.setattr(plot_command, "plot_fractal_event_segments_from_warehouse", lambda *args, **kwargs: segment_figures)
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -62,16 +77,30 @@ def test_plot_command_writes_one_svg_file_per_segment_by_default(monkeypatch, tm
     plot_command.main()
 
     base = tmp_path / "event_plots"
-    assert segment_figures[0].figure.saved == [("image", base / "fractal_NASDAQ_AAPL_1d_high_to_low_001.svg")]
-    assert segment_figures[1].figure.saved == [("image", base / "fractal_NASDAQ_AAPL_1d_high_to_low_002.svg")]
-    assert segment_figures[2].figure.saved == [("image", base / "fractal_NASDAQ_AAPL_1d_low_to_high_001.svg")]
+    assert figures[0].saved == [("image", base / "fractal_NASDAQ_AAPL_1d_high_to_low_001.svg")]
+    assert figures[1].saved == [("image", base / "fractal_NASDAQ_AAPL_1d_high_to_low_002.svg")]
+    assert figures[2].saved == [("image", base / "fractal_NASDAQ_AAPL_1d_low_to_high_001.svg")]
     assert base.exists()
+    manifest = json.loads((base / "fractal_NASDAQ_AAPL_1d_manifest.json").read_text())
+    assert manifest["summary"] == {
+        "raw_events": 5,
+        "filtered_events": 4,
+        "candidate_segments": 3,
+        "saved_segments": 3,
+        "skipped_by_gap": 0,
+        "skipped_by_change_pct": 0,
+    }
+    assert [item["transition"] for item in manifest["saved_segments"]] == [
+        "high_to_low",
+        "high_to_low",
+        "low_to_high",
+    ]
 
 
 def test_plot_command_supports_html_output_type(monkeypatch, tmp_path):
-    segment_figures = _fake_segment_figures()
+    selection = _fake_selection()
+    figures = _install_fake_plotting(monkeypatch, selection)
     out_path = tmp_path / "fractal.html"
-    monkeypatch.setattr(plot_command, "plot_fractal_event_segments_from_warehouse", lambda *args, **kwargs: segment_figures)
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -89,15 +118,15 @@ def test_plot_command_supports_html_output_type(monkeypatch, tmp_path):
 
     plot_command.main()
 
-    assert segment_figures[0].figure.saved == [("html", out_path.with_name("fractal_high_to_low_001.html"), False)]
-    assert segment_figures[1].figure.saved == [("html", out_path.with_name("fractal_high_to_low_002.html"), False)]
-    assert segment_figures[2].figure.saved == [("html", out_path.with_name("fractal_low_to_high_001.html"), False)]
+    assert figures[0].saved == [("html", out_path.with_name("fractal_high_to_low_001.html"), False)]
+    assert figures[1].saved == [("html", out_path.with_name("fractal_high_to_low_002.html"), False)]
+    assert figures[2].saved == [("html", out_path.with_name("fractal_low_to_high_001.html"), False)]
 
 
 def test_plot_command_appends_selected_suffix_for_suffixless_out_path(monkeypatch, tmp_path):
-    segment_figures = _fake_segment_figures()
+    selection = _fake_selection()
+    figures = _install_fake_plotting(monkeypatch, selection)
     out_path = tmp_path / "fractal_AAPL_1d"
-    monkeypatch.setattr(plot_command, "plot_fractal_event_segments_from_warehouse", lambda *args, **kwargs: segment_figures)
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -115,15 +144,15 @@ def test_plot_command_appends_selected_suffix_for_suffixless_out_path(monkeypatc
 
     plot_command.main()
 
-    assert segment_figures[0].figure.saved == [("image", tmp_path / "fractal_AAPL_1d_high_to_low_001.png")]
-    assert segment_figures[1].figure.saved == [("image", tmp_path / "fractal_AAPL_1d_high_to_low_002.png")]
-    assert segment_figures[2].figure.saved == [("image", tmp_path / "fractal_AAPL_1d_low_to_high_001.png")]
+    assert figures[0].saved == [("image", tmp_path / "fractal_AAPL_1d_high_to_low_001.png")]
+    assert figures[1].saved == [("image", tmp_path / "fractal_AAPL_1d_high_to_low_002.png")]
+    assert figures[2].saved == [("image", tmp_path / "fractal_AAPL_1d_low_to_high_001.png")]
 
 
 def test_plot_command_overrides_out_suffix_with_selected_type(monkeypatch, tmp_path):
-    segment_figures = _fake_segment_figures()
+    selection = _fake_selection()
+    figures = _install_fake_plotting(monkeypatch, selection)
     out_path = tmp_path / "fractal.html"
-    monkeypatch.setattr(plot_command, "plot_fractal_event_segments_from_warehouse", lambda *args, **kwargs: segment_figures)
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -141,9 +170,9 @@ def test_plot_command_overrides_out_suffix_with_selected_type(monkeypatch, tmp_p
 
     plot_command.main()
 
-    assert segment_figures[0].figure.saved == [("image", tmp_path / "fractal_high_to_low_001.pdf")]
-    assert segment_figures[1].figure.saved == [("image", tmp_path / "fractal_high_to_low_002.pdf")]
-    assert segment_figures[2].figure.saved == [("image", tmp_path / "fractal_low_to_high_001.pdf")]
+    assert figures[0].saved == [("image", tmp_path / "fractal_high_to_low_001.pdf")]
+    assert figures[1].saved == [("image", tmp_path / "fractal_high_to_low_002.pdf")]
+    assert figures[2].saved == [("image", tmp_path / "fractal_low_to_high_001.pdf")]
 
 
 def test_plot_command_rejects_even_window(monkeypatch, tmp_path):
