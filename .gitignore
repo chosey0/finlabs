@@ -230,3 +230,6 @@ research/runs/
 research/notebooks/research/
 *.pt
 .DS_Store
+
+# Generated fractal event plots
+research/fractal/event_plots/
