@@ -7,6 +7,9 @@ import webbrowser
 from pathlib import Path
 from typing import Any, Literal, cast
 
+from rich.console import Console
+from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, TimeElapsedColumn
+
 from kis_cli.storage.warehouse import default_warehouse_file
 
 from .labels import FractalEvent, FractalLabelConfig
@@ -26,9 +29,15 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Plot all high-to-low and low-to-high fractal segments from the local DuckDB warehouse.",
     )
+    parser.add_argument("symbols", nargs="*", help="One or more ticker symbols, for example INTC NVDA TSLA.")
     parser.add_argument("--warehouse-path", type=Path, default=default_warehouse_file())
     parser.add_argument("--market", default="NASDAQ")
-    parser.add_argument("--symbol", required=True)
+    parser.add_argument(
+        "--symbol",
+        dest="symbol_options",
+        action="append",
+        help="Ticker symbol. Kept for backward compatibility; positional symbols are preferred.",
+    )
     parser.add_argument("--interval", default="1m", help="Candle interval, for example 1m or 1d.")
     parser.add_argument("--max-candles", type=int, default=300, help="Deprecated. Segment plots always use full segment length.")
     parser.add_argument("--window", type=int, default=21)
@@ -61,13 +70,22 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument("--show-filtered", action="store_true")
-    parser.add_argument(
+    followthrough_group = parser.add_mutually_exclusive_group()
+    followthrough_group.add_argument(
         "--include-followthrough",
+        dest="include_followthrough",
         action="store_true",
+        default=True,
         help=(
             "Extend each plot from the segment end event to the next fractal event, "
-            "with a distinct background for the follow-through interval."
+            "with a distinct background for the follow-through interval. Enabled by default."
         ),
+    )
+    followthrough_group.add_argument(
+        "--no-followthrough",
+        dest="include_followthrough",
+        action="store_false",
+        help="Do not extend plots beyond the segment end event.",
     )
     parser.add_argument(
         "--type",
@@ -91,9 +109,8 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    symbols = _resolve_symbols(args)
     output_type = _normalize_output_type(args.type)
-    output_base = _resolve_output_base(args, output_type=output_type)
-    output_base.parent.mkdir(parents=True, exist_ok=True)
 
     label_config = FractalLabelConfig(
         window=args.window,
@@ -108,10 +125,42 @@ def main() -> None:
         raise ValueError("--min-followthrough-change-pct must be non-negative")
 
     max_gap_seconds = _resolve_max_gap_seconds(args)
+    with _symbol_progress() as progress:
+        task_id = progress.add_task("Plotting fractal segments", total=len(symbols))
+        for symbol in symbols:
+            progress.update(task_id, description=f"Plotting {symbol}")
+            _plot_symbol(
+                args,
+                symbol=symbol,
+                output_type=output_type,
+                multiple_symbols=len(symbols) > 1,
+                label_config=label_config,
+                max_gap_seconds=max_gap_seconds,
+            )
+            progress.advance(task_id)
+        progress.update(task_id, description="Plotting fractal segments")
+
+
+def _plot_symbol(
+    args: argparse.Namespace,
+    *,
+    symbol: str,
+    output_type: OutputType,
+    multiple_symbols: bool,
+    label_config: FractalLabelConfig,
+    max_gap_seconds: float | None,
+) -> None:
+    output_base = _resolve_output_base(
+        args,
+        output_type=output_type,
+        symbol=symbol,
+        multiple_symbols=multiple_symbols,
+    )
+    output_base.parent.mkdir(parents=True, exist_ok=True)
     selection = select_fractal_event_segments_from_warehouse(
         args.warehouse_path,
         market=args.market,
-        symbol=args.symbol,
+        symbol=symbol,
         interval=args.interval,
         label_config=label_config,
         max_gap_seconds=max_gap_seconds,
@@ -119,8 +168,8 @@ def main() -> None:
         min_followthrough_change_pct=args.min_followthrough_change_pct,
     )
     if not selection.segments:
-        _print_summary(selection)
-        _print_no_segments_message(args)
+        _print_summary(selection, symbol=symbol)
+        _print_no_segments_message(args, symbol=symbol)
         if args.fail_on_empty:
             raise SystemExit(1)
         return
@@ -136,7 +185,7 @@ def main() -> None:
             plot_candles,
             events=plot_events,
             label_config=label_config,
-            title=f"{args.market.upper()} {args.symbol.upper()} {args.interval} {segment.transition} #{segment.ordinal:03d}",
+            title=f"{args.market.upper()} {symbol.upper()} {args.interval} {segment.transition} #{segment.ordinal:03d}",
             max_candles=None,
             show_filtered=args.show_filtered,
             background_regions=background_regions,
@@ -155,9 +204,10 @@ def main() -> None:
         max_gap_seconds=max_gap_seconds,
         label_config=label_config,
         selection=selection,
+        symbol=symbol,
         saved_segments=saved_segments,
     )
-    _print_summary(selection)
+    _print_summary(selection, symbol=symbol)
     print(manifest_path)
 
 
@@ -168,10 +218,21 @@ def save_figure(fig: Any, out_path: Path, *, output_type: OutputType) -> None:
     fig.write_image(out_path)
 
 
+def _symbol_progress() -> Progress:
+    return Progress(
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        MofNCompleteColumn(),
+        TimeElapsedColumn(),
+        console=Console(stderr=True),
+        disable=not sys.stderr.isatty(),
+    )
+
+
 def _resolve_output_path(args: argparse.Namespace) -> Path:
     """Backward-compatible helper for callers that need the normalized base path."""
     output_type = _normalize_output_type(args.type)
-    return _resolve_output_base(args, output_type=output_type)
+    return _resolve_output_base(args, output_type=output_type, symbol=_first_symbol_for_compat(args))
 
 
 def _resolve_max_gap_seconds(args: argparse.Namespace) -> float | None:
@@ -199,13 +260,46 @@ def _interval_to_minutes(interval: str) -> int | None:
     return None
 
 
-def _resolve_output_base(args: argparse.Namespace, *, output_type: OutputType) -> Path:
+def _resolve_symbols(args: argparse.Namespace) -> tuple[str, ...]:
+    raw_symbols = [*(args.symbols or ()), *(args.symbol_options or ())]
+    symbols: list[str] = []
+    seen: set[str] = set()
+    for raw_symbol in raw_symbols:
+        symbol = raw_symbol.strip().upper()
+        if not symbol:
+            continue
+        if symbol not in seen:
+            symbols.append(symbol)
+            seen.add(symbol)
+    if not symbols:
+        raise ValueError("at least one symbol is required")
+    return tuple(symbols)
+
+
+def _first_symbol_for_compat(args: argparse.Namespace) -> str:
+    if hasattr(args, "symbols") or hasattr(args, "symbol_options"):
+        return _resolve_symbols(args)[0]
+    return str(args.symbol).strip().upper()
+
+
+def _resolve_output_base(
+    args: argparse.Namespace,
+    *,
+    output_type: OutputType,
+    symbol: str | None = None,
+    multiple_symbols: bool = False,
+) -> Path:
+    resolved_symbol = symbol or _first_symbol_for_compat(args)
     if args.out is not None:
         out_path = args.out.expanduser()
+        if multiple_symbols:
+            if out_path.suffix:
+                raise ValueError("--out must be a directory path when plotting multiple symbols")
+            return out_path / f"fractal_{args.market}_{resolved_symbol}_{args.interval}.{output_type}"
         if out_path.suffix:
             return _with_output_suffix(out_path, output_type=output_type)
         return out_path.with_suffix(f".{output_type}")
-    file_name = f"fractal_{args.market}_{args.symbol}_{args.interval}.{output_type}"
+    file_name = f"fractal_{args.market}_{resolved_symbol}_{args.interval}.{output_type}"
     return EVENT_PLOTS_DIR / file_name
 
 
@@ -225,11 +319,12 @@ def _write_manifest(
     max_gap_seconds: float | None,
     label_config: FractalLabelConfig,
     selection: FractalSegmentSelection,
+    symbol: str,
     saved_segments: list[dict[str, Any]],
 ) -> None:
     payload = {
         "market": args.market,
-        "symbol": args.symbol,
+        "symbol": symbol,
         "interval": args.interval,
         "warehouse_path": str(args.warehouse_path),
         "output_type": output_type,
@@ -306,10 +401,11 @@ def _summary_payload(selection: FractalSegmentSelection) -> dict[str, int]:
     }
 
 
-def _print_summary(selection: FractalSegmentSelection) -> None:
+def _print_summary(selection: FractalSegmentSelection, *, symbol: str | None = None) -> None:
     summary = _summary_payload(selection)
     print(
         "summary "
+        f"{f'symbol={symbol} ' if symbol else ''}"
         f"raw_events={summary['raw_events']} "
         f"filtered_events={summary['filtered_events']} "
         f"candidate_segments={summary['candidate_segments']} "
@@ -319,9 +415,10 @@ def _print_summary(selection: FractalSegmentSelection) -> None:
     )
 
 
-def _print_no_segments_message(args: argparse.Namespace) -> None:
+def _print_no_segments_message(args: argparse.Namespace, *, symbol: str | None = None) -> None:
+    prefix = f"{symbol}: " if symbol else ""
     print(
-        "no segments saved: no high-to-low or low-to-high segment passed the current filters. "
+        f"{prefix}no segments saved: no high-to-low or low-to-high segment passed the current filters. "
         "Try lowering --min-followthrough-change-pct or relaxing --max-gap-minutes.",
         file=sys.stderr,
     )

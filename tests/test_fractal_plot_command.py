@@ -143,7 +143,50 @@ def test_plot_command_writes_one_svg_file_per_segment_by_default(monkeypatch, tm
     ]
     assert manifest["segment_filters"]["min_segment_change_pct"] == 0.0
     assert manifest["segment_filters"]["min_followthrough_change_pct"] == 5.0
-    assert manifest["include_followthrough"] is False
+    assert manifest["include_followthrough"] is True
+
+
+def test_plot_command_accepts_multiple_positional_symbols(monkeypatch, tmp_path):
+    selection = _fake_selection()
+    symbols: list[str] = []
+    figures: list[FakeFigure] = []
+
+    def fake_select(*args, **kwargs):
+        symbols.append(kwargs["symbol"])
+        return selection
+
+    def fake_plot(*args, **kwargs):
+        figure = FakeFigure()
+        figures.append(figure)
+        return figure
+
+    monkeypatch.setattr(plot_command, "select_fractal_event_segments_from_warehouse", fake_select)
+    monkeypatch.setattr(plot_command, "plot_fractal_events", fake_plot)
+    monkeypatch.setattr(plot_command, "EVENT_PLOTS_DIR", tmp_path / "event_plots")
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "plot_command",
+            "AAPL",
+            "NVDA",
+            "--interval",
+            "1d",
+            "--no-followthrough",
+        ],
+    )
+
+    plot_command.main()
+
+    base = tmp_path / "event_plots"
+    assert symbols == ["AAPL", "NVDA"]
+    assert len(figures) == 6
+    assert figures[0].saved == [("image", base / "fractal_NASDAQ_AAPL_1d_high_to_low_001.svg")]
+    assert figures[3].saved == [("image", base / "fractal_NASDAQ_NVDA_1d_high_to_low_001.svg")]
+    aapl_manifest = json.loads((base / "fractal_NASDAQ_AAPL_1d_manifest.json").read_text())
+    nvda_manifest = json.loads((base / "fractal_NASDAQ_NVDA_1d_manifest.json").read_text())
+    assert aapl_manifest["symbol"] == "AAPL"
+    assert nvda_manifest["symbol"] == "NVDA"
+    assert aapl_manifest["include_followthrough"] is False
 
 
 def test_plot_command_can_include_followthrough_region(monkeypatch, tmp_path):

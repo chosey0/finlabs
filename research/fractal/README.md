@@ -124,22 +124,22 @@ Candlestick 색상은 한국식 상승/하락 색상에 맞춰 고정되어 있�
 
 기존의 시작/끝 segment 변화량 필터는 `--min-segment-change-pct`로 여전히 사용할 수 있지만 기본값이 `0`이므로, 명시적으로 지정하지 않는 한 비활성 상태입니다.
 
-`--include-followthrough`를 지정하면 저장되는 plot이 segment 종료 이벤트에서 바로 다음 fractal 이벤트까지 확장됩니다. 이때 원래 segment 구간과 follow-through 구간은 서로 다른 배경색으로 표시됩니다.
+기본적으로 저장되는 plot은 segment 종료 이벤트에서 바로 다음 fractal 이벤트까지 확장됩니다. 이때 원래 segment 구간과 follow-through 구간은 서로 다른 배경색으로 표시됩니다. 이 확장을 끄려면 `--no-followthrough`를 지정합니다.
 
 Segment plot은 MA로 필터링된 지도학습 라벨이 아니라 event-level 필터링만 거친 raw high/low 이벤트를 사용합니다. 이렇게 이벤트 탐지와 segment 선택을 분리해 둡니다.
 
 ```bash
-uv run python -m research.fractal.plot_command \
-  --market NASDAQ \
-  --symbol AAPL \
-  --interval 1m \
-  --max-candles 300 \
-  --max-gap-minutes 5 \
-  --min-followthrough-change-pct 5 \
-  --include-followthrough \
-  --type svg \
-  --out research/fractal/event_plots/fractal_AAPL_1m \
-  --open
+uv run python -m research.fractal INTC NVDA TSLA
+```
+
+터미널에서 실행하면 입력한 ticker 수를 기준으로 진행률이 표시됩니다.
+
+필요한 옵션만 덮어 씁니다.
+
+```bash
+uv run python -m research.fractal RKLB --interval 1d --type html
+uv run python -m research.fractal INTC NVDA --min-followthrough-change-pct 3
+uv run python -m research.fractal TSLA --no-followthrough
 ```
 
 분봉이면 `--interval 1m`, 일봉이면 `--interval 1d`를 사용합니다. `--window`는 `21`처럼 홀수 값이어야 합니다. fractal 라벨이 중앙 정렬 window를 쓰기 때문에 짝수 window는 거부됩니다.
