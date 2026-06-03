@@ -203,3 +203,18 @@ python -m kis_cli query ohlcv --symbol AAPL --export ./exports/aapl.json
 ```
 
 `--export`는 `.csv` 또는 `.json` 확장자를 기준으로 파일 형식을 결정합니다.
+
+실제 candle 데이터가 저장된 symbol만 조회하려면 `candle-symbols`를 사용합니다.
+이 명령은 symbol master가 아니라 `ohlcv_bars`와 `overseas_minute_bars`에
+실제 row가 있는 symbol을 기준으로 집계합니다.
+
+```bash
+python -m kis_cli query candle-symbols
+python -m kis_cli query candle-symbols --source minutes --market NASDAQ
+python -m kis_cli query candle-symbols --source ohlcv --interval 1d
+python -m kis_cli query candle-symbols --source minutes --interval 1m --symbols-only
+python -m kis_cli query candle-symbols --format json
+```
+
+`--source`는 `all`, `ohlcv`, `minutes` 중 하나입니다. `--symbols-only`는
+fractal plot 같은 후속 명령에 넘기기 쉽게 distinct symbol만 공백으로 출력합니다.

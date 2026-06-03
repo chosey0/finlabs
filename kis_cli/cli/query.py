@@ -11,6 +11,9 @@ from rich.panel import Panel
 from rich.table import Table
 
 from kis_cli.cli.common import (
+    MARKET_STYLE,
+    SYMBOL_STYLE,
+    TABLE_HEADER_STYLE,
     cli_console,
     export_format,
     export_ohlcv_rows,
@@ -21,8 +24,10 @@ from kis_cli.cli.common import (
     write_overseas_minute_csv,
 )
 from kis_cli.services.query import (
+    CandleSymbolQueryResult,
     OhlcvQueryResult,
     OverseasMinuteQueryResult,
+    query_stored_candle_symbols,
     query_stored_daily_ohlcv,
     query_stored_overseas_minutes,
 )
@@ -186,6 +191,53 @@ def query_minutes(
     _print_minutes_query_result(result, output_format=normalized_format)
 
 
+@query_app.command("candle-symbols")
+def query_candle_symbols(
+    source: Annotated[
+        str,
+        typer.Option("--source", help="Candle table source: all, ohlcv, or minutes."),
+    ] = "all",
+    market: Annotated[
+        str | None,
+        typer.Option("--market", help="Restrict results to one market, for example NASDAQ."),
+    ] = None,
+    interval: Annotated[
+        str | None,
+        typer.Option("--interval", help="Restrict interval, for example 1d or 1m."),
+    ] = None,
+    symbols_only: Annotated[
+        bool,
+        typer.Option("--symbols-only", help="Print only distinct symbols separated by spaces."),
+    ] = False,
+    output_format: Annotated[
+        str,
+        typer.Option("--format", help="Output format: table, json, or csv."),
+    ] = "table",
+    db_path: Annotated[
+        Path | None,
+        typer.Option("--db-path", help="Use a custom DuckDB warehouse path."),
+    ] = None,
+) -> None:
+    """List symbols that have actual stored candle rows."""
+    normalized_format = normalize_output_format(output_format)
+    try:
+        with cli_console().status("Querying symbols with stored candle rows..."):
+            result = query_stored_candle_symbols(
+                source=source,
+                market=market,
+                interval=interval,
+                db_path=db_path,
+            )
+    except (FileNotFoundError, ValueError) as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+    if symbols_only:
+        typer.echo(" ".join(result.symbols))
+        return
+
+    _print_candle_symbol_query_result(result, output_format=normalized_format)
+
+
 def _print_ohlcv_query_result(result: OhlcvQueryResult, *, output_format: str) -> None:
     if output_format == "json":
         typer.echo(json.dumps(result.rows, ensure_ascii=False, indent=2))
@@ -198,9 +250,9 @@ def _print_ohlcv_query_result(result: OhlcvQueryResult, *, output_format: str) -
         cli_console().print("No OHLCV bars found")
         return
 
-    table = Table(box=box.SIMPLE_HEAVY)
-    table.add_column("Market", style="bold cyan")
-    table.add_column("Symbol", style="bold")
+    table = Table(box=box.SIMPLE_HEAVY, header_style=TABLE_HEADER_STYLE)
+    table.add_column("Market", style=MARKET_STYLE)
+    table.add_column("Symbol", style=SYMBOL_STYLE)
     table.add_column("Date")
     table.add_column("Open", justify="right")
     table.add_column("High", justify="right")
@@ -239,9 +291,9 @@ def _print_minutes_query_result(result: OverseasMinuteQueryResult, *, output_for
         cli_console().print("No overseas minute bars found")
         return
 
-    table = Table(box=box.SIMPLE_HEAVY)
-    table.add_column("Market", style="bold cyan")
-    table.add_column("Symbol", style="bold")
+    table = Table(box=box.SIMPLE_HEAVY, header_style=TABLE_HEADER_STYLE)
+    table.add_column("Market", style=MARKET_STYLE)
+    table.add_column("Symbol", style=SYMBOL_STYLE)
     table.add_column("Int(m)", justify="right")
     table.add_column("Local date")
     table.add_column("Local time")
@@ -266,6 +318,48 @@ def _print_minutes_query_result(result: OverseasMinuteQueryResult, *, output_for
             _format_optional(row.get("amount")),
         )
     cli_console().print(table)
+
+
+def _print_candle_symbol_query_result(result: CandleSymbolQueryResult, *, output_format: str) -> None:
+    if output_format == "json":
+        typer.echo(json.dumps(result.rows, ensure_ascii=False, indent=2))
+        return
+    if output_format == "csv":
+        _write_candle_symbol_csv(result.rows, sys.stdout)
+        return
+
+    if not result.rows:
+        cli_console().print("No symbols with stored candle rows found")
+        return
+
+    table = Table(box=box.SIMPLE_HEAVY, header_style=TABLE_HEADER_STYLE)
+    table.add_column("Source")
+    table.add_column("Market", style=MARKET_STYLE)
+    table.add_column("Symbol", style=SYMBOL_STYLE)
+    table.add_column("Interval")
+    table.add_column("Bars", justify="right")
+    table.add_column("First")
+    table.add_column("Last")
+    for row in result.rows:
+        table.add_row(
+            str(row["source"]),
+            str(row["market"]),
+            str(row["symbol"]),
+            str(row["interval"]),
+            str(row["bar_count"]),
+            str(row["first_timestamp"]),
+            str(row["last_timestamp"]),
+        )
+    cli_console().print(table)
+
+
+def _write_candle_symbol_csv(rows, output) -> None:
+    import csv
+
+    fieldnames = ["source", "market", "symbol", "interval", "bar_count", "first_timestamp", "last_timestamp"]
+    writer = csv.DictWriter(output, fieldnames=fieldnames, extrasaction="ignore")
+    writer.writeheader()
+    writer.writerows(rows)
 
 
 def _print_export_result(

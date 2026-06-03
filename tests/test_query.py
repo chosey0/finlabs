@@ -6,7 +6,11 @@ import json
 from typer.testing import CliRunner
 
 from kis_cli.cli.app import app
-from kis_cli.services.query import query_stored_daily_ohlcv, query_stored_overseas_minutes
+from kis_cli.services.query import (
+    query_stored_candle_symbols,
+    query_stored_daily_ohlcv,
+    query_stored_overseas_minutes,
+)
 from kis_cli.storage import connect, init_database
 from kis_cli.storage.repositories import insert_ohlcv_bar, insert_overseas_minute_bars
 
@@ -242,6 +246,7 @@ def test_query_ohlcv_command_exports_csv(tmp_path) -> None:
 
 def _minute_bar(
     *,
+    symbol: str = "AAPL",
     local_date: str,
     local_time: str,
     close: float,
@@ -250,7 +255,7 @@ def _minute_bar(
 ) -> dict[str, object]:
     return {
         "market": "NASDAQ",
-        "symbol": "AAPL",
+        "symbol": symbol,
         "interval_minutes": interval_minutes,
         "local_business_date": local_date,
         "local_date": local_date,
@@ -355,5 +360,129 @@ def test_query_minutes_command_exports_csv(tmp_path) -> None:
             "close": "105.5",
             "volume": "100",
             "amount": "10000.0",
+        }
+    ]
+
+
+def test_query_stored_candle_symbols_lists_symbols_with_actual_candle_rows(tmp_path) -> None:
+    db_path = tmp_path / "test-warehouse.duckdb"
+    init_database(db_path)
+    with connect(db_path) as connection:
+        insert_ohlcv_bar(
+            connection,
+            market="NASDAQ",
+            symbol="AAPL",
+            interval="1d",
+            timestamp="2026-05-07",
+            open=100.0,
+            high=110.0,
+            low=99.0,
+            close=105.0,
+            volume=1000,
+        )
+        insert_overseas_minute_bars(
+            connection,
+            [
+                _minute_bar(symbol="NVDA", local_date="2026-05-07", local_time="15:30:00", close=105.5),
+                _minute_bar(symbol="NVDA", local_date="2026-05-07", local_time="15:31:00", close=106.5),
+            ],
+        )
+
+    result = query_stored_candle_symbols(db_path=db_path)
+
+    assert [(row["source"], row["symbol"], row["interval"], row["bar_count"]) for row in result.rows] == [
+        ("ohlcv_bars", "AAPL", "1d", 1),
+        ("overseas_minute_bars", "NVDA", "1m", 2),
+    ]
+    assert result.symbols == ["AAPL", "NVDA"]
+
+
+def test_query_candle_symbols_command_outputs_symbols_only_for_minutes(tmp_path) -> None:
+    db_path = tmp_path / "test-warehouse.duckdb"
+    init_database(db_path)
+    with connect(db_path) as connection:
+        insert_ohlcv_bar(
+            connection,
+            market="NASDAQ",
+            symbol="AAPL",
+            interval="1d",
+            timestamp="2026-05-07",
+            open=100.0,
+            high=110.0,
+            low=99.0,
+            close=105.0,
+            volume=1000,
+        )
+        insert_overseas_minute_bars(
+            connection,
+            [
+                _minute_bar(symbol="INTC", local_date="2026-05-07", local_time="15:30:00", close=105.5),
+                _minute_bar(symbol="NVDA", local_date="2026-05-07", local_time="15:31:00", close=106.5),
+            ],
+        )
+
+    result = runner.invoke(
+        app,
+        [
+            "query",
+            "candle-symbols",
+            "--source",
+            "minutes",
+            "--market",
+            "NASDAQ",
+            "--symbols-only",
+            "--db-path",
+            str(db_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert result.output.strip() == "INTC NVDA"
+
+
+def test_query_candle_symbols_command_outputs_json_with_interval_filter(tmp_path) -> None:
+    db_path = tmp_path / "test-warehouse.duckdb"
+    init_database(db_path)
+    with connect(db_path) as connection:
+        insert_overseas_minute_bars(
+            connection,
+            [
+                _minute_bar(symbol="AAPL", local_date="2026-05-07", local_time="15:30:00", close=105.5),
+                _minute_bar(
+                    symbol="AAPL",
+                    local_date="2026-05-07",
+                    local_time="15:35:00",
+                    close=106.5,
+                    interval_minutes=5,
+                ),
+            ],
+        )
+
+    result = runner.invoke(
+        app,
+        [
+            "query",
+            "candle-symbols",
+            "--source",
+            "minutes",
+            "--interval",
+            "5m",
+            "--format",
+            "json",
+            "--db-path",
+            str(db_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert json.loads(result.output) == [
+        {
+            "source": "overseas_minute_bars",
+            "market": "NASDAQ",
+            "symbol": "AAPL",
+            "interval": "5m",
+            "bar_count": 1,
+            "first_timestamp": "2026-05-07 15:35:00",
+            "last_timestamp": "2026-05-07 15:35:00",
         }
     ]

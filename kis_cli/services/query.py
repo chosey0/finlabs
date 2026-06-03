@@ -8,9 +8,10 @@ from typing import Literal
 from kis import parse_minute_datetime
 
 from kis_cli.storage import connect
-from kis_cli.storage.repositories import query_daily_ohlcv_bars, query_overseas_minute_bars
+from kis_cli.storage.repositories import list_candle_symbols, query_daily_ohlcv_bars, query_overseas_minute_bars
 
 DAILY_INTERVAL = "1d"
+CANDLE_SYMBOL_SOURCES = {"all", "ohlcv", "minutes"}
 
 
 @dataclass(frozen=True)
@@ -70,6 +71,56 @@ class OverseasMinuteQueryResult:
     rows: list[dict[str, object]]
 
 
+@dataclass(frozen=True)
+class CandleSymbolQueryResult:
+    db_path: Path | None
+    source: str
+    market: str | None
+    interval: str | None
+    rows: list[dict[str, object]]
+
+    @property
+    def symbols(self) -> list[str]:
+        seen: set[str] = set()
+        values: list[str] = []
+        for row in self.rows:
+            symbol = str(row["symbol"])
+            if symbol not in seen:
+                values.append(symbol)
+                seen.add(symbol)
+        return values
+
+
+def query_stored_candle_symbols(
+    *,
+    source: str = "all",
+    market: str | None = None,
+    interval: str | None = None,
+    db_path: Path | None = None,
+) -> CandleSymbolQueryResult:
+    normalized_source = source.strip().lower()
+    if normalized_source not in CANDLE_SYMBOL_SOURCES:
+        raise ValueError("source must be one of: all, ohlcv, minutes")
+    normalized_market = market.strip().upper() if market else None
+    normalized_interval = _normalize_candle_symbol_interval(interval) if interval else None
+
+    with connect(db_path) as connection:
+        rows = list_candle_symbols(
+            connection,
+            source=normalized_source,
+            market=normalized_market,
+            interval=normalized_interval,
+        )
+
+    return CandleSymbolQueryResult(
+        db_path=db_path,
+        source=normalized_source,
+        market=normalized_market,
+        interval=normalized_interval,
+        rows=list(rows),
+    )
+
+
 def query_stored_overseas_minutes(
     *,
     symbol: str,
@@ -111,6 +162,19 @@ def query_stored_overseas_minutes(
         end=end.strip() if end else None,
         rows=list(rows),
     )
+
+
+def _normalize_candle_symbol_interval(interval: str) -> str:
+    text = interval.strip().lower()
+    if not text:
+        raise ValueError("interval must not be empty")
+    if text in {"d", "daily"}:
+        return "1d"
+    if text.endswith("m") and text[:-1].isdigit() and int(text[:-1]) > 0:
+        return f"{int(text[:-1])}m"
+    if text.isdigit() and int(text) > 0:
+        return f"{int(text)}m"
+    return text
 
 
 def classify_minute_query_bound(value: str) -> tuple[Literal["date", "ts"], str]:

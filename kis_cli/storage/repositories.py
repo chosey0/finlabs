@@ -629,6 +629,70 @@ def query_overseas_minute_bars(
     return _dict_rows(connection.execute(sql, params))
 
 
+def list_candle_symbols(
+    connection,
+    *,
+    source: str = "all",
+    market: str | None = None,
+    interval: str | None = None,
+) -> Sequence[dict[str, object]]:
+    """List symbols that have actual candle rows in OHLCV/minute tables."""
+    if source not in {"all", "ohlcv", "minutes"}:
+        raise ValueError("source must be one of: all, ohlcv, minutes")
+
+    queries: list[str] = []
+    params: list[object] = []
+    if source in {"all", "ohlcv"}:
+        where = "TRUE"
+        if market is not None:
+            where += " AND market = ?"
+            params.append(market)
+        if interval is not None:
+            where += " AND interval = ?"
+            params.append(interval)
+        queries.append(
+            f"""
+            SELECT
+                'ohlcv_bars' AS source,
+                market,
+                symbol,
+                interval,
+                COUNT(*) AS bar_count,
+                MIN(timestamp) AS first_timestamp,
+                MAX(timestamp) AS last_timestamp
+            FROM ohlcv_bars
+            WHERE {where}
+            GROUP BY market, symbol, interval
+            """
+        )
+    if source in {"all", "minutes"}:
+        where = "TRUE"
+        if market is not None:
+            where += " AND market = ?"
+            params.append(market)
+        if interval is not None:
+            where += " AND CAST(interval_minutes AS VARCHAR) || 'm' = ?"
+            params.append(interval)
+        queries.append(
+            f"""
+            SELECT
+                'overseas_minute_bars' AS source,
+                market,
+                symbol,
+                CAST(interval_minutes AS VARCHAR) || 'm' AS interval,
+                COUNT(*) AS bar_count,
+                MIN(local_date || ' ' || local_time) AS first_timestamp,
+                MAX(local_date || ' ' || local_time) AS last_timestamp
+            FROM overseas_minute_bars
+            WHERE {where}
+            GROUP BY market, symbol, interval_minutes
+            """
+        )
+
+    sql = "\nUNION ALL\n".join(queries) + "\nORDER BY market, symbol, source, interval"
+    return _dict_rows(connection.execute(sql, params))
+
+
 def insert_realtime_tick(
     connection,
     *,
