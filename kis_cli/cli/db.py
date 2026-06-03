@@ -8,7 +8,7 @@ from rich import box
 from rich.panel import Panel
 from rich.table import Table
 
-from kis_cli.cli.common import console, prompt_supabase_dsn_if_missing, result_table
+from kis_cli.cli.common import FIELD_STYLE, TABLE_HEADER_STYLE, console, prompt_supabase_dsn_if_missing, result_table
 from kis_cli.storage import (
     DatabaseCountsResult,
     DatabaseInitResult,
@@ -122,8 +122,8 @@ def _print_database_schema_result(result: DatabaseSchemaResult) -> None:
     console.print(Panel(summary, title="Database schema", border_style="green", box=box.ROUNDED))
 
     for table_schema in result.tables:
-        table = Table(box=box.SIMPLE_HEAVY)
-        table.add_column("Column", style="bold cyan")
+        table = Table(box=box.SIMPLE_HEAVY, header_style=TABLE_HEADER_STYLE)
+        table.add_column("Column", style=FIELD_STYLE)
         table.add_column("Type")
         table.add_column("Required")
         table.add_column("Primary key")
@@ -139,8 +139,8 @@ def _print_database_schema_result(result: DatabaseSchemaResult) -> None:
         console.print(Panel(table, title=f"Table: {table_schema.name}", box=box.ROUNDED))
 
         if table_schema.indexes:
-            indexes = Table(box=box.SIMPLE_HEAVY)
-            indexes.add_column("Index", style="bold cyan")
+            indexes = Table(box=box.SIMPLE_HEAVY, header_style=TABLE_HEADER_STYLE)
+            indexes.add_column("Index", style=FIELD_STYLE)
             indexes.add_column("Unique")
             indexes.add_column("Origin")
             indexes.add_column("Columns")
@@ -155,8 +155,8 @@ def _print_database_schema_result(result: DatabaseSchemaResult) -> None:
 
 
 def _print_database_counts_result(result: DatabaseCountsResult) -> None:
-    table = Table(box=box.SIMPLE_HEAVY)
-    table.add_column("Table", style="bold cyan")
+    table = Table(box=box.SIMPLE_HEAVY, header_style=TABLE_HEADER_STYLE)
+    table.add_column("Table", style=FIELD_STYLE)
     table.add_column("Rows", justify="right")
     for count in result.tables:
         table.add_row(count.name, str(count.rows))

@@ -10,7 +10,7 @@ from rich.table import Table
 
 from kis import KisAuthError
 
-from kis_cli.cli.common import console, result_table
+from kis_cli.cli.common import FIELD_STYLE, TABLE_HEADER_STYLE, console, result_table
 from kis_cli.services.auth import (
     AuthClearResult,
     AuthStatusResult,
@@ -127,8 +127,8 @@ def _print_auth_test_result(result: AuthTestResult) -> None:
 
 
 def _print_auth_status_result(results: list[AuthStatusResult]) -> None:
-    table = Table(box=box.SIMPLE_HEAVY)
-    table.add_column("Profile", style="bold cyan")
+    table = Table(box=box.SIMPLE_HEAVY, header_style=TABLE_HEADER_STYLE)
+    table.add_column("Profile", style=FIELD_STYLE)
     table.add_column("Environment")
     table.add_column("Token")
     table.add_column("Expires at")
@@ -147,8 +147,8 @@ def _print_auth_status_result(results: list[AuthStatusResult]) -> None:
 
 
 def _print_auth_clear_result(results: list[AuthClearResult]) -> None:
-    table = Table(box=box.SIMPLE_HEAVY)
-    table.add_column("Profile", style="bold cyan")
+    table = Table(box=box.SIMPLE_HEAVY, header_style=TABLE_HEADER_STYLE)
+    table.add_column("Profile", style=FIELD_STYLE)
     table.add_column("Environment")
     table.add_column("Removed")
     table.add_column("Cache")

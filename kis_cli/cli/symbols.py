@@ -10,7 +10,13 @@ from rich.table import Table
 
 from kis import ALL_SYMBOL_MARKETS
 
-from kis_cli.cli.common import console, prompt_supabase_dsn_if_missing
+from kis_cli.cli.common import (
+    MARKET_STYLE,
+    SYMBOL_STYLE,
+    TABLE_HEADER_STYLE,
+    console,
+    prompt_supabase_dsn_if_missing,
+)
 from kis_cli.services.symbols import download_and_store_symbols, search_stored_symbols
 
 symbols_app = typer.Typer(help="Download and query symbol masters.", no_args_is_help=True)
@@ -115,8 +121,8 @@ def symbols_search(
 
 
 def _print_symbols_download_result(results: list) -> None:
-    table = Table(box=box.SIMPLE_HEAVY)
-    table.add_column("Market", style="bold cyan")
+    table = Table(box=box.SIMPLE_HEAVY, header_style=TABLE_HEADER_STYLE)
+    table.add_column("Market", style=MARKET_STYLE)
     table.add_column("Downloaded", justify="right")
     table.add_column("Stored", justify="right")
     table.add_column("Store")
@@ -140,9 +146,9 @@ def _print_symbols_download_result(results: list) -> None:
 
 
 def _print_symbols_search_result(rows) -> None:
-    table = Table(box=box.SIMPLE_HEAVY)
-    table.add_column("Market", style="bold cyan")
-    table.add_column("Symbol", style="bold")
+    table = Table(box=box.SIMPLE_HEAVY, header_style=TABLE_HEADER_STYLE)
+    table.add_column("Market", style=MARKET_STYLE)
+    table.add_column("Symbol", style=SYMBOL_STYLE)
     table.add_column("Realtime symbol")
     table.add_column("Korean name")
     table.add_column("English name")

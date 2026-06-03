@@ -11,7 +11,7 @@ from rich import box
 from rich.panel import Panel
 from rich.table import Table
 
-from kis_cli.cli.common import console, result_table
+from kis_cli.cli.common import FIELD_STYLE, SYMBOL_STYLE, TABLE_HEADER_STYLE, console, result_table
 from kis_cli.storage.app_db import default_app_database_file
 from kis_cli.storage.app_repositories import IngestRunRecord, find_api_logs, find_ingest_runs
 
@@ -162,11 +162,11 @@ def _print_ingest_runs(
     summary.add_row("Rows", str(len(rows)))
     console.print(Panel(summary, title="Ingest runs", border_style="green", box=box.ROUNDED))
 
-    table = Table(box=box.SIMPLE_HEAVY)
+    table = Table(box=box.SIMPLE_HEAVY, header_style=TABLE_HEADER_STYLE)
     table.add_column("ID", justify="right")
-    table.add_column("Kind", style="bold cyan", no_wrap=True)
+    table.add_column("Kind", style=FIELD_STYLE, no_wrap=True)
     table.add_column("Market")
-    table.add_column("Symbol")
+    table.add_column("Symbol", style=SYMBOL_STYLE)
     table.add_column("Status")
     table.add_column("Rows", justify="right")
     table.add_column("Started at")
@@ -205,8 +205,8 @@ def _print_api_logs(
     summary.add_row("Rows", str(len(rows)))
     console.print(Panel(summary, title="API logs", border_style="green", box=box.ROUNDED))
 
-    table = Table(box=box.SIMPLE_HEAVY)
-    table.add_column("Endpoint", style="bold cyan", no_wrap=True)
+    table = Table(box=box.SIMPLE_HEAVY, header_style=TABLE_HEADER_STYLE)
+    table.add_column("Endpoint", style=FIELD_STYLE, no_wrap=True)
     table.add_column("TR ID", no_wrap=True)
     table.add_column("Status", justify="right")
     table.add_column("Requested at")

@@ -52,6 +52,10 @@ def cli_console() -> Console:
 
 console = Console()
 CANCEL_EXIT_CODE = 130
+TABLE_HEADER_STYLE = "bold white on blue"
+FIELD_STYLE = "bold blue"
+MARKET_STYLE = "bold blue"
+SYMBOL_STYLE = "bold magenta"
 
 
 def normalize_output_format(value: str) -> str:
@@ -142,7 +146,7 @@ def format_decimal(value) -> str:
 
 def result_table() -> Table:
     table = Table.grid(padding=(0, 2))
-    table.add_column("Field", style="bold cyan", no_wrap=True)
+    table.add_column("Field", style=FIELD_STYLE, no_wrap=True)
     table.add_column("Value", overflow="fold")
     return table
 
