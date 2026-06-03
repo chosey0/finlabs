@@ -15,8 +15,8 @@ class FractalLabel(IntEnum):
 class FractalLabelConfig:
     """Configuration for lagging fractal label generation.
 
-    A candle is a fractal high when its high is the unique maximum in an odd,
-    centered rolling window. It is a fractal low when its low is the unique
+    A candle is a fractal high when its close is the unique maximum in an odd,
+    centered rolling window. It is a fractal low when its close is the unique
     minimum in the same centered window. Near-flat windows are skipped.
 
     This deliberately uses future candles inside the label window. Use it for
@@ -56,6 +56,7 @@ def compute_fractal_events(
     short_ma: Sequence[float | None],
     long_ma: Sequence[float | None],
     *,
+    closes: Sequence[float] | None = None,
     config: FractalLabelConfig | None = None,
 ) -> tuple[FractalEvent, ...]:
     """Return labeled centered-window fractal events in chronological order.
@@ -67,12 +68,16 @@ def compute_fractal_events(
     cfg = config or FractalLabelConfig()
     cfg.validate()
     _validate_equal_lengths(highs, lows, short_ma, long_ma)
+    close_values = tuple(closes) if closes is not None else None
+    if close_values is not None:
+        _validate_equal_lengths(highs, lows, close_values, short_ma, long_ma)
 
-    raw_events = detect_fractal_events(highs, lows, config=cfg)
+    raw_events = detect_fractal_events(highs, lows, closes=close_values, config=cfg)
     return filter_fractal_events(
         raw_events,
         highs=highs,
         lows=lows,
+        closes=close_values,
         short_ma=short_ma,
         long_ma=long_ma,
         config=cfg,
@@ -85,17 +90,22 @@ def detect_fractal_events(
     highs: Sequence[float],
     lows: Sequence[float],
     *,
+    closes: Sequence[float] | None = None,
     config: FractalLabelConfig | None = None,
 ) -> tuple[FractalEvent, ...]:
     """Detect raw centered-window fractal high/low events.
 
     Raw detection deliberately does not apply MA filtering or near-flat window
-    filtering. A raw high is the unique maximum in the centered window. A raw
-    low is the unique minimum in the centered window.
+    filtering. When ``closes`` is provided, both high and low raw events are
+    detected from close prices: a raw high is the unique close maximum in the
+    centered window, and a raw low is the unique close minimum. Without
+    ``closes``, the legacy high/low wick-based behavior is preserved.
     """
     cfg = config or FractalLabelConfig()
     cfg.validate()
     _validate_equal_lengths(highs, lows)
+    if closes is not None:
+        _validate_equal_lengths(highs, lows, closes)
 
     half_window = cfg.window // 2
     events: list[FractalEvent] = []
@@ -103,27 +113,29 @@ def detect_fractal_events(
     for index in range(half_window, len(highs) - half_window):
         start = index - half_window
         stop = start + cfg.window
-        high_window = highs[start:stop]
-        low_window = lows[start:stop]
+        high_series = closes if closes is not None else highs
+        low_series = closes if closes is not None else lows
+        high_window = high_series[start:stop]
+        low_window = low_series[start:stop]
         max_high = max(high_window)
         min_low = min(low_window)
 
-        if highs[index] == max_high and _is_unique(high_window, highs[index]):
+        if high_series[index] == max_high and _is_unique(high_window, high_series[index]):
             events.append(
                 FractalEvent(
                     index=index,
                     label=FractalLabel.HIGH,
-                    price=float(highs[index]),
+                    price=float(high_series[index]),
                     kind="high",
                 )
             )
 
-        if lows[index] == min_low and _is_unique(low_window, lows[index]):
+        if low_series[index] == min_low and _is_unique(low_window, low_series[index]):
             events.append(
                 FractalEvent(
                     index=index,
                     label=FractalLabel.LOW,
-                    price=float(lows[index]),
+                    price=float(low_series[index]),
                     kind="low",
                 )
             )
@@ -136,6 +148,7 @@ def filter_fractal_events(
     *,
     highs: Sequence[float],
     lows: Sequence[float],
+    closes: Sequence[float] | None = None,
     short_ma: Sequence[float | None] | None = None,
     long_ma: Sequence[float | None] | None = None,
     config: FractalLabelConfig | None = None,
@@ -151,6 +164,8 @@ def filter_fractal_events(
     cfg = config or FractalLabelConfig()
     cfg.validate()
     _validate_equal_lengths(highs, lows)
+    if closes is not None:
+        _validate_equal_lengths(highs, lows, closes)
     if apply_ma_filter:
         if short_ma is None or long_ma is None:
             raise ValueError("short_ma and long_ma are required when apply_ma_filter=True")
@@ -160,7 +175,7 @@ def filter_fractal_events(
     for event in events:
         if event.index < 0 or event.index >= len(highs):
             raise ValueError(f"event index out of range: {event.index}")
-        if _is_near_flat_window(event.index, highs, lows, config=cfg):
+        if _is_near_flat_window(event.index, highs, lows, closes=closes, config=cfg):
             continue
 
         label = event.label
@@ -235,6 +250,7 @@ def _is_near_flat_window(
     highs: Sequence[float],
     lows: Sequence[float],
     *,
+    closes: Sequence[float] | None = None,
     config: FractalLabelConfig,
 ) -> bool:
     half_window = config.window // 2
@@ -242,11 +258,17 @@ def _is_near_flat_window(
     stop = start + config.window
     if start < 0 or stop > len(highs):
         return True
-    max_high = max(highs[start:stop])
-    min_low = min(lows[start:stop])
+    if closes is not None:
+        window = closes[start:stop]
+        max_high = max(window)
+        min_low = min(window)
+        reference = abs(float(closes[index]))
+    else:
+        max_high = max(highs[start:stop])
+        min_low = min(lows[start:stop])
+        reference = max(abs(float(highs[index])), abs(float(lows[index])))
     reference_price = max(
-        abs(float(highs[index])),
-        abs(float(lows[index])),
+        reference,
         1.0,
     )
     window_range_pct = (float(max_high) - float(min_low)) / reference_price

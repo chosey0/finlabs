@@ -17,6 +17,18 @@ from .labels import (
 )
 
 TransitionType = Literal["high_to_low", "low_to_high"]
+CANDLE_INCREASING_COLOR = "#FD7979"
+CANDLE_DECREASING_COLOR = "#8CA9FF"
+SEGMENT_BACKGROUND_COLOR = "rgba(253, 121, 121, 0.12)"
+FOLLOWTHROUGH_BACKGROUND_COLOR = "rgba(140, 169, 255, 0.16)"
+
+
+@dataclass(frozen=True, slots=True)
+class PlotBackgroundRegion:
+    start: str
+    end: str
+    color: str
+    label: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,6 +39,9 @@ class FractalEventSegment:
     end_event: FractalEvent
     candles: tuple[Candle, ...]
     events: tuple[FractalEvent, ...]
+    confirmation_event: FractalEvent | None = None
+    followthrough_candles: tuple[Candle, ...] = ()
+    followthrough_events: tuple[FractalEvent, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,6 +72,7 @@ def plot_fractal_events(
     title: str | None = None,
     max_candles: int | None = None,
     show_filtered: bool = False,
+    background_regions: Sequence[PlotBackgroundRegion] | None = None,
     figure: Any | None = None,
 ) -> Any:
     """Plot candles with confirmed fractal high/low event markers.
@@ -100,6 +116,10 @@ def plot_fractal_events(
             low=[candle.low for candle in visible_candles],
             close=[candle.close for candle in visible_candles],
             name="candles",
+            increasing_line_color=CANDLE_INCREASING_COLOR,
+            increasing_fillcolor=CANDLE_INCREASING_COLOR,
+            decreasing_line_color=CANDLE_DECREASING_COLOR,
+            decreasing_fillcolor=CANDLE_DECREASING_COLOR,
         )
     )
 
@@ -150,6 +170,8 @@ def plot_fractal_events(
             symbol="x",
         )
 
+    _add_background_regions(fig, background_regions or ())
+
     fig.update_layout(
         title=title or "Fractal events",
         xaxis_title="time",
@@ -198,7 +220,8 @@ def latest_fractal_event_segments(
     events: Sequence[FractalEvent] | None = None,
     label_config: FractalLabelConfig | None = None,
     max_gap_seconds: float | None = None,
-    min_segment_change_pct: float = 3.0,
+    min_segment_change_pct: float = 0.0,
+    min_followthrough_change_pct: float = 5.0,
 ) -> dict[TransitionType, FractalEventSegment]:
     """Return the latest high→low and low→high confirmed fractal segments."""
     segments: dict[TransitionType, FractalEventSegment] = {}
@@ -208,6 +231,7 @@ def latest_fractal_event_segments(
         label_config=label_config,
         max_gap_seconds=max_gap_seconds,
         min_segment_change_pct=min_segment_change_pct,
+        min_followthrough_change_pct=min_followthrough_change_pct,
     ):
         segments[segment.transition] = segment
     return segments
@@ -219,15 +243,17 @@ def fractal_event_segments(
     events: Sequence[FractalEvent] | None = None,
     label_config: FractalLabelConfig | None = None,
     max_gap_seconds: float | None = None,
-    min_segment_change_pct: float = 3.0,
+    min_segment_change_pct: float = 0.0,
+    min_followthrough_change_pct: float = 5.0,
 ) -> tuple[FractalEventSegment, ...]:
-    """Return all accepted adjacent high→low and low→high fractal segments."""
+    """Return all accepted high→low and low→high fractal segments."""
     return select_fractal_event_segments(
         candles,
         events=events,
         label_config=label_config,
         max_gap_seconds=max_gap_seconds,
         min_segment_change_pct=min_segment_change_pct,
+        min_followthrough_change_pct=min_followthrough_change_pct,
     ).segments
 
 
@@ -237,13 +263,26 @@ def select_fractal_event_segments(
     events: Sequence[FractalEvent] | None = None,
     label_config: FractalLabelConfig | None = None,
     max_gap_seconds: float | None = None,
-    min_segment_change_pct: float = 3.0,
+    min_segment_change_pct: float = 0.0,
+    min_followthrough_change_pct: float = 5.0,
 ) -> FractalSegmentSelection:
     """Build segments and return selection diagnostics.
 
     The returned sequence is chronological. ``ordinal`` is counted separately
     per transition type so callers can build stable filenames such as
     ``high_to_low_001`` and ``low_to_high_001``.
+
+    ``min_segment_change_pct`` is kept for compatibility, but is disabled by
+    default. The active confirmation rule is:
+
+    - high→low candidate: low-to-next-event move must be at least
+      ``min_followthrough_change_pct``.
+    - low→high candidate: high-to-next-event move must be at least
+      ``min_followthrough_change_pct``.
+
+    The next event may be either a high or a low. Same-direction event pairs are
+    therefore not saved as segments, but they are intentionally allowed to act
+    as the confirmation event for the preceding opposite-direction segment.
     """
     if not candles:
         raise ValueError("candles must not be empty")
@@ -251,6 +290,8 @@ def select_fractal_event_segments(
         raise ValueError("max_gap_seconds must be positive")
     if min_segment_change_pct < 0:
         raise ValueError("min_segment_change_pct must be non-negative")
+    if min_followthrough_change_pct < 0:
+        raise ValueError("min_followthrough_change_pct must be non-negative")
 
     cfg = label_config or FractalLabelConfig()
     cfg.validate()
@@ -263,20 +304,28 @@ def select_fractal_event_segments(
     candidate_segment_count = 0
     skipped_by_gap = 0
     skipped_by_change_pct = 0
-    for start_event, end_event in zip(confirmed_events, confirmed_events[1:], strict=False):
+    for index, (start_event, end_event) in enumerate(
+        zip(confirmed_events, confirmed_events[1:], strict=False)
+    ):
         transition = _transition_type(start_event, end_event)
         if transition is None:
             continue
+        if index + 2 >= len(confirmed_events):
+            continue
+        confirmation_event = confirmed_events[index + 2]
         candidate_segment_count += 1
         if _has_large_time_gap(
             ordered,
             start_index=min(start_event.index, end_event.index),
-            end_index=max(start_event.index, end_event.index),
+            end_index=max(start_event.index, end_event.index, confirmation_event.index),
             max_gap_seconds=max_gap_seconds,
         ):
             skipped_by_gap += 1
             continue
-        if _segment_change_pct(start_event, end_event) < min_segment_change_pct:
+        if min_segment_change_pct and _segment_change_pct(start_event, end_event) < min_segment_change_pct:
+            skipped_by_change_pct += 1
+            continue
+        if _segment_change_pct(end_event, confirmation_event) < min_followthrough_change_pct:
             skipped_by_change_pct += 1
             continue
         ordinal_by_transition[transition] += 1
@@ -288,6 +337,7 @@ def select_fractal_event_segments(
                 events=resolved_events,
                 start_event=start_event,
                 end_event=end_event,
+                confirmation_event=confirmation_event,
             )
         )
 
@@ -307,7 +357,8 @@ def plot_fractal_event_segments(
     events: Sequence[FractalEvent] | None = None,
     label_config: FractalLabelConfig | None = None,
     max_gap_seconds: float | None = None,
-    min_segment_change_pct: float = 3.0,
+    min_segment_change_pct: float = 0.0,
+    min_followthrough_change_pct: float = 5.0,
     show_filtered: bool = False,
 ) -> tuple[FractalSegmentFigure, ...]:
     """Plot every high→low and low→high confirmed fractal segment."""
@@ -317,6 +368,7 @@ def plot_fractal_event_segments(
         label_config=label_config,
         max_gap_seconds=max_gap_seconds,
         min_segment_change_pct=min_segment_change_pct,
+        min_followthrough_change_pct=min_followthrough_change_pct,
     )
     figures: list[FractalSegmentFigure] = []
     for segment in selection.segments:
@@ -342,7 +394,8 @@ def plot_fractal_event_segments_from_warehouse(
     limit: int | None = None,
     label_config: FractalLabelConfig | None = None,
     max_gap_seconds: float | None = None,
-    min_segment_change_pct: float = 3.0,
+    min_segment_change_pct: float = 0.0,
+    min_followthrough_change_pct: float = 5.0,
     show_filtered: bool = False,
 ) -> tuple[FractalSegmentFigure, ...]:
     """Load candles and plot every high→low and low→high fractal segment."""
@@ -358,6 +411,7 @@ def plot_fractal_event_segments_from_warehouse(
         label_config=label_config,
         max_gap_seconds=max_gap_seconds,
         min_segment_change_pct=min_segment_change_pct,
+        min_followthrough_change_pct=min_followthrough_change_pct,
         show_filtered=show_filtered,
     )
     if not figures:
@@ -374,7 +428,8 @@ def select_fractal_event_segments_from_warehouse(
     limit: int | None = None,
     label_config: FractalLabelConfig | None = None,
     max_gap_seconds: float | None = None,
-    min_segment_change_pct: float = 3.0,
+    min_segment_change_pct: float = 0.0,
+    min_followthrough_change_pct: float = 5.0,
 ) -> FractalSegmentSelection:
     """Load candles and select all accepted high→low and low→high segments."""
     candles = load_fractal_candles_from_warehouse(
@@ -389,6 +444,7 @@ def select_fractal_event_segments_from_warehouse(
         label_config=label_config,
         max_gap_seconds=max_gap_seconds,
         min_segment_change_pct=min_segment_change_pct,
+        min_followthrough_change_pct=min_followthrough_change_pct,
     )
 
 
@@ -398,7 +454,8 @@ def plot_latest_fractal_event_segments(
     events: Sequence[FractalEvent] | None = None,
     label_config: FractalLabelConfig | None = None,
     max_gap_seconds: float | None = None,
-    min_segment_change_pct: float = 3.0,
+    min_segment_change_pct: float = 0.0,
+    min_followthrough_change_pct: float = 5.0,
     show_filtered: bool = False,
 ) -> dict[TransitionType, Any]:
     """Plot one latest high→low segment and one latest low→high segment."""
@@ -408,6 +465,7 @@ def plot_latest_fractal_event_segments(
         label_config=label_config,
         max_gap_seconds=max_gap_seconds,
         min_segment_change_pct=min_segment_change_pct,
+        min_followthrough_change_pct=min_followthrough_change_pct,
     )
     figures: dict[TransitionType, Any] = {}
     for transition, segment in segments.items():
@@ -432,7 +490,8 @@ def plot_latest_fractal_event_segments_from_warehouse(
     limit: int | None = None,
     label_config: FractalLabelConfig | None = None,
     max_gap_seconds: float | None = None,
-    min_segment_change_pct: float = 3.0,
+    min_segment_change_pct: float = 0.0,
+    min_followthrough_change_pct: float = 5.0,
     show_filtered: bool = False,
 ) -> dict[TransitionType, Any]:
     """Load candles and plot the latest high→low and low→high segments."""
@@ -448,6 +507,7 @@ def plot_latest_fractal_event_segments_from_warehouse(
         label_config=label_config,
         max_gap_seconds=max_gap_seconds,
         min_segment_change_pct=min_segment_change_pct,
+        min_followthrough_change_pct=min_followthrough_change_pct,
         show_filtered=show_filtered,
     )
     if not figures:
@@ -461,17 +521,19 @@ def _compute_events(candles: Sequence[Candle], config: FractalLabelConfig) -> tu
     closes = tuple(candle.close for candle in candles)
     short_ma = moving_average(closes, config.short_ma)
     long_ma = moving_average(closes, config.long_ma)
-    return compute_fractal_events(highs, lows, short_ma, long_ma, config=config)
+    return compute_fractal_events(highs, lows, short_ma, long_ma, closes=closes, config=config)
 
 
 def _compute_segment_events(candles: Sequence[Candle], config: FractalLabelConfig) -> tuple[FractalEvent, ...]:
     highs = tuple(candle.high for candle in candles)
     lows = tuple(candle.low for candle in candles)
-    raw_events = detect_fractal_events(highs, lows, config=config)
+    closes = tuple(candle.close for candle in candles)
+    raw_events = detect_fractal_events(highs, lows, closes=closes, config=config)
     return filter_fractal_events(
         raw_events,
         highs=highs,
         lows=lows,
+        closes=closes,
         config=config,
         apply_ma_filter=False,
     )
@@ -488,11 +550,13 @@ def _resolve_segment_events(
 
     highs = tuple(candle.high for candle in candles)
     lows = tuple(candle.low for candle in candles)
-    raw_events = detect_fractal_events(highs, lows, config=config)
+    closes = tuple(candle.close for candle in candles)
+    raw_events = detect_fractal_events(highs, lows, closes=closes, config=config)
     filtered_events = filter_fractal_events(
         raw_events,
         highs=highs,
         lows=lows,
+        closes=closes,
         config=config,
         apply_ma_filter=False,
     )
@@ -553,10 +617,38 @@ def _make_segment(
     events: Sequence[FractalEvent],
     start_event: FractalEvent,
     end_event: FractalEvent,
+    confirmation_event: FractalEvent | None = None,
 ) -> FractalEventSegment:
     start_index = min(start_event.index, end_event.index)
     end_index = max(start_event.index, end_event.index)
-    segment_events = tuple(
+    segment_events = _events_for_range(events, start_index=start_index, end_index=end_index)
+    followthrough_candles: tuple[Candle, ...] = ()
+    followthrough_events: tuple[FractalEvent, ...] = ()
+    if confirmation_event is not None:
+        confirmation_index = max(end_event.index, confirmation_event.index)
+        followthrough_candles = tuple(candles[end_index : confirmation_index + 1])
+        followthrough_events = _events_for_range(events, start_index=end_index, end_index=confirmation_index)
+
+    return FractalEventSegment(
+        transition=transition,
+        ordinal=ordinal,
+        start_event=start_event,
+        end_event=end_event,
+        candles=tuple(candles[start_index : end_index + 1]),
+        events=segment_events,
+        confirmation_event=confirmation_event,
+        followthrough_candles=followthrough_candles,
+        followthrough_events=followthrough_events,
+    )
+
+
+def _events_for_range(
+    events: Sequence[FractalEvent],
+    *,
+    start_index: int,
+    end_index: int,
+) -> tuple[FractalEvent, ...]:
+    return tuple(
         FractalEvent(
             index=event.index - start_index,
             label=event.label,
@@ -566,14 +658,44 @@ def _make_segment(
         for event in events
         if start_index <= event.index <= end_index
     )
-    return FractalEventSegment(
-        transition=transition,
-        ordinal=ordinal,
-        start_event=start_event,
-        end_event=end_event,
-        candles=tuple(candles[start_index : end_index + 1]),
-        events=segment_events,
+
+
+def segment_plot_payload(
+    segment: FractalEventSegment,
+    *,
+    include_followthrough: bool = False,
+) -> tuple[tuple[Candle, ...], tuple[FractalEvent, ...], tuple[PlotBackgroundRegion, ...]]:
+    if not include_followthrough or not segment.confirmation_event or not segment.followthrough_candles:
+        return segment.candles, segment.events, ()
+
+    followthrough_offset = len(segment.candles) - 1
+    followthrough_events = tuple(
+        FractalEvent(
+            index=event.index + followthrough_offset,
+            label=event.label,
+            price=event.price,
+            kind=event.kind,
+        )
+        for event in segment.followthrough_events
+        if event.index > 0
     )
+    candles = segment.candles + segment.followthrough_candles[1:]
+    events = segment.events + followthrough_events
+    regions = (
+        PlotBackgroundRegion(
+            start=segment.candles[0].timestamp,
+            end=segment.candles[-1].timestamp,
+            color=SEGMENT_BACKGROUND_COLOR,
+            label="segment",
+        ),
+        PlotBackgroundRegion(
+            start=segment.followthrough_candles[0].timestamp,
+            end=segment.followthrough_candles[-1].timestamp,
+            color=FOLLOWTHROUGH_BACKGROUND_COLOR,
+            label="followthrough",
+        ),
+    )
+    return candles, events, regions
 
 
 def _add_event_trace(
@@ -603,6 +725,20 @@ def _add_event_trace(
             hoverinfo="text",
         )
     )
+
+
+def _add_background_regions(fig: Any, regions: Sequence[PlotBackgroundRegion]) -> None:
+    for region in regions:
+        fig.add_vrect(
+            x0=region.start,
+            x1=region.end,
+            fillcolor=region.color,
+            opacity=1.0,
+            line_width=0,
+            layer="below",
+            annotation_text=region.label,
+            annotation_position="top left",
+        )
 
 
 def _require_plotly():

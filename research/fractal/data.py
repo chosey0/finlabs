@@ -97,7 +97,7 @@ def build_fractal_samples(
     short_ma = moving_average(closes, cfg.short_ma)
     long_ma = moving_average(closes, cfg.long_ma)
 
-    events = compute_fractal_events(highs, lows, short_ma, long_ma, config=cfg)
+    events = compute_fractal_events(highs, lows, short_ma, long_ma, closes=closes, config=cfg)
     samples: list[FractalSample] = []
 
     for event in events:
