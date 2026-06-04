@@ -39,20 +39,23 @@ def load_candles(
     """Load OHLCV candles from a DuckDB warehouse in timestamp order.
 
     Supported intervals:
-    - daily: ``1d`` or ``daily`` from ``ohlcv_bars``
+    - daily family from ``ohlcv_bars``: ``1d`` (or ``daily``), ``1w``, ``1mo``
     - overseas minutes: ``1m``, ``5m``, ``1min``, ``5minutes`` from ``overseas_minute_bars``
     """
     _validate_limit(limit)
     normalized_interval = interval.strip().lower()
     minute_interval = _parse_minute_interval(normalized_interval)
+    # "daily" is an alias for "1d"; weekly/monthly are stored under their own
+    # interval strings by the collector (period W -> 1w, M -> 1mo).
+    daily_interval = "1d" if normalized_interval == "daily" else normalized_interval
 
     with duckdb.connect(str(Path(warehouse_path).expanduser()), read_only=True) as connection:
-        if normalized_interval in {"1d", "daily"}:
+        if daily_interval in {"1d", "1w", "1mo"}:
             rows = _load_daily_rows(
                 connection,
                 market=market,
                 symbol=symbol,
-                interval="1d",
+                interval=daily_interval,
                 limit=limit,
             )
         elif minute_interval is not None:
