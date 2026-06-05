@@ -2,7 +2,7 @@
 
 `kis_cli.cli`는 Typer 기반 CLI 진입점입니다. 루트 앱은 `app.py`에 있으며, 로컬 개발에서는 `python -m kis_cli`로 실행합니다.
 
-CLI 계층은 입력값 검증, 사용자 친화적 에러 변환, Rich 기반 출력, JSON/CSV 출력 및 파일 내보내기만 담당합니다. 인증, API 호출, 저장, 조회 같은 실제 작업은 `services/`, `core/`, `storage/`로 위임합니다.
+CLI 계층은 입력값 검증, 사용자 친화적 에러 변환, Rich 기반 출력, JSON/CSV 출력 및 파일 내보내기만 담당합니다. 인증, API 호출, 저장, 조회 같은 실제 작업은 현재 transitional 계층인 `services/`, `core/`, `storage/`로 위임합니다. 새 유즈케이스는 가능한 경우 `modules.orchestration`으로 위임하는 방향으로 작성합니다(자세한 내용은 상위 [README](../README.md) 참고). CLI 명령 인터페이스 자체는 변경하지 않습니다.
 
 ## 모듈 구조
 
@@ -150,10 +150,12 @@ KIS REST OHLCV 이력을 수집합니다. `--save`를 주면 DuckDB warehouse �
 
 ```bash
 python -m kis_cli chart daily --profile csq1404 --symbol AAPL --start 2026-04-01 --end 2026-05-07 --save
+python -m kis_cli chart daily --profile csq1404 --symbol AAPL --symbol NVDA --start 2026-04-01 --end 2026-05-07 --save
 python -m kis_cli chart daily --profile csq1404 --symbol AAPL --start 2026-04-01 --end 2026-05-07 --save --store supabase
 python -m kis_cli chart weekly --profile csq1404 --symbol 005930 --start 2025-01-01 --end 2026-05-07
 python -m kis_cli chart monthly --profile csq1404 --symbol 005930 --start 2025-01-01 --end 2026-05-07
 python -m kis_cli chart yearly --profile csq1404 --symbol 005930 --start 2020-01-01 --end 2026-05-07
+python -m kis_cli chart minutes --profile csq1404 --symbol AAPL --symbol NVDA --start "2026-01-01 00:00:00" --save
 ```
 
 `history`는 `--period`를 직접 지정하는 고급/범용 명령입니다.
@@ -163,7 +165,7 @@ python -m kis_cli chart history --profile csq1404 --symbol 005930 --period D --s
 python -m kis_cli chart history --profile csq1404 --symbol 005930 --period W --start 2025-01-01 --end 2026-05-07 --save
 ```
 
-`chart` 명령은 로컬 DuckDB `symbols` 테이블에서 `--symbol`의 market을 해석합니다. 먼저 `python -m kis_cli symbols download`로 대상 시장의 심볼을 저장해두세요. `--save --store supabase`는 Supabase/PostgreSQL `ohlcv_bars` 테이블에 저장합니다. `--end`를 생략하면 오늘 날짜까지 조회합니다.
+`chart` 명령은 로컬 DuckDB `symbols` 테이블에서 `--symbol`의 market을 해석합니다. 먼저 `python -m kis_cli symbols download`로 대상 시장의 심볼을 저장해두세요. `daily`와 `minutes`는 `--symbol`을 반복해서 여러 종목을 순차 수집할 수 있으며, ticker 수 기준 progress bar를 표시합니다. `--save --store supabase`는 Supabase/PostgreSQL `ohlcv_bars` 테이블에 저장합니다. `--end`를 생략하면 오늘 날짜까지 조회합니다.
 환경변수가 없고 `profiles.env`에도 값이 없으면 DSN을 비공개 입력으로 요청한 뒤 저장합니다.
 
 해외 개별주식의 일/주/월 OHLCV는 `[해외주식] 해외주식 기간별시세` API(`/dailyprice`)를 사용합니다. 1회 최대 100건을 기준으로, 응답에 다음 `KEYB`가 있으면 같은 `BYMD`에서 다음 묶음을 이어 조회하고, `KEYB`가 없더라도 100건이 꽉 찬 응답이면 가장 오래된 응답일 이전으로 `BYMD`를 이동해 이어 조회합니다. 해외 개별주식 연봉(`Y`)은 지원하지 않습니다.

@@ -2,13 +2,15 @@
 
 `kis_cli`는 FinLabs의 Korea Investment & Securities Open API 기반 시장 데이터 수집 CLI 애플리케이션입니다. 로컬 개발에서는 `python -m kis_cli`로 실행하며, 현재 구현 범위는 설정 관리, 인증 확인, 심볼 마스터 다운로드/검색, OHLCV 이력 수집/저장, 저장 데이터 조회/내보내기, 로컬 저장소 점검입니다.
 
+KIS API 트랜스포트·파싱은 `modules.brokers.kis` SDK가 담당하고, `kis_cli`는 그 SDK를 소비하는 애플리케이션 계층입니다. `kis_cli`는 점진적으로 `modules.orchestration` 위의 **thin transport / legacy app shell**로 이전하는 중이며, 아래 `services`·`core`·`storage`는 마이그레이션이 끝날 때까지 남아 있는 transitional 계층입니다. 사용자 CLI 실행 방식(`python -m kis_cli`)은 이 이전 과정에서도 그대로 유지됩니다.
+
 ## 패키지 구성
 
 - `cli/`: Typer 기반 CLI 명령 정의와 콘솔 출력/파일 export 처리
-- `config/`: 설정 파일 생성, 프로필 추가/수정/삭제, 환경변수/프로필 해석
-- `core/`: KIS REST 인증, REST 클라이언트, 현재가/OHLCV/심볼 마스터 파서
-- `services/`: CLI와 core/storage를 잇는 유즈케이스 계층
-- `storage/`: 앱 SQLite DB, DuckDB warehouse, 중복 방지 insert/upsert, 조회, 저장소 점검
+- `config/`: _(transitional)_ 설정 파일 생성, 프로필 추가/수정/삭제, 환경변수/프로필 해석 — `modules/config`로 이전 예정
+- `core/`: _(transitional)_ 레거시 동기 REST 클라이언트와 파일 기반 토큰 캐시 — 삭제 또는 `modules.brokers.kis` auth로 통합 예정
+- `services/`: _(transitional)_ CLI와 storage/SDK를 잇는 유즈케이스 계층 — 새 유즈케이스는 `modules.orchestration`에 작성
+- `storage/`: _(transitional)_ 앱 SQLite DB, DuckDB warehouse 쓰기, 중복 방지 insert/upsert, 저장소 점검 — warehouse **읽기**는 `modules.storage`/`modules.orchestration.query`로 이동 완료
 
 ## 주요 CLI 기능
 

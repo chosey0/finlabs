@@ -6,16 +6,19 @@ FinLabs는 증권사 Open API를 파이썬 SDK로 구현하고, 그 SDK를 기�
 
 현재는 한국투자증권(KIS) Open API의 **해외주식 데이터 조회 SDK**와 이를 사용하는 시장 데이터 수집 CLI에 집중하고 있습니다. 국내주식 데이터 조회는 향후 Kiwoom REST API 기반 SDK로 별도 구현할 예정입니다.
 
+코드베이스는 broker-agnostic한 계층형 코어(`modules/`)로 이전하는 중입니다. 사용자 진입점인 CLI 실행 방식(`python -m kis_cli`)은 그대로 유지되며, 변경되는 것은 내부 구조뿐입니다. 자세한 내부 아키텍처는 아래 [개발자용 아키텍처](#개발자용-아키텍처) 섹션을 참고하세요.
+
 ## 현재 구현 범위
 
 | 영역 | 상태 | 설명 |
 |------|------|------|
-| [`kis/`](./kis/README.md) | 구현 중 | 한국투자증권 Open API SDK. 해외주식 REST/WebSocket 데이터 조회, 인증, 엔드포인트 스펙, 파서, 모델 제공 |
+| [`modules/brokers/kis/`](./modules/brokers/kis/README.md) | 구현 중 | 한국투자증권 Open API SDK. 해외주식 REST/WebSocket 데이터 조회, 인증, 엔드포인트 스펙, 파서, 모델 제공 (이전 top-level `kis/`에서 이동 완료) |
 | [`kis_cli/`](./kis_cli/README.md) | 구현 중 | KIS SDK 기반 CLI. 해외 심볼 다운로드, OHLCV·분봉 수집, DuckDB 저장, 조회/내보내기 제공 |
-| Kiwoom SDK | 예정 | 국내주식 데이터 조회용 Kiwoom REST API SDK |
+| `modules/` 계층형 코어 | 이전 중 | broker-agnostic 코어. SDK·warehouse read는 이동 완료, collection·write·config·job queue는 마이그레이션 진행 중 |
+| `dashboard/` | 구현 중 | 수집된 시장 데이터를 읽어 시각화하는 Streamlit 대시보드 (`modules.orchestration`을 통해 조회) |
+| Kiwoom SDK / adapter | 예정 | 국내주식 데이터 조회용 Kiwoom REST API SDK와 broker adapter |
 | [`research/`](./research/README.md) | 초기 연구 | Candlestick VQ-VAE Tokenizer 중심의 시장 표현 학습 연구 |
 | 분석 패키지 | 예정 | 수집된 시장 데이터 기반 통계 분석, 팩터 연구, 백테스트 도구 |
-| 대시보드 패키지 | 예정 | 수집·분석된 시장 데이터를 시각화하는 인터랙티브 대시보드 |
 
 ## 설계 원칙
 
@@ -35,14 +38,52 @@ FinLabs는 증권사 Open API를 파이썬 SDK로 구현하고, 그 SDK를 기�
 
 ```text
 finlabs/
-├── kis/        # 한국투자증권 해외주식 데이터 조회 SDK
-├── kis_cli/    # KIS SDK 기반 시장 데이터 수집 CLI
+├── modules/    # broker-agnostic 계층형 코어 (target architecture)
+│   ├── brokers/kis/            # 한국투자증권 해외주식 데이터 조회 SDK (이전 top-level kis/)
+│   ├── adapters/brokers/kis/   # SDK ↔ canonical 모델 변환 adapter
+│   ├── orchestration/          # use case + warehouse-agnostic 조회
+│   ├── domain/                 # canonical 데이터 계약 (I/O 없음)
+│   └── storage/                # warehouse read repository
+├── kis_cli/    # KIS SDK 기반 시장 데이터 수집 CLI (collection·write·config·job은 아직 여기 잔존)
+├── dashboard/  # Streamlit 대시보드
 ├── research/   # 시장 표현 학습 및 tokenizer 연구
 ├── tests/      # 단위·통합 테스트
 ├── exports/    # CSV 샘플 출력물
 ├── AGENTS.md   # 에이전트 작업 가이드
 └── README.md   # 프로젝트 개요
 ```
+
+## 개발자용 아키텍처
+
+내부 코어는 broker-agnostic한 4계층 스택으로 이전하는 중입니다. 의존성은 위에서 아래로만 흐릅니다.
+
+```text
+kis_cli / dashboard / research        # thin transport
+        ↓
+modules.orchestration                 # use case, 저장·로깅 조율 (쓰기는 여기서만)
+        ↓
+modules.adapters.brokers.{broker}     and  modules.storage
+        ↓
+modules.brokers.{broker}              # 순수 SDK (FinLabs 의존성 없음)
+
+modules.domain   ← 모든 계층이 import 가능 (의존성 없음)
+```
+
+| 계층 | 위치 | 책임 |
+|------|------|------|
+| Broker SDK | `modules/brokers/{broker}/` | 순수 transport + 파싱. 다른 `modules.*` import 금지 |
+| Broker adapter | `modules/adapters/brokers/{broker}/` | SDK 모델 → canonical `domain` 모델 변환. 저장 안 함 |
+| Orchestration | `modules/orchestration/` | adapter + storage + 로깅을 하나의 작업으로 조율 |
+| Domain | `modules/domain/` | canonical dataclass/Protocol, I/O 없음 |
+| Storage (read) | `modules/storage/` | warehouse SQL의 단일 출처. 읽기는 `orchestration.query`를 통해서만 |
+
+마이그레이션 현황:
+
+- **이동 완료**: KIS SDK(`kis/` → `modules/brokers/kis/`), warehouse read query, KIS chart SDK 호출 일부의 adapter 이동
+- **진행 중 (아직 `kis_cli`에 잔존)**: collection orchestration, storage write, config, job queue
+- **예정**: 두 번째 broker(Kiwoom) SDK/adapter, `modules/config`로의 config 이전
+
+계층 간 금지된 의존성은 `tests/test_architecture_boundaries.py`가 강제합니다.
 
 ## 개발 상태
 

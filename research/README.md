@@ -344,7 +344,7 @@ research/notebooks/01_shape_quantization/summaries/SUMMARY.md
 
 ## Data Source
 
-입력 데이터는 기존 `kis_cli/storage/`의 DuckDB warehouse를 재사용합니다.
+입력 데이터는 기존 DuckDB warehouse를 재사용합니다. warehouse 읽기는 `modules.orchestration.query`(내부적으로 `modules.storage.repositories`)를 통하며, research 코드는 더 이상 `kis_cli.storage`에 직접 의존하지 않습니다.
 
 대상 테이블:
 

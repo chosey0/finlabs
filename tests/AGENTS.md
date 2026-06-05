@@ -10,10 +10,11 @@
 
 | File | Description |
 |------|-------------|
+| `test_architecture_boundaries.py` | AST-based layer-boundary guards — top-level `kis/` removal, broker SDK purity, adapter/storage forbidden edges, dashboard read-page isolation, job-core FastAPI/services isolation |
 | `test_auth.py` | `kis_cli.services.auth` — profile → token issuance/cache flow |
 | `test_chart.py` | OHLCV chart collection + DuckDB ingestion + pagination |
 | `test_config_init.py` | `python -m kis_cli config init`, profile add/update/delete |
-| `test_kis_package.py` | `kis` SDK surface verification — `KisClient`, models, parsers, `EndpointSpec` |
+| `test_kis_package.py` | `modules.brokers.kis` SDK surface verification — `KisClient`, models, parsers, `EndpointSpec` |
 | `test_logs.py` | `python -m kis_cli logs runs/api` — SQLite `app.db` query + filtering |
 | `test_price.py` | Current price service function (`get_current_price`) |
 | `test_query.py` | `python -m kis_cli query ohlcv/minutes` — DuckDB query + CSV/JSON output |
@@ -34,6 +35,12 @@
 - Isolate DB tests using the `tmp_path` fixture — never touch the user data directory (current legacy path `~/.local/share/kis-cli/`).
 - Validate WebSocket behavior at the parser unit level via `parse_realtime_frame()` — do not start a real connection.
 - When a new endpoint is added, add a `lookup("...")` verification in `test_kis_package.py`; follow the `test_stage5_facades.py` pattern for high-level methods.
+- `test_architecture_boundaries.py` enforces the layered architecture from [modules/AGENTS.md](../modules/AGENTS.md). Its purposes:
+  - keep the top-level `kis/` package removed (`test_legacy_kis_package_is_removed`) — import `modules.brokers.kis` instead;
+  - keep broker SDKs pure (`test_modules_broker_sdks_stay_standalone`) — `modules/brokers/*` may not import `adapters`/`orchestration`/`storage`/`domain`;
+  - forbid adapter/storage edges (`test_modules_adapters_do_not_persist_or_orchestrate`, `test_modules_storage_does_not_depend_on_higher_layers`) — adapters never persist/orchestrate, storage never depends on higher layers;
+  - keep transports isolated (dashboard read pages free of API clients; `kis_cli/server/jobs.py` free of FastAPI and `kis_cli.services`).
+  - When you add a new layer or forbidden edge, add the matching AST assertion here in the same PR.
 
 ### Testing Requirements
 - Run: `uv run python -m pytest` (or `pytest`)
@@ -49,8 +56,9 @@
 ## Dependencies
 
 ### Internal
-- `kis` — SDK core
-- `kis_cli` — FinLabs KIS CLI + storage
+- `modules` — layered core (`modules.brokers.kis` SDK, `modules.adapters`, `modules.orchestration`, `modules.domain`, `modules.storage`)
+- `kis_cli` — FinLabs KIS CLI + transitional storage/collection layers
+- `dashboard`, `research` — thin transports read via `modules.orchestration.query`
 
 ### External
 - `pytest>=9.0.3` (currently a runtime dep, planned move to `dev` extras)

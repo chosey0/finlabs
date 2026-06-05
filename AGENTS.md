@@ -2,7 +2,7 @@
 
 ## Project Summary
 
-`FinLabs` is a local-first Python project for brokerage Open API SDKs, market data collection, and future analysis/dashboard tooling. The current implementation focuses on Korea Investment & Securities Open API data collection.
+`FinLabs` is a local-first Python project for brokerage Open API SDKs, market data collection, and analysis/dashboard tooling. The current implementation focuses on Korea Investment & Securities (KIS) Open API data collection, with a second broker (Kiwoom) planned. The codebase is mid-migration toward a layered, broker-agnostic core under `modules/` (see [modules/AGENTS.md](modules/AGENTS.md)).
 
 Core goals:
 
@@ -14,13 +14,20 @@ Core goals:
 - Optionally mirror selected data to Supabase/PostgreSQL.
 - Preserve ordered ingestion, idempotency, and duplicate prevention.
 
-Do **not** add UI, dashboards, chart rendering, trading/order execution, strategies, backtesting, ML, news analysis, or new broker adapters unless explicitly requested for a concrete feature. The current `research/tokenizers/` work is explicitly requested and should remain isolated from SDK/CLI runtime paths.
+Do **not** add trading/order execution, strategies, backtesting, ML, or news analysis unless explicitly requested for a concrete feature. The existing Streamlit `dashboard/`, `research/` chart rendering, and the planned Kiwoom broker adapter are explicitly-requested tracks; build only against them when asked, and keep `research/` isolated from SDK/CLI runtime paths.
 
 ## Repository Layout
 
 ```text
-kis/       KIS SDK: REST/WebSocket clients, endpoint specs, parsers, models
-kis_cli/   Current FinLabs KIS CLI application and storage workflows
+modules/   Layered broker-agnostic core (target architecture):
+             brokers/{broker}        broker SDKs (KIS today; was top-level kis/)
+             adapters/brokers/{broker} SDK ↔ canonical-model translators
+             orchestration/          use cases + warehouse-agnostic reads
+             domain/                 canonical data contracts (no I/O)
+             storage/                warehouse read repositories
+kis_cli/   FinLabs KIS CLI app; still hosts legacy/transitional collection,
+             write-storage, config, and job-queue layers (migration in progress)
+dashboard/ Streamlit dashboard; thin transport reading via modules.orchestration
 research/  Experimental market representation and tokenizer research
 tests/     Focused unit tests
 exports/   CSV sample outputs
@@ -28,11 +35,15 @@ README.md  User-facing usage docs
 pyproject.toml project metadata and dependencies
 ```
 
+The top-level `kis/` SDK package has been moved to `modules/brokers/kis/`; there is no
+longer a top-level `kis/` directory.
+
 For detailed guidelines, see the AGENTS.md in each directory:
 
 | Directory | AGENTS.md |
 |-----------|-----------|
-| `kis/` | [kis/AGENTS.md](kis/AGENTS.md) |
+| `modules/` | [modules/AGENTS.md](modules/AGENTS.md) |
+| `modules/brokers/kis/` | [modules/brokers/kis/AGENTS.md](modules/brokers/kis/AGENTS.md) |
 | `kis_cli/` | [kis_cli/AGENTS.md](kis_cli/AGENTS.md) |
 | `research/` | [research/AGENTS.md](research/AGENTS.md) |
 | `tests/` | [tests/AGENTS.md](tests/AGENTS.md) |
@@ -42,12 +53,27 @@ Do not create `docs/`, `examples/`, `LICENSE`, or `CHANGELOG.md` unless explicit
 
 ## Architecture Rules
 
-- Keep CLI files thin; delegate business logic to `services/`.
-- Put direct KIS REST behavior in `core/`.
-- Put database schema, reads, writes, and duplicate prevention in `storage/`.
-- Keep path resolution in `kis_cli/config/paths.py`, not `utils/`.
+### Target layered architecture (`modules/`)
+
+New core code follows the layered stack in [modules/AGENTS.md](modules/AGENTS.md):
+
+- **Broker SDK** → `modules/brokers/{broker}/` — pure transport + parsing, zero FinLabs deps. Must not import any other `modules.*` sibling.
+- **Broker adapter** → `modules/adapters/brokers/{broker}/` — translates SDK models into canonical `domain` models; never persists.
+- **Use case / orchestration** → `modules/orchestration/` — coordinates adapter + storage + logging into one operation; the only layer that writes.
+- **Canonical domain** → `modules/domain/` — pure dataclasses/Protocols, no I/O, importable by every layer.
+- **Shared storage (read repository)** → `modules/storage/` — single source of warehouse SQL; CLI, dashboard, and research read through `modules.orchestration.query`.
+
+Dependencies point downward only and broker-specific knowledge (market codes, intervals, auth quirks) lives only in the adapter. Forbidden cross-layer edges are enforced by `tests/test_architecture_boundaries.py`.
+
+### Transitional layers (`kis_cli/`)
+
+`kis_cli/services`, `kis_cli/core`, and `kis_cli/storage` are **legacy/transitional**: collection orchestration, warehouse writes, config, and the job queue still live here while the migration into `modules/` is in progress. Do not treat them as the target home for new logic.
+
+- Keep CLI files thin; delegate to `services/` today, and prefer moving new use cases into `modules/orchestration` rather than growing `services/`.
+- Database schema, writes, and duplicate prevention currently live in `kis_cli/storage/`; warehouse **reads** have already moved to `modules/storage` + `modules/orchestration/query`.
+- Keep path resolution in `kis_cli/config/paths.py`, not `utils/` (config migration to `modules/config` is planned, not done).
 - Use Typer for CLI commands; do not add raw `argparse` commands.
-- Keep the current implementation KIS-specific until a concrete new broker adapter is requested.
+- A second broker (Kiwoom) is planned, so keep broker-specific code behind the adapter boundary rather than hard-coding KIS assumptions in shared layers.
 - Never store credentials, tokens, logs, database files, raw market dumps, or private configs in package source.
 
 ## CLI Contract
