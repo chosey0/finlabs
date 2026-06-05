@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from kis_cli.config.resolver import ResolvedProfile
-from kis import KisAuthError
+from modules.brokers.kis import KisAuthError
 from kis_cli.core.endpoints import base_url
 from kis_cli.core.token_cache import CachedToken
 

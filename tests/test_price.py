@@ -3,7 +3,7 @@ from __future__ import annotations
 from decimal import Decimal
 from pathlib import Path
 
-from kis import (
+from modules.brokers.kis import (
     CurrentPrice,
     KisAuthError,
     parse_overseas_current_price,

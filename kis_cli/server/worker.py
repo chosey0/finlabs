@@ -12,7 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from kis import mask_sensitive_message
+from modules.brokers.kis import mask_sensitive_message
 
 from kis_cli.server.jobs import Job, JobQueue
 from kis_cli.services.chart import collect_overseas_minutes, collect_ohlcv_history

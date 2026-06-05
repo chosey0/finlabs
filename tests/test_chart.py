@@ -7,18 +7,18 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from kis import (
+from modules.brokers.kis import (
     KisAuthError,
     OhlcvBar,
     parse_overseas_minute_bar,
     parse_overseas_ohlcv_bar,
 )
-from kis._internal.pacing import (
+from modules.brokers.kis._internal.pacing import (
     KIS_CONTINUATION_MIN_INTERVAL_SECONDS,
     ContinuationPacer,
 )
-from kis.endpoints.registry import lookup
-from kis.overseas.chart import OverseasChartAPI
+from modules.brokers.kis.endpoints.registry import lookup
+from modules.brokers.kis.overseas.chart import OverseasChartAPI
 
 from kis_cli.cli.app import app
 from kis_cli.services.chart import collect_ohlcv_history
@@ -170,8 +170,8 @@ def test_continuation_pacer_waits_between_request_starts(monkeypatch) -> None:
     async def fake_sleep(delay: float) -> None:
         sleep_delays.append(delay)
 
-    monkeypatch.setattr("kis._internal.pacing.monotonic", lambda: next(monotonic_values))
-    monkeypatch.setattr("kis._internal.pacing.asyncio.sleep", fake_sleep)
+    monkeypatch.setattr("modules.brokers.kis._internal.pacing.monotonic", lambda: next(monotonic_values))
+    monkeypatch.setattr("modules.brokers.kis._internal.pacing.asyncio.sleep", fake_sleep)
 
     pacer = ContinuationPacer()
 
@@ -525,6 +525,44 @@ def test_chart_daily_command_prints_summary(monkeypatch, tmp_path: Path) -> None
     assert "Stored" in result.output
 
 
+def test_chart_daily_command_accepts_repeated_symbols(monkeypatch, tmp_path: Path) -> None:
+    captured_symbols: list[str] = []
+
+    def fake_collect_ohlcv_history(**kwargs):
+        captured_symbols.append(kwargs["symbol"])
+        return __import__("kis_cli.services.chart").services.chart.ChartHistoryResult(
+            db_path=tmp_path / "chart.db",
+            market="NASDAQ",
+            symbol=kwargs["symbol"],
+            interval="1d",
+            fetched=1,
+            stored=1,
+            bars=[],
+        )
+
+    monkeypatch.setattr("kis_cli.cli.chart.collect_ohlcv_history", fake_collect_ohlcv_history)
+
+    result = runner.invoke(
+        app,
+        [
+            "chart",
+            "daily",
+            "--symbol",
+            "AAPL",
+            "--symbol",
+            "NVDA",
+            "--start",
+            "2026-05-01",
+            "--save",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert captured_symbols == ["AAPL", "NVDA"]
+    assert "AAPL" in result.output
+    assert "NVDA" in result.output
+
+
 def test_chart_minutes_command_uses_required_start_without_max_pages(monkeypatch, tmp_path: Path) -> None:
     captured: dict[str, object] = {}
 
@@ -564,6 +602,46 @@ def test_chart_minutes_command_uses_required_start_without_max_pages(monkeypatch
     assert "max_pages" not in captured
     assert "Overseas minute bars" in result.output
     assert "Fetched" in result.output
+
+
+def test_chart_minutes_command_accepts_repeated_symbols(monkeypatch, tmp_path: Path) -> None:
+    captured_symbols: list[str] = []
+
+    def fake_collect_overseas_minutes(**kwargs):
+        captured_symbols.append(kwargs["symbol"])
+        return __import__("kis_cli.services.chart").services.chart.OverseasMinuteResult(
+            db_path=tmp_path / "chart.db",
+            market="NASDAQ",
+            symbol=kwargs["symbol"],
+            interval_minutes=kwargs["interval_minutes"],
+            fetched=1,
+            stored=1,
+            bars=[],
+        )
+
+    monkeypatch.setattr("kis_cli.cli.chart.collect_overseas_minutes", fake_collect_overseas_minutes)
+
+    result = runner.invoke(
+        app,
+        [
+            "chart",
+            "minutes",
+            "--symbol",
+            "INTC",
+            "--symbol",
+            "NVDA",
+            "--start",
+            "2024-10-14 14:01:00",
+            "--interval-minutes",
+            "5",
+            "--save",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert captured_symbols == ["INTC", "NVDA"]
+    assert "INTC" in result.output
+    assert "NVDA" in result.output
 
 
 def test_chart_daily_supabase_prompts_for_missing_dsn(monkeypatch, tmp_path: Path) -> None:

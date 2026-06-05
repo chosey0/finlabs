@@ -1,31 +1,10 @@
 from __future__ import annotations
 
-import re
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
-import duckdb
-
-
-@dataclass(frozen=True, slots=True)
-class CandleBar:
-    market: str
-    symbol: str
-    interval: str
-    timestamp: str
-    open: float
-    high: float
-    low: float
-    close: float
-    volume: int
-
-
-@dataclass(frozen=True, slots=True)
-class CandleSplit:
-    train: tuple[CandleBar, ...]
-    val: tuple[CandleBar, ...]
-    test: tuple[CandleBar, ...]
+from modules.domain.market_data import CandleBar, CandleSplit
+from modules.orchestration.query import load_candles as _load_candles
 
 
 def load_candles(
@@ -36,42 +15,14 @@ def load_candles(
     interval: str,
     limit: int | None = None,
 ) -> tuple[CandleBar, ...]:
-    """Load OHLCV candles from a DuckDB warehouse in timestamp order.
-
-    Supported intervals:
-    - daily family from ``ohlcv_bars``: ``1d`` (or ``daily``), ``1w``, ``1mo``
-    - overseas minutes: ``1m``, ``5m``, ``1min``, ``5minutes`` from ``overseas_minute_bars``
-    """
-    _validate_limit(limit)
-    normalized_interval = interval.strip().lower()
-    minute_interval = _parse_minute_interval(normalized_interval)
-    # "daily" is an alias for "1d"; weekly/monthly are stored under their own
-    # interval strings by the collector (period W -> 1w, M -> 1mo).
-    daily_interval = "1d" if normalized_interval == "daily" else normalized_interval
-
-    with duckdb.connect(str(Path(warehouse_path).expanduser()), read_only=True) as connection:
-        if daily_interval in {"1d", "1w", "1mo"}:
-            rows = _load_daily_rows(
-                connection,
-                market=market,
-                symbol=symbol,
-                interval=daily_interval,
-                limit=limit,
-            )
-        elif minute_interval is not None:
-            rows = _load_minute_rows(
-                connection,
-                market=market,
-                symbol=symbol,
-                interval_minutes=minute_interval,
-                limit=limit,
-            )
-        else:
-            raise ValueError(
-                "unsupported interval. Use '1d' for daily candles or minute intervals like '1m', '5m', '1min'."
-            )
-
-    return tuple(rows)
+    """Load OHLCV candles through the FinLabs query orchestration layer."""
+    return _load_candles(
+        warehouse_path,
+        market=market,
+        symbol=symbol,
+        interval=interval,
+        limit=limit,
+    )
 
 
 def filter_by_min_volume(
@@ -139,98 +90,3 @@ def split_by_ratio(
         test=ordered[val_end_index:],
     )
 
-
-def _validate_limit(limit: int | None) -> None:
-    if limit is not None and limit <= 0:
-        raise ValueError("limit must be positive")
-
-
-def _parse_minute_interval(interval: str) -> int | None:
-    match = re.fullmatch(r"(\d+)\s*(m|min|minute|minutes)", interval)
-    if match is None:
-        return None
-    interval_minutes = int(match.group(1))
-    if interval_minutes <= 0:
-        raise ValueError("minute interval must be positive")
-    return interval_minutes
-
-
-def _load_daily_rows(
-    connection,
-    *,
-    market: str,
-    symbol: str,
-    interval: str,
-    limit: int | None,
-) -> tuple[CandleBar, ...]:
-    query = """
-        SELECT market, symbol, interval, timestamp, open, high, low, close, volume
-        FROM ohlcv_bars
-        WHERE market = ? AND lower(symbol) = lower(?) AND interval = ?
-        ORDER BY timestamp ASC
-    """
-    params: list[object] = [market, symbol, interval]
-    if limit is not None:
-        query += " LIMIT ?"
-        params.append(limit)
-
-    rows = connection.execute(query, params).fetchall()
-    return tuple(
-        CandleBar(
-            market=str(row[0]),
-            symbol=str(row[1]),
-            interval=str(row[2]),
-            timestamp=str(row[3]),
-            open=float(row[4]),
-            high=float(row[5]),
-            low=float(row[6]),
-            close=float(row[7]),
-            volume=int(row[8]),
-        )
-        for row in rows
-    )
-
-
-def _load_minute_rows(
-    connection,
-    *,
-    market: str,
-    symbol: str,
-    interval_minutes: int,
-    limit: int | None,
-) -> tuple[CandleBar, ...]:
-    query = """
-        SELECT
-            market,
-            symbol,
-            interval_minutes,
-            local_date || ' ' || local_time AS timestamp,
-            open,
-            high,
-            low,
-            close,
-            volume
-        FROM overseas_minute_bars
-        WHERE market = ? AND lower(symbol) = lower(?) AND interval_minutes = ?
-        ORDER BY local_date ASC, local_time ASC
-    """
-    params: list[object] = [market, symbol, interval_minutes]
-    if limit is not None:
-        query += " LIMIT ?"
-        params.append(limit)
-
-    rows = connection.execute(query, params).fetchall()
-    return tuple(
-        CandleBar(
-            market=str(row[0]),
-            symbol=str(row[1]),
-            interval=f"{int(row[2])}m",
-            timestamp=str(row[3]),
-            open=float(row[4]),
-            high=float(row[5]),
-            low=float(row[6]),
-            close=float(row[7]),
-            volume=int(row[8]),
-        )
-        for row in rows
-    )

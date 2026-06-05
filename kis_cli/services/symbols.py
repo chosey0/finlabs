@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from kis import download_symbol_master, normalize_market
+from modules.brokers.kis import download_symbol_master, normalize_market
 
 from kis_cli.storage import (
     connect,

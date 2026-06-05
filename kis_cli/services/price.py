@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from kis import CurrentPrice, KisClient, OVERSEAS_MARKET_CODES
+from modules.brokers.kis import CurrentPrice, KisClient, OVERSEAS_MARKET_CODES
 
 from kis_cli.services.auth import call_with_sdk_client
 

@@ -6,7 +6,7 @@ from decimal import Decimal
 
 import httpx
 
-from kis import (
+from modules.brokers.kis import (
     Credentials,
     KisClient,
     OrderBookSnapshot,
@@ -16,7 +16,7 @@ from kis import (
     lookup,
     mask_sensitive_message,
 )
-from kis.parsers.realtime import parse_realtime_frame, parse_trade_payload
+from modules.brokers.kis.parsers.realtime import parse_realtime_frame, parse_trade_payload
 
 
 def test_issue_websocket_approval_key_sync(monkeypatch) -> None:
@@ -29,7 +29,7 @@ def test_issue_websocket_approval_key_sync(monkeypatch) -> None:
         captured["timeout"] = timeout
         return httpx.Response(200, json={"approval_key": "approval-secret-key"})
 
-    monkeypatch.setattr("kis.auth.oauth.httpx.post", fake_post)
+    monkeypatch.setattr("modules.brokers.kis.auth.oauth.httpx.post", fake_post)
 
     key = issue_websocket_approval_key(
         environment="real",
@@ -107,8 +107,8 @@ def test_realtime_rejects_domestic_subscription(monkeypatch) -> None:
     async def fake_approval(self):
         return "approval-key"
 
-    monkeypatch.setattr("kis.realtime.connection.websockets.connect", fake_connect)
-    monkeypatch.setattr("kis.client.KisClient.ensure_approval_key", fake_approval)
+    monkeypatch.setattr("modules.brokers.kis.realtime.connection.websockets.connect", fake_connect)
+    monkeypatch.setattr("modules.brokers.kis.client.KisClient.ensure_approval_key", fake_approval)
 
     async def run() -> None:
         async with KisClient(credentials=Credentials("app-key", "app-secret")) as client:
@@ -133,8 +133,8 @@ def test_realtime_subscribe_unsubscribe_state_machine(monkeypatch) -> None:
     async def fake_approval(self):
         return "approval-key"
 
-    monkeypatch.setattr("kis.realtime.connection.websockets.connect", fake_connect)
-    monkeypatch.setattr("kis.client.KisClient.ensure_approval_key", fake_approval)
+    monkeypatch.setattr("modules.brokers.kis.realtime.connection.websockets.connect", fake_connect)
+    monkeypatch.setattr("modules.brokers.kis.client.KisClient.ensure_approval_key", fake_approval)
 
     async def run() -> None:
         async with KisClient(credentials=Credentials("app-key", "app-secret")) as client:
@@ -172,8 +172,8 @@ def test_realtime_quick_start_with_mock_websocket(monkeypatch) -> None:
     async def fake_approval(self):
         return "approval-key"
 
-    monkeypatch.setattr("kis.realtime.connection.websockets.connect", fake_connect)
-    monkeypatch.setattr("kis.client.KisClient.ensure_approval_key", fake_approval)
+    monkeypatch.setattr("modules.brokers.kis.realtime.connection.websockets.connect", fake_connect)
+    monkeypatch.setattr("modules.brokers.kis.client.KisClient.ensure_approval_key", fake_approval)
 
     async def run() -> RealtimeTick:
         async with KisClient(credentials=Credentials("app-key", "app-secret")) as client:
@@ -208,8 +208,8 @@ def test_realtime_received_seq_does_not_overlap_across_multi_record_frames(monke
     async def fake_approval(self):
         return "approval-key"
 
-    monkeypatch.setattr("kis.realtime.connection.websockets.connect", fake_connect)
-    monkeypatch.setattr("kis.client.KisClient.ensure_approval_key", fake_approval)
+    monkeypatch.setattr("modules.brokers.kis.realtime.connection.websockets.connect", fake_connect)
+    monkeypatch.setattr("modules.brokers.kis.client.KisClient.ensure_approval_key", fake_approval)
 
     async def run() -> list[int]:
         received_seq: list[int] = []

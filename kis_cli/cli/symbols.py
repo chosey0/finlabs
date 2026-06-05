@@ -8,7 +8,7 @@ from rich import box
 from rich.panel import Panel
 from rich.table import Table
 
-from kis import ALL_SYMBOL_MARKETS
+from modules.brokers.kis import ALL_SYMBOL_MARKETS
 
 from kis_cli.cli.common import (
     MARKET_STYLE,

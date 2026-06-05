@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Sequence
 
 import typer
 from rich import box
+from rich.console import Console
 from rich.panel import Panel
+from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, TimeElapsedColumn
 
-from kis import KisApiError, KisAuthError
+from modules.brokers.kis import KisApiError, KisAuthError
 
 from kis_cli.cli.common import console, prompt_supabase_dsn_if_missing, result_table
 from kis_cli.services.chart import (
@@ -85,8 +88,11 @@ def chart_history(
 
 @chart_app.command("daily")
 def chart_daily(
-    symbol: Annotated[str, typer.Option("--symbol", help="Stock symbol to collect.")],
     start: Annotated[str, typer.Option("--start", help="Start date.")],
+    symbol: Annotated[
+        list[str] | None,
+        typer.Option("--symbol", help="Stock symbol to collect. Repeat for multiple symbols."),
+    ] = None,
     end: Annotated[str | None, typer.Option("--end", help="End date. Defaults to today.")] = None,
     profile: Annotated[str | None, typer.Option("--profile")] = None,
     path: Annotated[Path | None, typer.Option("--path")] = None,
@@ -100,8 +106,8 @@ def chart_daily(
     max_pages: Annotated[int, typer.Option("--max-pages", min=1, max=1000)] = 100,
 ) -> None:
     """Collect daily OHLCV history."""
-    _run_chart_history(
-        symbol=symbol,
+    _run_chart_history_many(
+        symbols=_normalize_symbols(symbol),
         start=start,
         end=end,
         period="D",
@@ -213,11 +219,14 @@ def chart_yearly(
 
 @chart_app.command("minutes")
 def chart_minutes(
-    symbol: Annotated[str, typer.Option("--symbol", help="Overseas stock symbol to collect.")],
     start: Annotated[
         str,
         typer.Option("--start", help="Start local exchange datetime, for example '2024-10-14 14:01:00'."),
     ],
+    symbol: Annotated[
+        list[str] | None,
+        typer.Option("--symbol", help="Overseas stock symbol to collect. Repeat for multiple symbols."),
+    ] = None,
     interval_minutes: Annotated[
         int,
         typer.Option("--interval-minutes", min=1, help="Minute interval, for example 1 or 5."),
@@ -236,23 +245,89 @@ def chart_minutes(
     ] = True,
 ) -> None:
     """Collect overseas stock minute bars."""
-    try:
-        with console.status("Collecting overseas minute bars..."):
-            result = collect_overseas_minutes(
-                symbol=symbol,
+    symbols = _normalize_symbols(symbol)
+    with _symbol_progress() as progress:
+        task_id = progress.add_task("Collecting overseas minute bars", total=len(symbols))
+        for item in symbols:
+            progress.update(task_id, description=f"Collecting {item}")
+            _run_chart_minutes(
+                symbol=item,
                 start=start,
                 interval_minutes=interval_minutes,
                 count=count,
                 profile=profile,
-                config_path=path,
+                path=path,
                 db_path=db_path,
                 save=save,
                 include_previous=include_previous,
             )
+            progress.advance(task_id)
+        progress.update(task_id, description="Collecting overseas minute bars")
+
+
+def _run_chart_minutes(
+    *,
+    symbol: str,
+    start: str,
+    interval_minutes: int,
+    count: int,
+    profile: str | None,
+    path: Path | None,
+    db_path: Path | None,
+    save: bool,
+    include_previous: bool,
+) -> None:
+    try:
+        result = collect_overseas_minutes(
+            symbol=symbol,
+            start=start,
+            interval_minutes=interval_minutes,
+            count=count,
+            profile=profile,
+            config_path=path,
+            db_path=db_path,
+            save=save,
+            include_previous=include_previous,
+        )
     except (FileNotFoundError, ValueError, KisAuthError, KisApiError) as exc:
         raise typer.BadParameter(str(exc)) from exc
 
     _print_overseas_minute_result(result)
+
+
+def _run_chart_history_many(
+    *,
+    symbols: Sequence[str],
+    start: str,
+    end: str | None,
+    period: str,
+    profile: str | None,
+    path: Path | None,
+    db_path: Path | None,
+    save: bool,
+    store: str,
+    adjusted: bool,
+    max_pages: int,
+) -> None:
+    with _symbol_progress() as progress:
+        task_id = progress.add_task("Collecting OHLCV history", total=len(symbols))
+        for symbol in symbols:
+            progress.update(task_id, description=f"Collecting {symbol}")
+            _run_chart_history(
+                symbol=symbol,
+                start=start,
+                end=end,
+                period=period,
+                profile=profile,
+                path=path,
+                db_path=db_path,
+                save=save,
+                store=store,
+                adjusted=adjusted,
+                max_pages=max_pages,
+            )
+            progress.advance(task_id)
+        progress.update(task_id, description="Collecting OHLCV history")
 
 
 def _run_chart_history(
@@ -274,21 +349,20 @@ def _run_chart_history(
         raise typer.BadParameter("--db-path is only valid with --store duckdb")
     supabase_dsn = prompt_supabase_dsn_if_missing() if save and normalized_store == "supabase" else None
     try:
-        with console.status("Collecting OHLCV history..."):
-            result = collect_ohlcv_history(
-                symbol=symbol,
-                start=start,
-                end=end,
-                period=period,
-                profile=profile,
-                config_path=path,
-                db_path=db_path,
-                save=save,
-                store=normalized_store,
-                supabase_dsn=supabase_dsn,
-                adjusted=adjusted,
-                max_pages=max_pages,
-            )
+        result = collect_ohlcv_history(
+            symbol=symbol,
+            start=start,
+            end=end,
+            period=period,
+            profile=profile,
+            config_path=path,
+            db_path=db_path,
+            save=save,
+            store=normalized_store,
+            supabase_dsn=supabase_dsn,
+            adjusted=adjusted,
+            max_pages=max_pages,
+        )
     except (FileNotFoundError, ValueError, KisAuthError, KisApiError) as exc:
         raise typer.BadParameter(str(exc)) from exc
 
@@ -336,3 +410,29 @@ def _normalize_store(value: str) -> str:
     if normalized not in {"duckdb", "supabase"}:
         raise typer.BadParameter("store must be one of: duckdb, supabase")
     return normalized
+
+
+def _normalize_symbols(symbols: Sequence[str] | None) -> tuple[str, ...]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for raw_symbol in symbols or ():
+        symbol = raw_symbol.strip().upper()
+        if not symbol:
+            continue
+        if symbol not in seen:
+            normalized.append(symbol)
+            seen.add(symbol)
+    if not normalized:
+        raise typer.BadParameter("pass at least one --symbol")
+    return tuple(normalized)
+
+
+def _symbol_progress() -> Progress:
+    return Progress(
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        MofNCompleteColumn(),
+        TimeElapsedColumn(),
+        console=Console(stderr=True),
+        disable=not sys.stderr.isatty(),
+    )

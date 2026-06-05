@@ -5,7 +5,7 @@ from datetime import date, datetime, time
 from pathlib import Path
 from typing import Literal
 
-from kis import parse_minute_datetime
+from modules.brokers.kis import parse_minute_datetime
 
 from kis_cli.storage import connect
 from kis_cli.storage.repositories import list_candle_symbols, query_daily_ohlcv_bars, query_overseas_minute_bars

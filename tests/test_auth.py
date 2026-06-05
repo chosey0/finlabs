@@ -5,7 +5,7 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from kis import IssuedToken, KisAuthError, TokenRecord, mask_sensitive_message, parse_token_response
+from modules.brokers.kis import IssuedToken, KisAuthError, TokenRecord, mask_sensitive_message, parse_token_response
 
 from kis_cli.cli.app import app
 from kis_cli.config.profiles import ProfileCredentials, add_profile

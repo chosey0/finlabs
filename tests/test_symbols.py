@@ -5,7 +5,7 @@ from io import BytesIO
 
 from typer.testing import CliRunner
 
-from kis import SymbolRecord, parse_symbol_master
+from modules.brokers.kis import SymbolRecord, parse_symbol_master
 from kis_cli.cli.app import app
 from kis_cli.services.symbols import SymbolDownloadResult
 from kis_cli.storage import connect

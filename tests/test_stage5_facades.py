@@ -5,7 +5,7 @@ from decimal import Decimal
 
 import httpx
 
-from kis import (
+from modules.brokers.kis import (
     Credentials,
     KisClient,
     lookup,

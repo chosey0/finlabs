@@ -41,11 +41,11 @@ def load_fractal_candles_from_warehouse(
 ) -> tuple[Candle, ...]:
     """Load DuckDB OHLCV candles and convert them to fractal ``Candle`` objects.
 
-    This delegates the actual DuckDB query to ``research.tokenizers.data`` so
+    This delegates the actual DuckDB query to ``modules.orchestration.query`` so
     fractal research does not duplicate warehouse SQL. Returned candles preserve
-    the tokenizers loader's chronological order.
+    the canonical loader's chronological order.
     """
-    from research.tokenizers.data import load_candles
+    from modules.orchestration.query import load_candles
 
     bars = load_candles(
         warehouse_path,

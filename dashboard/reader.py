@@ -16,7 +16,9 @@ from typing import Callable, TypeVar
 
 import duckdb
 
-from research.tokenizers.data import CandleBar, load_candles
+from modules.domain.market_data import CandleBar
+from modules.orchestration.query import list_available_series as _list_available_series
+from modules.orchestration.query import load_candles
 
 T = TypeVar("T")
 
@@ -104,21 +106,6 @@ def list_available_series(
         return []
 
     def _query() -> list[dict[str, str]]:
-        with duckdb.connect(str(path), read_only=True) as connection:
-            tables = {row[0] for row in connection.execute("SHOW TABLES").fetchall()}
-            series: list[dict[str, str]] = []
-            if "ohlcv_bars" in tables:
-                rows = connection.execute(
-                    "SELECT DISTINCT market, symbol, interval FROM ohlcv_bars"
-                ).fetchall()
-                series.extend({"market": m, "symbol": s, "interval": i} for m, s, i in rows)
-            if "overseas_minute_bars" in tables:
-                rows = connection.execute(
-                    "SELECT DISTINCT market, symbol, interval_minutes FROM overseas_minute_bars"
-                ).fetchall()
-                series.extend(
-                    {"market": m, "symbol": s, "interval": f"{int(mins)}m"} for m, s, mins in rows
-                )
-            return sorted(series, key=lambda r: (r["symbol"], r["interval"]))
+        return _list_available_series(path)
 
     return with_lock_retry(_query, retries=retries, backoff=backoff, sleep=sleep)

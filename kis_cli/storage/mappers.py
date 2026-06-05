@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from kis import OhlcvBar, OverseasMinuteBar, SymbolRecord
+from modules.brokers.kis import OhlcvBar, OverseasMinuteBar, SymbolRecord
 
 from kis_cli.utils.time import now_kst_iso
 

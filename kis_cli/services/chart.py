@@ -6,8 +6,12 @@ from pathlib import Path
 
 import duckdb
 
-from kis import KisClient, OhlcvBar, OVERSEAS_MARKET_CODES, OverseasMinuteBar
-from kis.parsers import parse_date
+from modules.adapters.brokers.kis.market_data import (
+    fetch_ohlcv_history,
+    fetch_overseas_minutes,
+    period_to_interval,
+)
+from modules.brokers.kis import KisClient, OhlcvBar, OverseasMinuteBar
 
 from kis_cli.services.auth import call_with_sdk_client
 from kis_cli.storage import (
@@ -253,14 +257,7 @@ def resolve_symbol_market(symbol: str, *, db_path: Path | None = None) -> str:
 
 
 def _period_to_interval(period: str) -> str:
-    return {"D": "1d", "W": "1w", "M": "1mo", "Y": "1y"}[normalize_period(period)]
-
-
-def normalize_period(period: str) -> str:
-    normalized = period.strip().upper()
-    if normalized not in {"D", "W", "M", "Y"}:
-        raise ValueError("period must be one of: D, W, M, Y")
-    return normalized
+    return period_to_interval(period)
 
 
 async def _fetch_ohlcv_history_async(
@@ -274,22 +271,13 @@ async def _fetch_ohlcv_history_async(
     adjusted: bool,
     max_pages: int,
 ) -> list[OhlcvBar]:
-    normalized_period = normalize_period(period)
-    if parse_date(start) > parse_date(end):
-        raise ValueError("start must be on or before end")
-    if market in {"KOSPI", "KOSDAQ"}:
-        raise ValueError("KIS data queries support overseas stocks only; use Kiwoom for domestic stocks")
-    if market not in OVERSEAS_MARKET_CODES:
-        raise ValueError("KIS data queries support overseas stock markets only")
-    if normalized_period == "Y":
-        raise ValueError("overseas stock period price supports only D, W, or M")
-    return await client.overseas.chart.daily(
-        symbol,
-        exchange=OVERSEAS_MARKET_CODES[market].upper(),  # type: ignore[arg-type]
+    return await fetch_ohlcv_history(
+        client,
+        market=market,
+        symbol=symbol,
         start=start,
         end=end,
-        period=normalized_period,  # type: ignore[arg-type]
-        market=market,
+        period=period,
         adjusted=adjusted,
         max_pages=max_pages,
     )
@@ -305,16 +293,14 @@ async def _fetch_overseas_minutes_async(
     count: int,
     include_previous: bool,
 ) -> list[OverseasMinuteBar]:
-    if market not in OVERSEAS_MARKET_CODES:
-        raise ValueError("overseas minute bars support overseas stock markets only")
-    return await client.overseas.chart.minute(
-        symbol,
-        exchange=OVERSEAS_MARKET_CODES[market].upper(),  # type: ignore[arg-type]
+    return await fetch_overseas_minutes(
+        client,
+        market=market,
+        symbol=symbol,
         start=start,
         interval_minutes=interval_minutes,
         count=count,
         include_previous=include_previous,
-        market=market,
     )
 
 

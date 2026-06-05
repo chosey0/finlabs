@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Awaitable, Callable, TypeVar
 from zoneinfo import ZoneInfo
 
-from kis import (
+from modules.brokers.kis import (
     Credentials,
     IssuedToken,
     KisAuthError,

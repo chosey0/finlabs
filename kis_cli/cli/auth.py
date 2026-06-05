@@ -8,7 +8,7 @@ from rich import box
 from rich.panel import Panel
 from rich.table import Table
 
-from kis import KisAuthError
+from modules.brokers.kis import KisAuthError
 
 from kis_cli.cli.common import FIELD_STYLE, TABLE_HEADER_STYLE, console, result_table
 from kis_cli.services.auth import (

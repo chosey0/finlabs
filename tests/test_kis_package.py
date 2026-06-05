@@ -5,17 +5,17 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from io import BytesIO
 
-import kis
-from kis import (
+import modules.brokers.kis as kis
+from modules.brokers.kis import (
     Credentials,
     KisClient,
     KisConfigError,
     MockNotSupportedError,
     parse_overseas_minute_bar,
 )
-from kis.auth import IssuedToken, parse_token_response
-from kis.parsers import output_rows
-from kis.symbols import parse_symbol_master
+from modules.brokers.kis.auth import IssuedToken, parse_token_response
+from modules.brokers.kis.parsers import output_rows
+from modules.brokers.kis.symbols import parse_symbol_master
 
 
 def test_kis_package_exports_core_sdk_api() -> None:

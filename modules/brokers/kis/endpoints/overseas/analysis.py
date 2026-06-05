@@ -1,0 +1,170 @@
+"""EndpointSpec registry for `[해외주식] 시세분석.xlsx`."""
+
+from __future__ import annotations
+
+from modules.brokers.kis.endpoints.registry import EndpointSpec, register
+
+# Each tuple keeps the source workbook row API 명 in the final field.
+_SPECS = (
+    (
+        "overseas.analysis.price_fluct",
+        "/uapi/overseas-stock/v1/ranking/price-fluct",
+        "HHDFS76260000",
+        None,
+        ("AUTH", "EXCD", "GUBN", "MINX", "VOL_RANG"),
+        "해외주식 가격급등락",
+    ),
+    (
+        "overseas.analysis.volume_surge",
+        "/uapi/overseas-stock/v1/ranking/volume-surge",
+        "HHDFS76270000",
+        None,
+        ("AUTH", "EXCD", "MINX", "VOL_RANG"),
+        "해외주식 거래량급증",
+    ),
+    (
+        "overseas.analysis.volume_power",
+        "/uapi/overseas-stock/v1/ranking/volume-power",
+        "HHDFS76280000",
+        None,
+        ("AUTH", "EXCD", "NDAY", "VOL_RANG"),
+        "해외주식 매수체결강도상위",
+    ),
+    (
+        "overseas.analysis.updown_rate",
+        "/uapi/overseas-stock/v1/ranking/updown-rate",
+        "HHDFS76290000",
+        None,
+        ("AUTH", "EXCD", "GUBN", "NDAY", "VOL_RANG"),
+        "해외주식 상승율/하락율",
+    ),
+    (
+        "overseas.analysis.new_highlow",
+        "/uapi/overseas-stock/v1/ranking/new-highlow",
+        "HHDFS76300000",
+        None,
+        ("AUTH", "EXCD", "GUBN", "GUBN2", "NDAY", "VOL_RANG"),
+        "해외주식 신고/신저가",
+    ),
+    (
+        "overseas.analysis.trade_vol",
+        "/uapi/overseas-stock/v1/ranking/trade-vol",
+        "HHDFS76310010",
+        None,
+        ("AUTH", "EXCD", "NDAY", "PRC1", "PRC2", "VOL_RANG"),
+        "해외주식 거래량순위",
+    ),
+    (
+        "overseas.analysis.trade_pbmn",
+        "/uapi/overseas-stock/v1/ranking/trade-pbmn",
+        "HHDFS76320010",
+        None,
+        ("AUTH", "EXCD", "NDAY", "VOL_RANG", "PRC1", "PRC2"),
+        "해외주식 거래대금순위",
+    ),
+    (
+        "overseas.analysis.trade_growth",
+        "/uapi/overseas-stock/v1/ranking/trade-growth",
+        "HHDFS76330000",
+        None,
+        ("AUTH", "EXCD", "NDAY", "VOL_RANG"),
+        "해외주식 거래증가율순위",
+    ),
+    (
+        "overseas.analysis.trade_turnover",
+        "/uapi/overseas-stock/v1/ranking/trade-turnover",
+        "HHDFS76340000",
+        None,
+        ("AUTH", "EXCD", "NDAY", "VOL_RANG"),
+        "해외주식 거래회전율순위",
+    ),
+    (
+        "overseas.analysis.market_cap",
+        "/uapi/overseas-stock/v1/ranking/market-cap",
+        "HHDFS76350100",
+        None,
+        ("AUTH", "EXCD", "VOL_RANG"),
+        "해외주식 시가총액순위",
+    ),
+    (
+        "overseas.analysis.period_rights",
+        "/uapi/overseas-price/v1/quotations/period-rights",
+        "CTRGT011R",
+        None,
+        (
+            "INQR_DVSN_CD",
+            "INQR_STRT_DT",
+            "INQR_END_DT",
+            "PDNO",
+            "PRDT_TYPE_CD",
+            "CTX_AREA_NK50",
+            "CTX_AREA_FK50",
+        ),
+        "해외주식 기간별권리조회",
+    ),
+    (
+        "overseas.analysis.news_title",
+        "/uapi/overseas-price/v1/quotations/news-title",
+        "HHPSTH60100C1",
+        None,
+        ("CLASS_CD", "NATION_CD", "EXCHANGE_CD", "SYMB", "DATA_DT", "DATA_TM", "CTS"),
+        "해외뉴스종합(제목)",
+    ),
+    (
+        "overseas.analysis.rights_by_ice",
+        "/uapi/overseas-price/v1/quotations/rights-by-ice",
+        "HHDFS78330900",
+        None,
+        ("SYMB", "ST_YMD", "ED_YMD"),
+        "해외주식 권리종합",
+    ),
+    (
+        "overseas.analysis.colable_by_company",
+        "/uapi/overseas-price/v1/quotations/colable-by-company",
+        "CTLN4050R",
+        None,
+        (
+            "PRDT_TYPE_CD",
+            "INQR_STRT_DT",
+            "INQR_END_DT",
+            "INQR_DVSN",
+            "NATN_CD",
+            "INQR_SQN_DVSN",
+            "RT_DVSN_CD",
+            "RT",
+            "LOAN_PSBL_YN",
+            "CTX_AREA_FK100",
+            "CTX_AREA_NK100",
+        ),
+        "당사 해외주식담보대출 가능 종목",
+    ),
+    (
+        "overseas.analysis.brknews_title",
+        "/uapi/overseas-price/v1/quotations/brknews-title",
+        "FHKST01011801",
+        None,
+        (
+            "FID_COND_MRKT_CLS_CODE",
+            "FID_INPUT_ISCD",
+            "FID_TITL_CNTT",
+            "FID_INPUT_DATE_1",
+            "FID_INPUT_HOUR_1",
+            "FID_RANK_SORT_CLS_CODE",
+            "FID_INPUT_SRNO",
+            "FID_COND_SCR_DIV_CODE",
+        ),
+        "해외속보(제목)",
+    ),
+)
+
+for name, path, tr_id_real, tr_id_mock, required_params, _api_name in _SPECS:
+    register(
+        EndpointSpec(
+            name=name,
+            method="GET",
+            path=path,
+            tr_id_real=tr_id_real,
+            tr_id_mock=tr_id_mock,
+            required_params=required_params,
+        )
+    )
