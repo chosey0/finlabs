@@ -26,11 +26,11 @@ symbols_app = typer.Typer(help="Download and query symbol masters.", no_args_is_
 def symbols_download(
     market: Annotated[
         str | None,
-        typer.Option("--market", help="Market to download, for example NASDAQ, NYSE, or AMEX."),
+        typer.Option("--market", help="Market to download, for example KOSPI, KOSDAQ, or NASDAQ."),
     ] = None,
     all_markets: Annotated[
         bool,
-        typer.Option("--all", help="Download every supported overseas symbol master."),
+        typer.Option("--all", help="Download every supported domestic and overseas symbol master."),
     ] = False,
     db_path: Annotated[
         Path | None,

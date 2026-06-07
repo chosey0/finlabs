@@ -52,6 +52,7 @@ from modules.brokers.kis.parsers import (
 from modules.brokers.kis.realtime import RealtimeSession
 from modules.brokers.kis.symbols import (
     ALL_SYMBOL_MARKETS,
+    DOMESTIC_MARKET_FILES,
     OVERSEAS_MARKET_CODES,
     SUPPORTED_SYMBOL_MARKETS,
     download_symbol_master,
@@ -71,6 +72,7 @@ __all__ = [
     "ALL_SYMBOL_MARKETS",
     "Credentials",
     "CurrentPrice",
+    "DOMESTIC_MARKET_FILES",
     "EndpointSpec",
     "IssuedToken",
     "KisApiError",

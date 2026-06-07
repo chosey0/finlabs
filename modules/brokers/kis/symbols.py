@@ -1,7 +1,7 @@
-"""Symbol master download + parsing for KIS overseas listings.
+"""Symbol master download and parsing for KIS domestic and overseas listings.
 
-The KIS-provided overseas master files are static zip archives served over plain HTTPS:
-no auth header or KIS REST flow involved. We therefore route this domain to
+The KIS-provided master files are static zip archives served over HTTPS. No auth
+header or KIS REST flow is involved, so this domain is routed to
 `httpx.get` rather than the auth'd transport in `kis._internal.http`.
 """
 
@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import csv
 import zipfile
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from io import BytesIO, StringIO
 
@@ -29,8 +30,12 @@ OVERSEAS_MARKET_CODES = {
     "HANOI": "hnx",
     "HOCHIMINH": "hsx",
 }
-SUPPORTED_SYMBOL_MARKETS = set(OVERSEAS_MARKET_CODES)
-ALL_SYMBOL_MARKETS = tuple(OVERSEAS_MARKET_CODES)
+DOMESTIC_MARKET_FILES = {
+    "KOSPI": "kospi_code.mst",
+    "KOSDAQ": "kosdaq_code.mst",
+}
+SUPPORTED_SYMBOL_MARKETS = set(DOMESTIC_MARKET_FILES) | set(OVERSEAS_MARKET_CODES)
+ALL_SYMBOL_MARKETS = (*DOMESTIC_MARKET_FILES, *OVERSEAS_MARKET_CODES)
 
 MASTER_BASE_URL = "https://new.real.download.dws.co.kr/common/master"
 OVERSEAS_COLUMNS = [
@@ -59,6 +64,178 @@ OVERSEAS_COLUMNS = [
     "classification_code",
     "tick_size_type_detail",
 ]
+
+KOSPI_WIDTHS = (
+    2, 1, 4, 4, 4, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 9, 5, 5, 1, 1, 1, 2, 1, 1,
+    1, 2, 2, 2, 3, 1, 3, 12, 12, 8, 15, 21, 2, 7, 1, 1, 1, 1, 1, 9,
+    9, 9, 5, 9, 8, 9, 3, 1, 1, 1,
+)
+KOSPI_COLUMNS = (
+    "group_code",
+    "market_cap_size",
+    "index_industry_large",
+    "index_industry_medium",
+    "index_industry_small",
+    "manufacturing",
+    "low_liquidity",
+    "governance_index",
+    "kospi200_sector",
+    "kospi100",
+    "kospi50",
+    "krx",
+    "etp",
+    "elw_issuer",
+    "krx100",
+    "krx_auto",
+    "krx_semiconductor",
+    "krx_bio",
+    "krx_bank",
+    "spac",
+    "krx_energy_chemical",
+    "krx_steel",
+    "short_term_overheat",
+    "krx_media_telecom",
+    "krx_construction",
+    "non1",
+    "krx_securities",
+    "krx_shipbuilding",
+    "krx_insurance",
+    "krx_transport",
+    "sri",
+    "base_price",
+    "regular_lot_size",
+    "after_hours_lot_size",
+    "trading_halt",
+    "liquidation_trading",
+    "management_stock",
+    "market_warning",
+    "warning_notice",
+    "unfaithful_disclosure",
+    "backdoor_listing",
+    "lock_type",
+    "par_value_change",
+    "capital_increase_type",
+    "margin_rate",
+    "credit_order_available",
+    "credit_period",
+    "previous_volume",
+    "par_value",
+    "listed_date",
+    "listed_shares",
+    "capital",
+    "fiscal_month",
+    "ipo_price",
+    "preferred_stock",
+    "short_sale_overheat",
+    "abnormal_surge",
+    "krx300",
+    "kospi",
+    "revenue",
+    "operating_profit",
+    "ordinary_profit",
+    "net_income",
+    "roe",
+    "reference_month",
+    "market_cap",
+    "group_company_code",
+    "company_credit_limit_exceeded",
+    "collateral_loan_available",
+    "stock_lending_available",
+)
+KOSDAQ_WIDTHS = (
+    2, 1, 4, 4, 4, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 9, 5, 5, 1, 1, 1, 2, 1, 1, 1, 2, 2, 2, 3,
+    1, 3, 12, 12, 8, 15, 21, 2, 7, 1, 1, 1, 1, 9, 9, 9, 5, 9, 8, 9,
+    3, 1, 1, 1,
+)
+KOSDAQ_COLUMNS = (
+    "security_group_code",
+    "market_cap_size",
+    "index_industry_large",
+    "index_industry_medium",
+    "index_industry_small",
+    "venture",
+    "low_liquidity",
+    "krx",
+    "etp_product_type",
+    "krx100",
+    "krx_auto",
+    "krx_semiconductor",
+    "krx_bio",
+    "krx_bank",
+    "spac",
+    "krx_energy_chemical",
+    "krx_steel",
+    "short_term_overheat",
+    "krx_media_telecom",
+    "krx_construction",
+    "investment_caution",
+    "krx_securities",
+    "krx_shipbuilding",
+    "krx_insurance",
+    "krx_transport",
+    "kosdaq150",
+    "base_price",
+    "regular_lot_size",
+    "after_hours_lot_size",
+    "trading_halt",
+    "liquidation_trading",
+    "management_stock",
+    "market_warning",
+    "warning_notice",
+    "unfaithful_disclosure",
+    "backdoor_listing",
+    "lock_type",
+    "par_value_change",
+    "capital_increase_type",
+    "margin_rate",
+    "credit_order_available",
+    "credit_period",
+    "previous_volume",
+    "par_value",
+    "listed_date",
+    "listed_shares",
+    "capital",
+    "fiscal_month",
+    "ipo_price",
+    "preferred_stock",
+    "short_sale_overheat",
+    "abnormal_surge",
+    "krx300",
+    "revenue",
+    "operating_profit",
+    "ordinary_profit",
+    "net_income",
+    "roe",
+    "reference_month",
+    "market_cap",
+    "group_company_code",
+    "company_credit_limit_exceeded",
+    "collateral_loan_available",
+    "stock_lending_available",
+)
+
+
+@dataclass(frozen=True)
+class DomesticMasterSpec:
+    widths: tuple[int, ...]
+    columns: tuple[str, ...]
+    security_type_field: str
+
+
+DOMESTIC_MASTER_SPECS = {
+    "KOSPI": DomesticMasterSpec(
+        widths=KOSPI_WIDTHS,
+        columns=KOSPI_COLUMNS,
+        security_type_field="group_code",
+    ),
+    "KOSDAQ": DomesticMasterSpec(
+        widths=KOSDAQ_WIDTHS,
+        columns=KOSDAQ_COLUMNS,
+        security_type_field="security_group_code",
+    ),
+}
 
 
 def normalize_market(market: str) -> str:
@@ -94,7 +271,59 @@ def parse_symbol_master(market: str, zip_bytes: bytes) -> list[SymbolRecord]:
         member = _find_member(archive, _master_file_name(normalized))
         content = archive.read(member).decode("cp949")
 
+    if normalized in DOMESTIC_MASTER_SPECS:
+        return parse_domestic_master(normalized, content)
     return parse_overseas_master(normalized, content)
+
+
+def parse_domestic_master(market: str, content: str) -> list[SymbolRecord]:
+    normalized = normalize_market(market)
+    try:
+        spec = DOMESTIC_MASTER_SPECS[normalized]
+    except KeyError as exc:
+        raise ValueError(f"domestic master is not available for: {normalized}") from exc
+
+    suffix_width = sum(spec.widths)
+    records: list[SymbolRecord] = []
+    for line_number, line in enumerate(content.splitlines(), start=1):
+        if not line.strip():
+            continue
+        if len(line) < 21 + suffix_width:
+            raise ValueError(
+                f"invalid {normalized} master row {line_number}: "
+                f"expected at least {21 + suffix_width} characters, got {len(line)}"
+            )
+
+        prefix_end = len(line) - suffix_width
+        prefix = line[:prefix_end]
+        fixed_values = _parse_fixed_width(line[prefix_end:], spec)
+        raw = {
+            "short_code": prefix[:9].strip(),
+            "standard_code": prefix[9:21].strip(),
+            "korean_name": prefix[21:].strip(),
+            **fixed_values,
+        }
+        records.append(
+            SymbolRecord(
+                market=normalized,
+                symbol=raw["short_code"],
+                standard_code=raw["standard_code"],
+                realtime_symbol=raw["short_code"],
+                korean_name=raw["korean_name"],
+                security_type=raw[spec.security_type_field],
+                currency="KRW",
+                exchange_id=normalized,
+                exchange_code="KRX",
+                exchange_name="Korea Exchange",
+                country_code="KR",
+                listed_date=raw["listed_date"],
+                base_price=_to_int(raw["base_price"]),
+                lot_size=_to_int(raw["regular_lot_size"]),
+                raw_source=_master_file_name(normalized),
+                raw=raw,
+            )
+        )
+    return records
 
 
 def parse_overseas_master(market: str, content: str) -> list[SymbolRecord]:
@@ -134,11 +363,26 @@ def parse_overseas_master(market: str, content: str) -> list[SymbolRecord]:
 
 
 def _master_url(market: str) -> str:
+    if market in DOMESTIC_MARKET_FILES:
+        return f"{MASTER_BASE_URL}/{DOMESTIC_MARKET_FILES[market]}.zip"
     return f"{MASTER_BASE_URL}/{OVERSEAS_MARKET_CODES[market]}mst.cod.zip"
 
 
 def _master_file_name(market: str) -> str:
+    if market in DOMESTIC_MARKET_FILES:
+        return DOMESTIC_MARKET_FILES[market]
     return f"{OVERSEAS_MARKET_CODES[market]}mst.cod"
+
+
+def _parse_fixed_width(content: str, spec: DomesticMasterSpec) -> dict[str, str]:
+    if len(spec.widths) != len(spec.columns):
+        raise RuntimeError("domestic master widths and columns must have equal lengths")
+    raw: dict[str, str] = {}
+    offset = 0
+    for column, width in zip(spec.columns, spec.widths, strict=True):
+        raw[column] = content[offset : offset + width].strip()
+        offset += width
+    return raw
 
 
 def _download_zip(url: str, *, timeout_seconds: float) -> bytes:

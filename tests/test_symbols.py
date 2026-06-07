@@ -5,7 +5,13 @@ from io import BytesIO
 
 from typer.testing import CliRunner
 
-from modules.brokers.kis import SymbolRecord, parse_symbol_master
+import modules.brokers.kis.symbols as symbol_masters
+from modules.brokers.kis import (
+    SymbolRecord,
+    download_symbol_master,
+    normalize_market,
+    parse_symbol_master,
+)
 from kis_cli.cli.app import app
 from kis_cli.services.symbols import SymbolDownloadResult
 from kis_cli.storage import connect
@@ -13,6 +19,19 @@ from kis_cli.storage.app_repositories import list_api_logs, list_ingest_runs
 from kis_cli.storage.mappers import record_to_db_values
 
 runner = CliRunner()
+
+KOSPI_WIDTHS = (
+    2, 1, 4, 4, 4, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 9, 5, 5, 1, 1, 1, 2, 1, 1,
+    1, 2, 2, 2, 3, 1, 3, 12, 12, 8, 15, 21, 2, 7, 1, 1, 1, 1, 1, 9,
+    9, 9, 5, 9, 8, 9, 3, 1, 1, 1,
+)
+KOSDAQ_WIDTHS = (
+    2, 1, 4, 4, 4, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 9, 5, 5, 1, 1, 1, 2, 1, 1, 1, 2, 2, 2, 3,
+    1, 3, 12, 12, 8, 15, 21, 2, 7, 1, 1, 1, 1, 9, 9, 9, 5, 9, 8, 9,
+    3, 1, 1, 1,
+)
 
 
 def test_parse_overseas_master_normalizes_tab_separated_record() -> None:
@@ -60,6 +79,104 @@ def test_parse_overseas_master_normalizes_tab_separated_record() -> None:
     assert record.country_code == "US"
     assert record.base_price == 1234
     assert record.lot_size == 1
+
+
+def test_parse_kospi_master_normalizes_fixed_width_record() -> None:
+    row = _domestic_row(
+        symbol="005930",
+        standard_code="KR7005930003",
+        korean_name="삼성전자",
+        widths=KOSPI_WIDTHS,
+        values={
+            0: "01",
+            31: "72000",
+            32: "1",
+            34: "N",
+            36: "N",
+            49: "19750611",
+            54: "0",
+        },
+    )
+
+    records = parse_symbol_master("kospi", _zip_bytes("kospi_code.mst", row))
+
+    assert normalize_market("kospi") == "KOSPI"
+    assert len(records) == 1
+    record = records[0]
+    assert record.market == "KOSPI"
+    assert record.symbol == "005930"
+    assert record.standard_code == "KR7005930003"
+    assert record.realtime_symbol == "005930"
+    assert record.korean_name == "삼성전자"
+    assert record.security_type == "01"
+    assert record.currency == "KRW"
+    assert record.exchange_code == "KRX"
+    assert record.listed_date == "19750611"
+    assert record.base_price == 72000
+    assert record.lot_size == 1
+    assert record.raw_source == "kospi_code.mst"
+    assert record.raw["trading_halt"] == "N"
+    assert record.raw["preferred_stock"] == "0"
+
+
+def test_parse_kosdaq_master_normalizes_fixed_width_record() -> None:
+    row = _domestic_row(
+        symbol="035900",
+        standard_code="KR7035900000",
+        korean_name="JYP Ent.",
+        widths=KOSDAQ_WIDTHS,
+        values={
+            0: "01",
+            26: "42100",
+            27: "1",
+            29: "N",
+            31: "N",
+            44: "20171010",
+            49: "0",
+        },
+    )
+
+    records = parse_symbol_master("KOSDAQ", _zip_bytes("kosdaq_code.mst", row))
+
+    assert normalize_market("KOSDAQ") == "KOSDAQ"
+    assert len(records) == 1
+    record = records[0]
+    assert record.market == "KOSDAQ"
+    assert record.symbol == "035900"
+    assert record.korean_name == "JYP Ent."
+    assert record.listed_date == "20171010"
+    assert record.base_price == 42100
+    assert record.raw["trading_halt"] == "N"
+    assert record.raw["management_stock"] == "N"
+
+
+def test_download_domestic_master_uses_kis_archive_url(monkeypatch) -> None:
+    row = _domestic_row(
+        symbol="005930",
+        standard_code="KR7005930003",
+        korean_name="삼성전자",
+        widths=KOSPI_WIDTHS,
+        values={31: "72000", 32: "1", 49: "19750611"},
+    )
+    requested: list[str] = []
+
+    def fake_download_zip(url: str, *, timeout_seconds: float) -> bytes:
+        requested.append(url)
+        assert timeout_seconds == 7.5
+        return _zip_bytes("kospi_code.mst", row)
+
+    monkeypatch.setattr(symbol_masters, "_download_zip", fake_download_zip)
+
+    records = download_symbol_master(
+        "KOSPI",
+        downloaded_at="2026-06-07T12:00:00+09:00",
+        timeout_seconds=7.5,
+    )
+
+    assert requested == [
+        "https://new.real.download.dws.co.kr/common/master/kospi_code.mst.zip"
+    ]
+    assert records[0].downloaded_at == "2026-06-07T12:00:00+09:00"
 
 
 def test_symbol_record_defaults_downloaded_at_to_kst() -> None:
@@ -116,6 +233,51 @@ def test_symbols_download_command_upserts_downloaded_records(tmp_path, monkeypat
     assert runs[0].finished_at is not None
     assert api_logs[0]["endpoint"] == "symbol_master:NASDAQ"
     assert api_logs[0]["status_code"] == 200
+
+
+def test_symbols_download_command_stores_domestic_record(tmp_path, monkeypatch) -> None:
+    db_path = tmp_path / "symbols.db"
+
+    def fake_download_symbol_master(market: str, *, downloaded_at: str) -> list[SymbolRecord]:
+        return [
+            SymbolRecord(
+                market=market,
+                symbol="005930",
+                standard_code="KR7005930003",
+                realtime_symbol="005930",
+                korean_name="삼성전자",
+                currency="KRW",
+                exchange_code="KRX",
+                listed_date="19750611",
+                base_price=72000,
+                lot_size=1,
+                raw_source="kospi_code.mst",
+                raw={"symbol": "005930"},
+                downloaded_at=downloaded_at,
+            )
+        ]
+
+    monkeypatch.setattr(
+        "kis_cli.services.symbols.download_symbol_master",
+        fake_download_symbol_master,
+    )
+
+    result = runner.invoke(
+        app,
+        ["symbols", "download", "--market", "KOSPI", "--db-path", str(db_path)],
+    )
+    rerun = runner.invoke(
+        app,
+        ["symbols", "download", "--market", "KOSPI", "--db-path", str(db_path)],
+    )
+
+    assert result.exit_code == 0
+    assert rerun.exit_code == 0
+    with connect(db_path) as connection:
+        rows = connection.execute(
+            "SELECT market, symbol, standard_code, korean_name, currency FROM symbols"
+        ).fetchall()
+    assert rows == [("KOSPI", "005930", "KR7005930003", "삼성전자", "KRW")]
 
 
 def test_symbols_download_all_uses_progressbar(tmp_path, monkeypatch) -> None:
@@ -193,3 +355,18 @@ def _zip_bytes(name: str, content: str) -> bytes:
     with zipfile.ZipFile(buffer, mode="w") as archive:
         archive.writestr(name, content.encode("cp949"))
     return buffer.getvalue()
+
+
+def _domestic_row(
+    *,
+    symbol: str,
+    standard_code: str,
+    korean_name: str,
+    widths: tuple[int, ...],
+    values: dict[int, str],
+) -> str:
+    suffix = "".join(
+        values.get(index, "").ljust(width)[:width]
+        for index, width in enumerate(widths)
+    )
+    return f"{symbol:<9}{standard_code:<12}{korean_name}{suffix}\n"
