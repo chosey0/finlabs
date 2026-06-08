@@ -7,7 +7,12 @@ and transport layers decide whether and where fetched bars are stored.
 
 from __future__ import annotations
 
-from modules.brokers.kis import KisClient, OhlcvBar, OVERSEAS_MARKET_CODES, OverseasMinuteBar
+from modules.brokers.kis import (
+    KisClient,
+    OhlcvBar,
+    OVERSEAS_MARKET_CODES,
+    OverseasMinuteBar,
+)
 from modules.brokers.kis.parsers import parse_date
 
 
@@ -43,7 +48,9 @@ async def fetch_ohlcv_history(
     if parse_date(start) > parse_date(end):
         raise ValueError("start must be on or before end")
     if market in {"KOSPI", "KOSDAQ"}:
-        raise ValueError("KIS data queries support overseas stocks only; use Kiwoom for domestic stocks")
+        raise ValueError(
+            "KIS data queries support overseas stocks only; use Kiwoom for domestic stocks"
+        )
     if market not in OVERSEAS_MARKET_CODES:
         raise ValueError("KIS data queries support overseas stock markets only")
     if normalized_period == "Y":
