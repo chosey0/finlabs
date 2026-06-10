@@ -1,0 +1,5 @@
+news.duckdb
+news.duckdb.wal
+db/*.db
+db/*.db.wal
+db/*.db.lock
