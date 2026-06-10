@@ -1,0 +1,17 @@
+[Unit]
+Description=FinLabs news collection and analysis pipeline
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=finlabs
+WorkingDirectory=/opt/finlabs
+Environment=NEWS_DB_PATH=/var/lib/finlabs-news/news.duckdb
+EnvironmentFile=-/etc/finlabs-news.env
+ExecStart=/usr/bin/env uv run python -m modules.news.main collect-rss
+ExecStart=/usr/bin/env uv run python -m modules.news.main collect-articles --limit 100
+ExecStart=/usr/bin/env uv run python -m modules.news.main analyze --limit 100
+
+# Keep each scheduled run bounded so a stalled request cannot overlap indefinitely.
+TimeoutStartSec=45min

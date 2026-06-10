@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the FinLabs news pipeline every 30 minutes
+
+[Timer]
+OnCalendar=*:0/30
+Persistent=true
+RandomizedDelaySec=2min
+Unit=finlabs-news.service
+
+[Install]
+WantedBy=timers.target
