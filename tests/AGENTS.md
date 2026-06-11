@@ -1,66 +1,66 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-05-13 | Updated: 2026-05-14 -->
 
 # tests
 
 ## Purpose
-`pytest`-based unit and integration test suite. Tests do not depend on the real KIS API — they use mock transports and temporary DuckDB/SQLite files to verify success and failure paths. Add regression tests here whenever a new feature is introduced.
 
-## Key Files
+`pytest`-based unit and integration suite. Tests use mock transports and temporary
+databases; they never call a real brokerage API or touch user data directories.
 
-| File | Description |
-|------|-------------|
-| `test_architecture_boundaries.py` | AST-based layer-boundary guards — top-level `kis/` removal, broker SDK purity, adapter/storage forbidden edges, dashboard read-page isolation, job-core FastAPI/services isolation |
-| `test_auth.py` | `kis_cli.services.auth` — profile → token issuance/cache flow |
-| `test_chart.py` | OHLCV chart collection + DuckDB ingestion + pagination |
-| `test_config_init.py` | `python -m kis_cli config init`, profile add/update/delete |
-| `test_kis_package.py` | `modules.brokers.kis` SDK surface verification — `KisClient`, models, parsers, `EndpointSpec` |
-| `test_logs.py` | `python -m kis_cli logs runs/api` — SQLite `app.db` query + filtering |
-| `test_price.py` | Current price service function (`get_current_price`) |
-| `test_query.py` | `python -m kis_cli query ohlcv/minutes` — DuckDB query + CSV/JSON output |
-| `test_realtime.py` | Stage 4 WebSocket session — `RealtimeSession`, subscription messages, frame parsing |
-| `test_stage5_facades.py` | Stage 5 high-level methods — `overseas.analysis` |
-| `test_storage.py` | DuckDB/SQLite schema creation, unique constraints, ingestion ordering |
-| `test_supabase_schema.py` | Supabase DDL SQL generation + `PRIMARY KEY` verification |
-| `test_symbols.py` | Overseas symbol master parsing (TSV) + DuckDB upsert |
-| `test_tokenizer_features.py` | Candlestick 7D feature extraction and boundary cases |
-| `test_tokenizer_data.py` | Tokenizer DuckDB loading and time-based split behavior |
-| `test_tokenizer_shape_metrics.py` | Phase 1 token utilization and semantic consistency |
-| `test_tokenizer_sequence_metrics.py` | Phase 2 transition counts and transition report behavior |
+## Layout
+
+| Directory | Ownership |
+|-----------|-----------|
+| `architecture/` | Cross-package dependency and transport-boundary guards |
+| `brokers/kis/` | Pure KIS SDK surface, parser, facade, and realtime tests |
+| `brokers/toss/` | Pure Toss SDK tests |
+| `applications/kis_cli/` | KIS CLI, service, server, and transitional storage tests |
+| `applications/dashboard/` | Dashboard transport and retry behavior |
+| `research/fractal/` | Fractal research implementation tests |
+| `research/tokenizers/` | Tokenizer research implementation tests |
+
+Keep tests under the directory that owns the behavior. Only cross-package
+architecture and integration tests belong directly under shared central areas.
 
 ## For AI Agents
 
 ### Working In This Directory
-- **Never call the real KIS API.** Replace the transport with `httpx.MockTransport`, `unittest.mock.AsyncMock`, or `monkeypatch`.
-- Isolate DB tests using the `tmp_path` fixture — never touch the user data directory (current legacy path `~/.local/share/kis-cli/`).
-- Validate WebSocket behavior at the parser unit level via `parse_realtime_frame()` — do not start a real connection.
-- When a new endpoint is added, add a `lookup("...")` verification in `test_kis_package.py`; follow the `test_stage5_facades.py` pattern for high-level methods.
-- `test_architecture_boundaries.py` enforces the layered architecture from [modules/AGENTS.md](../modules/AGENTS.md). Its purposes:
-  - keep the top-level `kis/` package removed (`test_legacy_kis_package_is_removed`) — import `modules.brokers.kis` instead;
-  - keep broker SDKs pure (`test_modules_broker_sdks_stay_standalone`) — `modules/brokers/*` may not import `adapters`/`orchestration`/`storage`/`domain`;
-  - forbid adapter/storage edges (`test_modules_adapters_do_not_persist_or_orchestrate`, `test_modules_storage_does_not_depend_on_higher_layers`) — adapters never persist/orchestrate, storage never depends on higher layers;
-  - keep transports isolated (dashboard read pages free of API clients; `kis_cli/server/jobs.py` free of FastAPI and `kis_cli.services`).
-  - When you add a new layer or forbidden edge, add the matching AST assertion here in the same PR.
+
+- Never call the real KIS or Toss APIs. Use `httpx.MockTransport`, mock objects,
+  or `monkeypatch`.
+- Isolate database tests with `tmp_path`; never touch the user data directory.
+- Validate WebSocket behavior with injected frames and mock connections.
+- Add endpoint registry checks to `brokers/kis/test_kis_package.py` and follow
+  `brokers/kis/test_stage5_facades.py` for high-level KIS methods.
+- `architecture/test_boundaries.py` enforces the layered architecture from
+  [modules/AGENTS.md](../modules/AGENTS.md).
+- Add a matching AST assertion whenever a new forbidden dependency edge is
+  introduced.
 
 ### Testing Requirements
-- Run: `uv run python -m pytest` (or `pytest`)
+
+- Run: `uv run python -m pytest`
 - Lint: `uv run ruff check .`
-- New tests follow `def test_<behavior>():` or `async def test_<behavior>():` (requires `@pytest.mark.asyncio`) naming.
+- Name tests `test_<behavior>`; async tests require the repository's configured
+  async test support.
 
 ### Common Patterns
-- Mock transport: `httpx.MockTransport(handler)` → `httpx.AsyncClient(transport=mock_transport)` → `KisClient(..., http_client=client)`.
-- DuckDB unit tests: call `init_warehouse(tmp_path/'wh.duckdb')`, then call repository functions directly. Tokenizer data tests may create a minimal temporary `ohlcv_bars` table.
-- Frozen dataclass result comparison: `assert result == ExpectedResult(...)` — all service results are frozen and support equality.
-- Write response fixtures as inline dicts where possible — avoid separate JSON files (readability first).
+
+- Mock REST transport: `httpx.MockTransport(handler)`.
+- DuckDB tests create a minimal temporary database under `tmp_path`.
+- Prefer frozen dataclass equality assertions for result objects.
+- Keep small response fixtures inline when that improves readability.
 
 ## Dependencies
 
 ### Internal
-- `modules` — layered core (`modules.brokers.kis` SDK, `modules.adapters`, `modules.orchestration`, `modules.domain`, `modules.storage`)
-- `kis_cli` — FinLabs KIS CLI + transitional storage/collection layers
-- `dashboard`, `research` — thin transports read via `modules.orchestration.query`
+
+- `modules`: layered core and broker SDKs
+- `kis_cli`: transitional CLI, services, storage, and server
+- `dashboard`, `research`: application and experimental consumers
 
 ### External
-- `pytest>=9.0.3` (currently a runtime dep, planned move to `dev` extras)
+
+- `pytest>=9.0.3`
 
 <!-- MANUAL: Manually added notes below this line are preserved on regeneration -->

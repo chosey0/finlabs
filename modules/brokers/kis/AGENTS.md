@@ -40,7 +40,7 @@
 
 ### Testing Requirements
 - Never call the real KIS API. Replace the transport with `httpx.MockTransport` or a mock object.
-- Parser tests are in `tests/test_kis_package.py`; high-level methods in `tests/test_stage5_facades.py`; realtime in `tests/test_realtime.py`.
+- Parser tests are in `tests/brokers/kis/test_kis_package.py`; high-level methods in `tests/brokers/kis/test_stage5_facades.py`; realtime in `tests/brokers/kis/test_realtime.py`.
 - After registering a new endpoint, verify that `lookup("name")` succeeds and that `tr_id_for("real")` / `tr_id_for("mock")` behave as intended.
 
 ### Common Patterns

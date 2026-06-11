@@ -28,7 +28,7 @@ Collection of **frozen dataclass models** that represent normalized KIS API resp
 - Add new models to `__init__.py`'s `__all__` and export from the package root `modules/brokers/kis/__init__.py` as well.
 
 ### Testing Requirements
-- Models themselves contain almost no logic, so tests validate instantiation on the **parser** side (`tests/test_kis_package.py`, `tests/test_stage5_facades.py`).
+- Models themselves contain almost no logic, so tests validate instantiation on the **parser** side (`tests/brokers/kis/test_kis_package.py`, `tests/brokers/kis/test_stage5_facades.py`).
 - To maintain equality-based assertions, preserve frozen + hashability of all fields (dict fields are fine via `default_factory`).
 
 ### Common Patterns

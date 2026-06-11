@@ -24,7 +24,7 @@ Provides a KIS WebSocket realtime quote session. `RealtimeSession`, returned by 
 - Never log raw WebSocket messages — they may contain quote or account information.
 
 ### Testing Requirements
-- Do not start a real WebSocket connection. Validate at the parser unit level via `parse_realtime_frame()` (`tests/test_realtime.py`).
+- Do not start a real WebSocket connection. Validate at the parser unit level via `parse_realtime_frame()` (`tests/brokers/kis/test_realtime.py`).
 - Testing subscription message construction by comparing the result of `build_websocket_subscribe_message(...)` directly against an expected dict is the safest approach.
 - For reconnect/timeout logic, verify only that an explicit exception is raised (within the current implementation scope).
 

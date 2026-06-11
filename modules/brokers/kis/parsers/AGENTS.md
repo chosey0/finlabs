@@ -25,7 +25,7 @@ Converts KIS REST responses (JSON dicts) or WebSocket frames (pipe-delimited str
 
 ### Testing Requirements
 - Write response fixtures as inline dicts (avoid external JSON files).
-- Test realtime parsers by injecting string payloads directly — do not start a real WebSocket (`tests/test_realtime.py` pattern).
+- Test realtime parsers by injecting string payloads directly — do not start a real WebSocket (`tests/brokers/kis/test_realtime.py` pattern).
 - Regression cases must cover Decimal precision, sign handling, and date format.
 
 ### Common Patterns

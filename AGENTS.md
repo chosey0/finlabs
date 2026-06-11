@@ -63,7 +63,7 @@ New core code follows the layered stack in [modules/AGENTS.md](modules/AGENTS.md
 - **Canonical domain** → `modules/domain/` — pure dataclasses/Protocols, no I/O, importable by every layer.
 - **Shared storage (read repository)** → `modules/storage/` — single source of warehouse SQL; CLI, dashboard, and research read through `modules.orchestration.query`.
 
-Dependencies point downward only and broker-specific knowledge (market codes, intervals, auth quirks) lives only in the adapter. Forbidden cross-layer edges are enforced by `tests/test_architecture_boundaries.py`.
+Dependencies point downward only and broker-specific knowledge (market codes, intervals, auth quirks) lives only in the adapter. Forbidden cross-layer edges are enforced by `tests/architecture/test_boundaries.py`.
 
 ### Transitional layers (`kis_cli/`)
 

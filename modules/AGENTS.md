@@ -176,7 +176,7 @@ modules.domain  ← importable by every layer (depends on nothing)
 modules.config  ← used by orchestration (and below only via injection)
 ```
 
-Forbidden edges (enforce with `tests/test_architecture_boundaries.py`):
+Forbidden edges (enforce with `tests/architecture/test_boundaries.py`):
 
 | Forbidden | Why |
 |-----------|-----|
@@ -221,7 +221,7 @@ only call `modules.orchestration`.
 - Orchestration functions return frozen result DTOs from `orchestration/types.py` (e.g. `CollectionResult`), matching the existing `@dataclass(frozen=True)` convention.
 
 ### Testing Requirements
-- Each forbidden edge in the table above must have an AST-based assertion in `tests/test_architecture_boundaries.py`. Add the rule in the same PR that creates the layer.
+- Each forbidden edge in the table above must have an AST-based assertion in `tests/architecture/test_boundaries.py`. Add the rule in the same PR that creates the layer.
 - Adapters are tested with mock SDK responses → assert canonical model output. No network.
 - Orchestration is tested with a fake adapter (injected via `registry`) + temp DuckDB/SQLite, asserting save + ingest-log + result DTO.
 - The `asyncio.run` / single-writer constraints from `orchestration/jobs.py` still hold: collection runs on the worker thread, never inside a request coroutine.

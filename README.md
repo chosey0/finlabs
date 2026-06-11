@@ -83,7 +83,7 @@ modules.domain   ← 모든 계층이 import 가능 (의존성 없음)
 - **진행 중 (아직 `kis_cli`에 잔존)**: collection orchestration, storage write, config, job queue
 - **예정**: 두 번째 broker(Kiwoom) SDK/adapter, `modules/config`로의 config 이전
 
-계층 간 금지된 의존성은 `tests/test_architecture_boundaries.py`가 강제합니다.
+계층 간 금지된 의존성은 `tests/architecture/test_boundaries.py`가 강제합니다.
 
 ## 개발 상태
 

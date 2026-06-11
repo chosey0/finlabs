@@ -27,7 +27,7 @@ Collection of **EndpointSpec registration modules** for overseas exchange (NAS/N
 - For endpoints like `overseas.chart.minute` where pagination depends on the response body (`output1.next`) rather than the `tr_cont` header, set `supports_tr_cont=False` and implement body-based branching in the caller (`modules/brokers/kis/overseas/chart.py`).
 
 ### Testing Requirements
-- For mock-unsupported endpoints, add a one-line regression in `tests/test_kis_package.py` verifying that `tr_id_for("mock")` raises `MockNotSupportedError`.
+- For mock-unsupported endpoints, add a one-line regression in `tests/brokers/kis/test_kis_package.py` verifying that `tr_id_for("mock")` raises `MockNotSupportedError`.
 - For core endpoints (`overseas.price.current`, `overseas.chart.dailyprice`, `overseas.chart.minute`), retrieve metadata via `lookup(...)` and assert `tr_id_real` / `path` match expected values.
 
 ### Common Patterns
