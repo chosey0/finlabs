@@ -30,7 +30,7 @@ from .pipeline import (
     parse_feed_source,
     run_recorded_operation,
 )
-from .symbols import NEWS_SYMBOL_MARKETS, update_symbol_masters
+from .symbols import NEWS_SYMBOL_MARKETS, OnMarketDownloaded, update_symbol_masters
 
 
 app = typer.Typer(no_args_is_help=True, help=__doc__)
@@ -147,21 +147,44 @@ def update_symbols_command(
 
     markets = tuple(market or NEWS_SYMBOL_MARKETS)
 
-    def update(connection: duckdb.DuckDBPyConnection) -> OperationResult:
-        downloaded, stored = update_symbol_masters(connection, markets=markets)
-        return OperationResult(
-            processed=downloaded,
-            created=stored,
-            skipped=downloaded - stored,
-        )
-
     try:
-        result = _execute(
-            db_path=db_path,
-            command="update-symbols",
-            parameters={"markets": list(markets)},
-            operation_factory=update,
-        )
+        with Progress(
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            MofNCompleteColumn(),
+            TimeElapsedColumn(),
+        ) as progress:
+            task = progress.add_task("다운로드 중…", total=len(markets))
+            completed: list[tuple[str, int]] = []
+
+            def on_market_downloaded(mkt: str, count: int) -> None:
+                completed.append((mkt, count))
+                next_desc = (
+                    f"다운로드 중 · {markets[len(completed)]}"
+                    if len(completed) < len(markets)
+                    else "저장 중…"
+                )
+                progress.update(task, advance=1, description=next_desc)
+
+            def update(connection: duckdb.DuckDBPyConnection) -> OperationResult:
+                downloaded, stored = update_symbol_masters(
+                    connection,
+                    markets=markets,
+                    on_market_downloaded=on_market_downloaded,
+                )
+                progress.update(task, description="완료")
+                return OperationResult(
+                    processed=downloaded,
+                    created=stored,
+                    skipped=downloaded - stored,
+                )
+
+            result = _execute(
+                db_path=db_path,
+                command="update-symbols",
+                parameters={"markets": list(markets)},
+                operation_factory=update,
+            )
     except (OSError, RuntimeError, ValueError) as error:
         raise typer.BadParameter(str(error)) from error
     _print_result("update-symbols", result)

@@ -17,6 +17,7 @@ DOMESTIC_SYMBOL_MARKETS = ("KOSPI", "KOSDAQ")
 OVERSEAS_SYMBOL_MARKETS = ("NASDAQ", "NYSE", "AMEX")
 NEWS_SYMBOL_MARKETS = DOMESTIC_SYMBOL_MARKETS + OVERSEAS_SYMBOL_MARKETS
 SymbolMasterDownloader = Callable[..., list[SymbolRecord]]
+OnMarketDownloaded = Callable[[str, int], None]
 
 
 def update_symbol_masters(
@@ -24,8 +25,13 @@ def update_symbol_masters(
     *,
     markets: Iterable[str] = NEWS_SYMBOL_MARKETS,
     downloader: SymbolMasterDownloader = download_symbol_master,
+    on_market_downloaded: OnMarketDownloaded | None = None,
 ) -> tuple[int, int]:
-    """국내·해외 종목 마스터를 내려받아 뉴스 DB 스냅샷을 교체한다."""
+    """국내·해외 종목 마스터를 내려받아 뉴스 DB 스냅샷을 교체한다.
+
+    ``on_market_downloaded``를 주면 시장 하나의 다운로드가 끝날 때마다
+    ``(market, count)``를 전달하므로 호출자가 진행 상황을 표시할 수 있다.
+    """
 
     normalized_markets = _normalize_news_markets(markets)
     downloaded_at = datetime.now(SEOUL_TIMEZONE).isoformat()
@@ -35,6 +41,8 @@ def update_symbol_masters(
         if not records:
             raise ValueError(f"{market} symbol master download returned no rows")
         symbols.extend(_to_news_symbol(record) for record in records)
+        if on_market_downloaded is not None:
+            on_market_downloaded(market, len(records))
 
     stored = replace_symbol_snapshots(connection, symbols)
     return len(symbols), stored
