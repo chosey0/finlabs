@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from modules.news.articles.parsers import ARTICLE_PARSERS
@@ -87,7 +89,46 @@ def test_article_parser_versions_are_present_and_publisher_specific() -> None:
     }
     versions = {parser.version for parser in ARTICLE_PARSERS.values()}
     assert len(versions) == len(ARTICLE_PARSERS)
-    assert all(version.endswith("-v1") for version in versions)
+    assert all(re.search(r"-v\d+$", version) for version in versions)
+
+
+def test_hankyung_falls_back_to_container_text_without_paragraphs() -> None:
+    """제휴·스포츠 템플릿은 <p> 없이 본문이 컨테이너 직속 텍스트로 들어온다."""
+
+    html = """
+    <div id="articletxt">
+      <figure class="article-figure">
+        <img src="x.jpg" alt="사진">
+        <figcaption>사진=제공사</figcaption>
+      </figure>
+      서교림이 생애 첫 승을 거뒀다.<br/><br/>최종 합계 15언더파를 기록했다.
+    </div>
+    """
+
+    content = ARTICLE_PARSERS["hankyung"].parse(html)
+
+    assert content == "서교림이 생애 첫 승을 거뒀다. 최종 합계 15언더파를 기록했다."
+    assert "사진=제공사" not in content
+
+
+def test_sedaily_photo_article_falls_back_to_caption_text() -> None:
+    """포토 기사는 본문이 사진 설명뿐이므로 설명 텍스트를 본문으로 저장한다."""
+
+    html = """
+    <div id="article-body">
+      <div class="article-photo-wrap"><figure>
+        <img src="x.jpg"><figcaption>공연이 펼쳐지고 있다.</figcaption>
+      </figure></div>
+      <div class="article-photo-wrap"><figure>
+        <img src="y.jpg"><figcaption>관객이 모여 있다.</figcaption>
+      </figure></div>
+    </div>
+    """
+
+    assert (
+        ARTICLE_PARSERS["sedaily"].parse(html)
+        == "공연이 펼쳐지고 있다. 관객이 모여 있다."
+    )
 
 
 def test_article_parser_rejects_page_without_configured_body() -> None:

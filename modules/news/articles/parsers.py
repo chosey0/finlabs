@@ -146,32 +146,54 @@ class BaseArticleParser(ABC):
 
 @dataclass(frozen=True, slots=True)
 class SelectorArticleParser(BaseArticleParser):
-    """정해진 선택자에 해당하는 요소의 가시 텍스트만 추출한다."""
+    """정해진 선택자에 해당하는 요소의 가시 텍스트만 추출한다.
+
+    일부 언론사는 같은 도메인에서 본문을 ``<p>`` 없이 컨테이너 직속
+    텍스트로 내보내는 템플릿을 함께 쓴다. 기본 선택자가 텍스트를 찾지
+    못하면 ``fallback_selectors``로 한 번 더 시도하고, ``excluded_tags``
+    하위의 텍스트(예: 사진 설명 ``figure``)는 항상 제외한다.
+    """
 
     publisher: str
     version: str
     selectors: tuple[SelectorPath, ...]
+    fallback_selectors: tuple[SelectorPath, ...] = ()
+    excluded_tags: frozenset[str] = frozenset()
 
     def parse(self, html: str) -> str:
         document = _DocumentParser()
         document.feed(html)
+        for selector_group in (self.selectors, self.fallback_selectors):
+            if not selector_group:
+                continue
+            content = self._extract(document.root, selector_group)
+            if content:
+                return content
+        raise ValueError(
+            f"{self.publisher} article body selector produced no visible text"
+        )
+
+    def _extract(
+        self,
+        root: _Node,
+        selector_group: tuple[SelectorPath, ...],
+    ) -> str:
         selected = [
             node
-            for node in _walk(document.root)
-            if any(selector.matches(node) for selector in self.selectors)
+            for node in _walk(root)
+            if any(selector.matches(node) for selector in selector_group)
         ]
         selected_ids = {id(node) for node in selected}
         top_level = [
             node for node in selected if not _has_selected_ancestor(node, selected_ids)
         ]
-        content = _normalize_text(
-            " ".join(text for node in top_level for text in _visible_text(node))
-        )
-        if not content:
-            raise ValueError(
-                f"{self.publisher} article body selector produced no visible text"
+        return _normalize_text(
+            " ".join(
+                text
+                for node in top_level
+                for text in _visible_text(node, excluded=self.excluded_tags)
             )
-        return content
+        )
 
 
 def _walk(node: _Node):
@@ -189,14 +211,14 @@ def _has_selected_ancestor(node: _Node, selected_ids: set[int]) -> bool:
     return False
 
 
-def _visible_text(node: _Node):
-    if node.tag in {"script", "style", "noscript", "svg"}:
+def _visible_text(node: _Node, *, excluded: frozenset[str] = frozenset()):
+    if node.tag in {"script", "style", "noscript", "svg"} or node.tag in excluded:
         return
     for item in node.content:
         if isinstance(item, str):
             yield item
         else:
-            yield from _visible_text(item)
+            yield from _visible_text(item, excluded=excluded)
 
 
 def _normalize_text(value: str) -> str:
@@ -260,9 +282,12 @@ ARTICLE_PARSERS: Mapping[str, BaseArticleParser] = {
             ),
         ),
     ),
+    # 일부 템플릿(제휴·스포츠 기사)은 본문이 <p> 없이 #articletxt 직속
+    # 텍스트로 들어오므로 컨테이너 전체를 fallback으로 둔다. 사진 설명은
+    # figure 제외로 걸러낸다.
     "hankyung": SelectorArticleParser(
         publisher="hankyung",
-        version="hankyung-article-text-v1",
+        version="hankyung-article-text-v2",
         selectors=(
             SelectorPath(
                 (_element(element_id="articletxt"), _element("p")),
@@ -273,15 +298,20 @@ ARTICLE_PARSERS: Mapping[str, BaseArticleParser] = {
                 direct_children=False,
             ),
         ),
+        fallback_selectors=(SelectorPath((_element(element_id="articletxt"),)),),
+        excluded_tags=frozenset({"figure"}),
     ),
+    # 포토 기사는 본문 텍스트가 사진 설명뿐이므로 컨테이너 전체를
+    # fallback으로 두어 설명 텍스트를 본문으로 저장한다.
     "sedaily": SelectorArticleParser(
         publisher="sedaily",
-        version="sedaily-article-body-v1",
+        version="sedaily-article-body-v2",
         selectors=(
             SelectorPath(
                 (_element(element_id="article-body"), _element("p")),
                 direct_children=False,
             ),
         ),
+        fallback_selectors=(SelectorPath((_element(element_id="article-body"),)),),
     ),
 }
