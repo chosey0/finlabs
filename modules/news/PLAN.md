@@ -1,51 +1,558 @@
-# Airflow 도입 시점
+# FinLabs News Intelligence — 프로젝트 계획서 (개정판 v2.3)
 
-## 결론
+## 1. 프로젝트 개요
 
-현재는 Airflow 도입이 이릅니다. 우선 Linux 서버에서 `systemd timer`로 단일 CLI 파이프라인을 운영합니다.
+**프로젝트명**: FinLabs News Intelligence
 
-Airflow 도입 시점은 RSS 수집 → 본문 수집 → 분석의 세 단계가 모두 구현되고, 단계별 재시도/백필/모니터링 필요성이 실제 운영 문제로 나타날 때.
+**목표**: 국내 주식 시장(코스피·코스닥)의 뉴스를 실시간 수집·분석하여, 익일 또는 3거래일 이내 +10% 이상 상승 가능성이 있는 종목을 조기에 탐지하는 시스템 구축.
 
-## 단계별 전략
+**핵심 차별점**: 단순 감성 분석이 아니라 **"과거 급등 직전 뉴스 패턴과의 유사도(Vector Similarity Factor)"**를 핵심 신호로 사용. "좋은 뉴스인가?"가 아니라 "과거 급등 직전 뉴스와 얼마나 비슷한가? 그리고 **급등하지 않은 유사 뉴스와는 얼마나 다른가?**"를 판단한다. 여기에 **Market Context Features(거래대금·변동성·테마 확산·시장 국면)**를 결합해 "재료의 질"과 "재료를 받아들일 시장 환경"을 함께 평가한다.
 
-1. 현재 단계
-    - 저장소 루트에서 `uv run python -m modules.news.main collect-rss`
-    - `uv run python -m modules.news.main collect-articles --limit 100`
-    - `uv run python -m modules.news.main analyze --limit 100`
-    - `NEWS_DB_PATH` 또는 `--db-path`로 운영 DB 경로 지정
-    - 모든 작업은 기본키와 본문 해시를 기준으로 멱등하게 실행
-    - `pipeline_runs`에 성공·실패 상태, 처리 건수, 오류 메시지 저장
-    - `systemd/finlabs-news.service`와 `systemd/finlabs-news.timer`로 주기 실행
-    - DB별 잠금 파일로 DuckDB writer를 하나의 CLI 프로세스로 직렬화
+---
 
-2. Airflow 검토 단계
-   다음 조건 중 3개 이상이 충족되면 파일럿을 시작.
-    - 세 단계가 서로 다른 주기나 재시도 정책을 요구함
-    - 언론사와 크롤러 수가 지속적으로 증가함
-    - 특정 날짜나 언론사만 다시 처리하는 백필이 자주 필요함
-    - 실패 탐지와 수동 재실행에 주당 30분 이상 사용함
-    - 한 번의 실행이 다음 스케줄까지 끝나지 않음
-    - 운영자가 웹 UI에서 실행 상태와 로그를 확인해야 함
-    - 여러 서버나 컨테이너에서 작업을 실행해야 함
+## 2. 핵심 설계 원칙 (v2에서 추가)
 
-3. Airflow 도입 단계
-    - DAG는 RSS 수집 → 본문 수집 → 분석 → 완료 검증으로 구성
-    - 기사 한 건마다 Airflow Task를 만들지 않고, 언론사나 배치 단위로 Scrapy 작업을 실행
-    - XCom에는 ID, 건수, 저장 위치 같은 작은 메타데이터만 전달
-    - Airflow 메타데이터는 PostgreSQL에 저장
-    - DuckDB를 유지한다면 단일 writer Task로 쓰기를 직렬화
-    - 병렬 작업자가 직접 DB를 써야 한다면 RSS 운영 저장소를 PostgreSQL로 이전
+본 개정판은 다음 5가지 원칙을 시스템 전반에 강제한다.
 
-## 핵심 제약
-Airflow는 스케줄러 외에도 웹서버, DAG 프로세서, 메타데이터 DB가 필요한 운영 시스템입니다.
+1. **Point-in-Time 무결성**: 모든 검색·점수 계산은 평가 시점 이전 데이터만 사용한다. 백테스트 엔진이 미래 데이터를 참조할 수 없도록 구조적으로 차단한다.
+2. **Contrastive 비교**: 급등 사례(positive)뿐 아니라 비급등 유사 사례(negative)와 함께 비교한다. 급등 사례하고만 비교하면 "공급 계약" 류의 흔한 기사가 모두 고득점을 받아 Precision이 붕괴한다.
+3. **데이터 우선**: 과거 뉴스 백필과 급등 사례 라벨링이 프로젝트의 본체이므로 로드맵 초·중기로 앞당긴다. RSS만으로는 라이브러리 축적에 6개월~1년이 걸린다(Cold Start).
+4. **베이스라인 대비 검증**: 모든 성능 지표는 랜덤 선택, 단순 키워드 점수, 거래대금 모멘텀 등 베이스라인과 비교해 보고한다.
+5. **뉴스 + 시장의 결합** (v2.2): 급등은 뉴스 단독이 아니라 거래량·변동성·테마·시장 국면과의 결합으로 발생한다. 뉴스 팩터와 Market Context features를 하나의 학습 모델에 함께 입력해 상호작용을 학습시킨다.
 
-현재 규모에서는 유지비가 자동화 이익보다 큽니다.
+---
 
-또한 DuckDB 파일은 기본적으로 하나의 writer 프로세스를 전제로 합니다.
+## 3. 시스템 아키텍처
 
-Airflow 작업을 병렬 프로세스나 여러 서버에서 실행하면 현재 저장 구조와 충돌할 수 있으므로, Airflow 도입과 DuckDB 병렬 쓰기를 동시에 시작하지 않습니다.
+```
+RSS Sources ─────────────┐
+과거 뉴스 백필 소스 ──────┤  (네이버 뉴스 API, 빅카인즈 등)
+                         ↓
+                  News Collector
+                         ↓
+                  Article Fetcher
+                         ↓
+                  Article Cleaner
+                  (콘텐츠 기반 중복 제거 포함)
+                         ↓
+        ┌────────────────┴────────────────┐
+        ↓                                 ↓
+┌──────────────────┐            ┌──────────────────────┐
+│ DuckDB           │            │ Vector Store          │
+│ 원본/정제 기사    │            │ 기사 임베딩 + 메타데이터│
+│ 종목 마스터       │            │ (point-in-time 필터)  │
+│ market_features  │            └──────────────────────┘
+└──────────────────┘                      ↓
+        ↓                       Surge / Negative Library
+  Entity Extractor                        ↓
+        ↓                                 │
+        ├─────────────┬───────────────────┘
+        ↓             ↓
+시세 데이터 ──→ Market Feature Builder
+(pykrx 등)    (거래대금·변동성·테마·시장 국면)
+                      ↓
+            Scoring Engine
+            (뉴스 팩터 + Market Context
+             → LightGBM 학습 기반 결합)
+                      ↓
+            Backtest Engine
+            (point-in-time 강제, 체결 가능성 모델)
+                      ↓
+        Streamlit Dashboard + RAG 설명
+```
 
-## 권장 기본값
-  - 단일 서버: systemd timer + CLI + DuckDB
-  - 수집 및 분석 파이프라인이 안정된 후: Airflow LocalExecutor 파일럿
-  - 다중 서버 또는 병렬 writer 필요 시: PostgreSQL 전환 후 Airflow 운영
+---
+
+## 4. 데이터 수집
+
+### 4.1 실시간 수집 (RSS)
+
+- **대상**: 연합뉴스, 한국경제, 매일경제, 이데일리, 서울경제, Investing.com
+- **주기**: 5분
+- **테이블**: `rss_sources`, `rss_items`
+
+`rss_items` 스키마:
+
+```
+id, source_id, rss_guid, rss_url, canonical_url,
+title, summary, published_at, collected_at,
+unique_key, article_status
+```
+
+### 4.2 과거 뉴스 백필 (v2 신규, 초기 단계 필수)
+
+- **목적**: Cold Start 해소. 급등 사례 라이브러리를 수집 시작일 이전 데이터로 채운다.
+- **소스**: 네이버 뉴스 검색 API, 빅카인즈(BIGKinds) 등
+- **범위**: 최소 과거 2~3년
+- **방법**: 급등 이벤트를 먼저 시세 데이터로 추출 → 해당 종목·기간 뉴스 역수집
+
+### 4.3 중복 제거 (2단계)
+
+**1단계 — URL/메타 기반** (수집 시):
+1. guid
+2. canonical_url
+3. normalized_url
+4. title + published_at
+
+**2단계 — 콘텐츠 기반** (v2 신규, 임베딩 생성 후):
+- 임베딩 유사도가 임계값(예: 0.97) 이상이면 동일 콘텐츠 클러스터로 묶는다.
+- 통신사 기사 전재(연합뉴스 → 각 매체) 문제 해결. **뉴스 확산도 점수는 클러스터 단위로 계산**해 전재 기사로 인한 부풀림을 방지한다.
+
+### 4.4 기사 본문 수집
+
+- 대상: `article_status = pending`
+- 테이블: `articles`
+
+```
+id, rss_item_id, canonical_url, title, publisher,
+author, cleaned_text, published_at, fetched_at
+```
+
+> **저작권 정책 (v2)**: `raw_html` 장기 보관은 저작권 이슈가 있으므로 `cleaned_text` 위주로 보관하고, 원문 HTML은 보존 기간(예: 30일) 후 삭제하는 정책을 둔다.
+
+---
+
+## 5. 종목 마스터 / Entity 추출
+
+### 5.1 종목 마스터 (v2 신규, 독립 작업으로 분리)
+
+종목명→티커 매핑은 공수가 큰 별도 작업이다.
+
+- KRX 종목 마스터 테이블 (상장/폐지 이력 포함)
+- **별칭 사전**: 약칭(삼전, 하이닉스), 옛 사명, 영문명
+- 우선주/지주사/스팩 구분 규칙
+
+### 5.2 Entity 추출
+
+- 추출 대상: 종목, 기업, 산업, 키워드 (예: 삼성전자, SK하이닉스, HBM, AI반도체)
+- 테이블: `article_entities`
+
+```
+article_id, entity_type, entity_name, ticker, confidence
+```
+
+---
+
+## 6. Vector Store
+
+### 6.1 저장 구조 (v2 수정)
+
+```
+article_id
+title
+tickers            ← 리스트형. 한 기사가 여러 종목을 다루므로 1:1 필드 불가
+published_at       ← point-in-time 필터의 기준
+embedding
+embedding_model    ← 모델 교체 시 재임베딩 추적용 (필수)
+model_version
+dup_cluster_id     ← 콘텐츠 중복 클러스터 ID
+```
+
+### 6.2 임베딩 모델 (v2 신규)
+
+한국어 금융 텍스트 기준 후보 비교 실험을 초기 단계에 수행:
+
+- multilingual-e5-large
+- KURE (한국어 특화)
+- OpenAI text-embedding-3 계열
+
+선정 기준: surge library 내 유사 사례 검색의 Precision@k.
+
+### 6.3 DB 선택
+
+| 단계 | 선택 | 이유 |
+|---|---|---|
+| 초기 | **DuckDB VSS 확장 (HNSW)** | 이미 DuckDB 사용 중 → 스택 단일화. 메타데이터 필터를 SQL로 처리 |
+| 대안 | ChromaDB | 설치 쉬움, 로컬 실행 |
+| 중기 | Qdrant | 고속 검색, 풍부한 필터링, 운영 안정성 |
+
+### 6.4 Point-in-Time 검색 강제 (v2 핵심)
+
+- 모든 유사도 검색은 `published_at < 평가 시점` AND `surge_date < 평가 시점` 필터를 **검색 레이어에서 강제**한다.
+- 백테스트 엔진은 필터 없는 raw 검색 API에 접근할 수 없도록 인터페이스를 분리한다.
+- 이를 어기면 백테스트 성능이 허위로 부풀려진다 (look-ahead bias).
+
+---
+
+## 7. 사례 라이브러리 (핵심 자산)
+
+### 7.1 급등 사례 라이브러리 (Positive)
+
+**급등 정의**: 거래대금 100억 이상 AND (익일 +10% OR 3거래일 내 +10%)
+
+**테이블**: `surge_news_library`
+
+```
+article_id, ticker, surge_date,
+return_1d, return_3d, return_5d
+```
+
+> 기사의 이벤트 정보(event_type, entities, industry)는 `article_events` 테이블(7.3절)에 저장하고 article_id로 조인한다. 급등의 "원인" 여부를 별도 라벨로 저장하지 않는다 — 어떤 이벤트 유형이 급등과 연결되는지는 학습 모델이 데이터에서 발견한다.
+
+### 7.2 라이브러리 구축 파이프라인 — 전 과정 자동화 (v2.1 상세화)
+
+사람이 기사를 직접 검색·수집·라벨링하는 단계는 없다. 전체가 다음 배치 파이프라인으로 자동 실행되며, 사람의 역할은 마지막 샘플 검증뿐이다.
+
+```
+① 시세 데이터
+   → "거래대금 100억 + 익일/3거래일 내 +10%" 조건으로
+     (종목, 급등일) 이벤트 목록 추출            [코드]
+        ↓
+② 후보 기사 자동 수집
+   - 백필 구간: 네이버 뉴스 API / 빅카인즈에
+     "종목명+별칭 × 급등일 이전 7일" 쿼리       [코드]
+   - 실시간 구간: RSS 수집분에서 entity 매칭     [코드]
+        ↓
+③ 규칙 기반 1차 필터
+   종목 entity가 제목/리드 문단에 등장하는 기사만 통과
+   → LLM 호출량을 이벤트당 5~20건으로 축소      [코드]
+        ↓
+④ LLM 이벤트 분류 (7.3절)                      [LLM]
+        ↓
+⑤ 샘플 검증 100~200건                          [사람]
+```
+
+운영 시 주의:
+- **②의 품질은 별칭 사전에 좌우된다.** "삼전", 옛 사명, 영문명으로만 보도된 기사는 정식 종목명 쿼리로 잡히지 않는다. 종목 마스터 + 별칭 사전(5.1절)이 선행 작업인 이유.
+- **API 호출 한도**: 네이버 뉴스 API는 일 25,000건 제한이 있으므로, 2~3년치 백필은 며칠에 걸쳐 분할 실행하도록 스케줄링한다.
+- 급등일에 가까운 기사일수록 가중치를 부여해 저장한다.
+
+### 7.3 LLM 이벤트 분류 (v2.3 전면 수정)
+
+#### 7.3.1 설계 변경의 배경
+
+v2.1까지의 과제였던 **"이 기사가 급등의 직접적 재료인가?"는 인과 판단이라 개념이 애매하다.** 같은 기사를 보고도 사람마다 yes/no가 갈리고, LLM 라벨의 일관성도 보장하기 어렵다.
+
+v2.3에서는 과제를 **"이 기사는 어떤 이벤트를 다루고 있는가?"**라는 객관적 분류 문제로 바꾼다.
+
+- LLM의 역할: 기사에서 **사실(이벤트 유형, 관련 기업, 산업)을 추출**하는 것까지만. 주관적 인과 판단을 하지 않는다.
+- 인과 발견의 역할: **학습 모델(8.3절)로 이관**한다. event_type을 feature로 넣으면, 어떤 이벤트 유형이 어떤 시장 환경에서 급등과 자주 연결되는지를 모델이 데이터에서 스스로 발견한다. 예컨대 "regulatory_approval × biotech × 테마 강세"의 급등 확률이 높다는 패턴은 사람이 정의하는 게 아니라 학습된다.
+
+부수 효과로 적용 범위가 넓어진다. "급등의 원인" 라벨은 급등이 일어난 뒤에만 붙일 수 있었지만, **이벤트 분류는 급등 여부와 무관하게 모든 기사에 적용**할 수 있다. 따라서 surge library뿐 아니라 negative library, 그리고 **실시간 유입 기사에도 동일한 분류기를 그대로 사용**한다 — 라벨링 파이프라인이 곧 실시간 feature 생성 파이프라인이 된다.
+
+#### 7.3.2 이벤트 분류 체계 (Taxonomy)
+
+자유 서술이 아니라 **닫힌 목록(enum)**으로 강제한다. 자유 서술을 허용하면 "공급계약", "납품 계약", "supply deal"처럼 같은 이벤트가 다른 라벨로 파편화되어 feature로 쓸 수 없다.
+
+| event_type | 정의 | 예 |
+|---|---|---|
+| `contract_supply` | 공급·납품 계약 체결/확대 | 삼성전자, 엔비디아에 HBM 공급 확대 |
+| `order_win` | 수주 (건설·방산·플랜트 등) | 두산에너빌리티, 원전 수주 |
+| `regulatory_approval` | 인허가·승인 (FDA, 식약처 등) | 셀트리온, FDA 승인 획득 |
+| `clinical_result` | 임상 결과 발표 | 임상 3상 1차 지표 달성 |
+| `earnings` | 실적 발표·전망 (서프라이즈 포함) | 영업이익 컨센서스 상회 |
+| `product_launch` | 신제품·신서비스 출시 | 카카오, AI 서비스 출시 |
+| `tech_patent` | 신기술 개발·특허 | 고체전해질 특허 등록 |
+| `partnership` | 제휴·협력·MOU | 글로벌 빅테크와 협력 |
+| `ma_investment` | M&A·지분 투자·유치 | 경영권 인수, 대규모 투자 유치 |
+| `capital_change` | 유상증자·감자·CB 발행 | 주주가치에 양/음 모두 가능 |
+| `policy_theme` | 정부 정책·테마 편입 | 정책 수혜주 부각 |
+| `litigation_risk` | 소송·제재·악재 | 공정위 제재 |
+| `management` | 경영진·지배구조 변화 | 대표 교체, 승계 |
+| `market_commentary` | 시황·업종 일반 기사 | 코스피 전망 |
+| `simple_mention` | 타 기업이 주인공, 단순 언급 | 경쟁사 기사에 언급 |
+| `other` | 위에 없는 유형 | — |
+
+> 초기 16종으로 시작하고, 검증 과정에서 `other` 비중이 높으면 유형을 추가한다. taxonomy 변경 시 `taxonomy_version`을 올리고 영향 구간을 재분류한다.
+
+**노이즈 처리도 이 체계 안에서 해결된다**: 기존의 "no(원인 아님)" 판정 대신, `market_commentary`·`simple_mention`으로 분류된 기사를 라이브러리의 유사도 검색 대상에서 제외하면 된다. "원인인가?"라는 주관 판단 없이 객관적 유형 기준으로 같은 효과를 얻는다.
+
+#### 7.3.3 출력 스키마와 저장
+
+**테이블**: `article_events` (모든 기사 대상, surge library 전용 아님)
+
+```
+article_id,
+event_type,        ← taxonomy enum
+entities,          ← 이벤트의 주체 기업 리스트 (JSON)
+tickers,           ← entities를 종목 마스터로 매핑한 결과
+industry,          ← semiconductor, biotech, software, ...
+specificity,       ← high/low: 금액·수량·기간이 명시됐는가
+confidence,        ← 0.0~1.0
+reason,            ← 한 문장 근거 (검증용)
+label_model, prompt_version, taxonomy_version
+```
+
+`specificity`는 선택 필드지만 권장한다 — "1조원 규모 공급 계약"과 "공급 논의 중"은 같은 contract_supply라도 시장 반응이 다르며, 이 구분도 학습 feature가 된다.
+
+#### 7.3.4 프롬프트 설계
+
+입력: 기사 제목 + 본문 앞부분(1,000~2,000자) + 발행일. (급등일 정보는 불필요해졌다 — 분류는 급등과 무관한 과제이므로)
+
+```
+당신은 금융 뉴스 분석가입니다. 아래 기사가 다루는
+이벤트를 분류하세요.
+
+event_type은 반드시 다음 중 하나:
+contract_supply, order_win, regulatory_approval,
+clinical_result, earnings, product_launch, tech_patent,
+partnership, ma_investment, capital_change, policy_theme,
+litigation_risk, management, market_commentary,
+simple_mention, other
+
+[각 유형의 정의 서술...]
+
+예시:
+"삼성전자, 엔비디아에 HBM 공급 확대"
+→ {"event_type": "contract_supply",
+   "entities": ["삼성전자", "엔비디아"],
+   "industry": "semiconductor", "specificity": "low"}
+
+"카카오, AI 서비스 출시"
+→ {"event_type": "product_launch",
+   "entities": ["카카오"],
+   "industry": "software", "specificity": "low"}
+
+"셀트리온, FDA 승인 획득"
+→ {"event_type": "regulatory_approval",
+   "entities": ["셀트리온"],
+   "industry": "biotech", "specificity": "high"}
+
+기사 발행일: 2025-03-10
+제목: ...
+본문: ...
+
+JSON으로만 응답:
+{"event_type": "...", "entities": [...],
+ "industry": "...", "specificity": "high|low",
+ "confidence": 0.0~1.0, "reason": "한 문장"}
+```
+
+설계 원칙:
+- **taxonomy 전체와 각 유형의 정의를 프롬프트에 명시**한다. 정의 없이 유형명만 주면 경계 사례에서 흔들린다.
+- **few-shot 예시에 경계 사례 포함**: contract_supply vs partnership(계약 체결 vs MOU), product_launch vs tech_patent(출시 vs 개발) 같은 혼동 쌍을 예시로 넣는다. 검증에서 발견한 혼동 사례를 재활용한다.
+- **출력의 event_type을 코드에서 enum 검증**하고, 목록 밖 값이 나오면 재시도한다.
+- entities는 LLM이 추출한 기업명 그대로 받고, **티커 매핑은 종목 마스터(5.1절)로 코드에서 처리**한다. LLM에게 티커를 직접 묻지 않는다 (환각 위험).
+
+#### 7.3.5 배치 실행 코드 골격
+
+```python
+def classify_article(article):
+    prompt = build_prompt(article)
+    resp = call_llm(prompt, temperature=0)
+    result = parse_json_with_retry(resp)   # 코드펜스 제거, 재시도
+    assert result["event_type"] in EVENT_TAXONOMY  # enum 검증
+    tickers = map_to_tickers(result["entities"])   # 종목 마스터 매핑
+    db.execute("""
+        INSERT INTO article_events
+        (article_id, event_type, entities, tickers, industry,
+         specificity, confidence, reason,
+         label_model, prompt_version, taxonomy_version)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, [article.id, result["event_type"],
+          json.dumps(result["entities"]), json.dumps(tickers),
+          result["industry"], result["specificity"],
+          result["confidence"], result["reason"],
+          MODEL_NAME, PROMPT_VERSION, TAXONOMY_VERSION])
+```
+
+구현 규칙:
+- **temperature=0** 고정 (재현성 확보)
+- JSON 파싱 실패·enum 위반 대비 **재시도 로직**
+- `label_model`, `prompt_version`, `taxonomy_version`을 반드시 저장 — 모델·프롬프트·분류 체계를 바꿔 재분류할 때 어느 구간을 다시 돌려야 하는지 추적
+
+#### 7.3.6 비용 전략
+
+- 분류 과제이므로 고성능 모델은 불필요하다. **Haiku급 경량 모델**로 충분하다.
+- 본문을 2,000자로 절단하면 수천 건도 수 달러 수준.
+- 백필 구간은 **Batch API**(약 50% 할인)로 처리한다.
+- 실시간 구간은 기사 유입 시점에 1회 분류 — 이후 모든 단계(라이브러리, 점수화)가 결과를 재사용하므로 기사당 LLM 호출은 1회로 끝난다.
+
+#### 7.3.7 검증 루프 — 사람의 역할
+
+사람이 개입하는 유일한 지점. 수천 건을 손으로 분류하지 않는다.
+
+1. **샘플 검증 (필수)**: 무작위 100~200건을 직접 검토해 사람-LLM 분류 일치율을 측정한다.
+   - 일치율 ≥ 90% → 나머지는 LLM에 위임
+   - 일치율 < 90% → **혼동 행렬로 어떤 유형 쌍이 헷갈리는지 분석** (예: partnership↔contract_supply) → 해당 유형의 정의를 명확화하거나 few-shot에 경계 사례 추가 → 프롬프트 버전 올리고 해당 구간 재분류
+2. **저신뢰 건 처리**: confidence가 낮거나 `other`로 분류된 건은 (a) 샘플링해 사람이 확인하거나 (b) 새 유형 추가의 신호로 활용한다.
+3. **유형 분포 모니터링**: `other`·`simple_mention` 비중이 비정상적으로 높으면 taxonomy나 규칙 필터(③)에 문제가 있다는 신호다.
+
+### 7.4 비급등 사례 라이브러리 (Negative, v2 신규)
+
+- 급등 기사와 유사한 주제(계약, 수주, 특허 등)이지만 **급등으로 이어지지 않은** 기사를 별도 저장: `non_surge_news_library`
+- 구성 방법: surge library 기사와 임베딩 유사도가 높지만 해당 종목이 이후 3거래일 내 +10%를 달성하지 못한 기사를 자동 수집
+- **이벤트 분류 도입으로 구성이 더 정교해진다** (v2.3): "같은 event_type인데 급등하지 않은 기사"를 직접 쿼리할 수 있다. 예: contract_supply 기사 전체 중 급등 미달성 건 → contrastive 비교가 동일 유형 내에서 이루어져 변별력이 올라간다.
+
+---
+
+## 8. 점수화 — 뉴스 팩터 + Market Context (v2.2 확장)
+
+> 같은 뉴스라도 시장 국면에 따라 결과가 다르다. 뉴스 팩터는 "재료의 질"을, Market Context는 "재료를 받아들일 시장 환경"을 측정한다. 급등은 둘의 결합으로 발생하므로 뉴스만으로 예측하는 것은 구조적으로 한계가 있다.
+
+### 8.1 뉴스 팩터
+
+| 팩터 | 내용 |
+|---|---|
+| **Event Type** | (v2.3 신규) LLM 이벤트 분류 결과(7.3절)를 범주형 feature로 사용. industry, specificity 포함. 어떤 이벤트 유형이 급등과 연결되는지는 학습 모델이 발견 |
+| Sentiment | 긍정/중립/부정. **범용 모델 대신 KR-FinBERT 또는 LLM 분류 사용** (v2) |
+| Novelty | 최근 30일 내 등장 빈도 기반 신규성 |
+| Urgency | 수주, 계약, 특허, 실적, 승인 등 긴급 키워드 |
+| News Spread | 같은 내용 기사 수. **콘텐츠 중복 제거 후 클러스터 단위 카운트** (v2) |
+| **Contrastive Similarity** | (v2 수정) `sim(급등 사례 Top-k 평균) − sim(비급등 사례 Top-k 평균)`. 급등 패턴과 비슷하면서 흔한 패턴과는 다른 기사에 고득점. **동일 event_type 내에서 비교하면 변별력 상승** (v2.3) |
+| Source Trust | (v2 신규) 발행처 신뢰도. 작전성 보도자료·홍보성 기사에 낚이는 것을 방지 |
+
+### 8.2 Market Context Features (v2.2 신규)
+
+#### 8.2.1 종목 레벨
+
+| Feature | 내용 | 의미 |
+|---|---|---|
+| 거래대금 이상치 | 전일 거래대금 ÷ 20일 평균 거래대금 | 자금 유입의 선행 신호. 뉴스 + 거래대금 급증의 결합이 강력 |
+| 변동성 | 20일 historical volatility, ATR | 변동성이 깨어 있는 종목이 재료에 민감하게 반응 |
+| 가격 위치 | 52주 고가/저가 대비 현재가 위치 | 신고가 근접(돌파 대기) vs 바닥권(반등 재료)은 다른 패턴 |
+| 단기 모멘텀 | 5일/20일 수익률 | 이미 움직이기 시작했는지 |
+| 시가총액 | 로그 시총 | 소형주일수록 동일 재료에 대한 가격 탄력이 큼 |
+| 유통 물량 | 유통주식비율 (가능 시) | 물량이 가벼울수록 급등 용이 |
+
+#### 8.2.2 섹터/테마 레벨
+
+| Feature | 내용 | 의미 |
+|---|---|---|
+| 섹터 모멘텀 | 동일 업종 지수의 5일/20일 수익률 | 주도 섹터의 재료가 더 잘 먹힘 |
+| 테마 확산 | 동일 테마 내 최근 3거래일 급등 종목 수 | 테마 순환매 국면 포착. "두 번째, 세 번째 급등주" 탐지 |
+| 섹터 거래대금 집중도 | 해당 섹터 거래대금 ÷ 시장 전체 거래대금 | 시장 자금이 어디에 몰려 있는지 |
+
+#### 8.2.3 시장 레벨 (국면/Regime)
+
+| Feature | 내용 | 의미 |
+|---|---|---|
+| 지수 수익률 | KOSPI/KOSDAQ 5일/20일 수익률 | 강세장 vs 약세장에서 재료 수용성이 다름 |
+| 시장 변동성 | VKOSPI 또는 지수 realized volatility | 공포 국면에서는 호재도 묻힘 |
+| 시장 폭 | 상승종목비율(ADR) | 시장 체력 |
+| 투기 심리 | 일별 상한가 종목 수, 코스닥 거래대금 비중 | 급등이 잘 나오는 "판"인지에 대한 직접적 proxy |
+
+#### 8.2.4 저장 및 Point-in-Time 규칙
+
+**테이블**: `market_features`
+
+```
+ticker, as_of_date,
+turnover_ratio_20d, volatility_20d, atr_14,
+price_position_52w, return_5d, return_20d,
+log_market_cap, sector_momentum, theme_spread_count,
+market_return_5d, market_volatility, adr, limit_up_count
+```
+
+- **모든 feature는 전일 종가 기준(as_of_date = 평가일 전일)으로 계산한다.** 당일 거래량·종가는 장중에 알 수 없으므로 사용 시 look-ahead bias가 발생한다.
+- 시세 원천: pykrx 등. 급등 이벤트 추출(7.2절 ①)에 이미 시세 수집이 필요하므로 동일 파이프라인에서 feature를 함께 생성한다 — 추가 수집 비용이 거의 없다.
+- **생존 편향 주의**: 상장폐지 종목도 과거 시점 데이터에 포함해야 한다. 현재 상장 종목만으로 백테스트하면 성과가 부풀려진다.
+
+#### 8.2.5 뉴스 팩터와의 결합 방식
+
+별도의 "시장 점수"를 만들어 수동 가중치로 더하지 않는다. **뉴스 팩터 6개 + Market Context features를 하나의 feature 벡터로 묶어 학습 모델(8.3절)에 함께 입력**한다. 이렇게 하면:
+
+- "강세 테마 + 유사도 높은 뉴스 + 거래대금 이상치" 같은 **상호작용을 모델(LightGBM)이 자동 학습**한다.
+- 약세장에서는 뉴스 점수의 기여가 자동으로 할인되는 국면 적응이 별도 규칙 없이 달성된다.
+- 이것이 수동 가중치를 폐기하고 학습 기반 점수화를 채택한 또 하나의 이유다 — 수동 가중치로는 feature가 늘어날수록 조합이 불가능해진다.
+
+추가로, feature importance 분석을 통해 "뉴스 단독 vs 뉴스+시장 결합"의 성능 차이를 정량화한다. 이 비교 자체가 시스템의 가치를 증명하는 핵심 실험이다.
+
+### 8.3 최종 점수 — 학습 기반 가중치 (v2 수정)
+
+수동 가중치(0.20/0.15/0.15/0.15/0.35)는 근거가 없으므로 폐기하고, **뉴스 팩터 + Market Context features 전체를 feature로 하여 로지스틱 회귀 또는 LightGBM으로 학습**한다.
+
+- 라벨: 익일/3거래일 내 +10% 달성 여부
+- 학습/검증 분리: 시계열 기준 walk-forward (랜덤 분할 금지)
+- 초기 데이터 부족 시: 수동 가중치 + 뉴스 팩터만으로 시작하되, 백테스트에서 grid search로 보정. "수동 vs 학습", "뉴스 단독 vs 뉴스+시장" 비교 자체가 검증 자료이자 논문 소재가 된다.
+
+---
+
+## 9. 백테스트 (v2 대폭 강화)
+
+### 9.1 현실성 규칙
+
+- **진입 시점 통일**: 뉴스 발행 시각 기준 익일 시가 진입 (장중 발행 기사도 동일 적용. 장 마감 후 기사는 익일 시가)
+- **체결 가능성**: 시가가 이미 상한가이거나 갭이 임계값 이상이면 체결 불가 처리. 상한가 종목 매수 불가 모델링 없이는 Hit Rate가 환상이다.
+- **비용 반영**: 수수료, 거래세, 슬리피지(보수적으로 설정)
+
+### 9.2 베이스라인 비교
+
+다음과의 상대 성능으로 보고:
+1. 랜덤 5종목 선택
+2. 단순 키워드 점수만 사용
+3. 거래대금 모멘텀 전략
+
+### 9.3 지표
+
+- Top-5 평균 수익률, Hit Rate (+10% 달성 비율)
+- Precision@5, Precision@10, Recall
+- Sharpe Ratio, Max Drawdown
+- **Lift**: 익일 +10%는 희귀 이벤트이므로 base rate 대비 배수로 보고 (v2)
+
+---
+
+## 10. RAG 기반 설명
+
+사용자 질문: "왜 이 종목이 추천됐지?"
+
+1. Vector Search로 관련 뉴스 Top-10 검색 (point-in-time 필터 적용)
+2. LLM 입력: 관련 뉴스 + 팩터별 점수 + 과거 유사 급등/비급등 사례
+3. 출력: 추천 이유, 위험 요소, 유사 사례
+4. **인용 강제** (v2): 모든 주장에 근거 기사 ID를 인용하도록 프롬프트와 출력 검증을 설계해 환각을 차단
+
+---
+
+## 11. Dashboard (Streamlit)
+
+- Top-5 추천 종목: 종목명, 최종 점수, 팩터별 기여도
+- 유사 급등 사례 / 유사 비급등 사례 나란히 표시 (v2)
+- 관련 뉴스 수(중복 제거 후), 최근 뉴스
+- 백테스트 성능 vs 베이스라인 차트
+
+---
+
+## 12. 개발 로드맵 (v2 재구성)
+
+> 변경 핵심: 데이터 축적(백필, 급등 라벨링)은 시간이 걸리므로 가장 먼저 시작한다. 감성 분석은 후순위로 미룬다.
+
+### 초기 (2~4주)
+
+- RSS 수집, 본문 수집, DuckDB 저장
+- **종목 마스터 + 별칭 사전 구축**
+- **과거 뉴스 백필 파이프라인 (네이버 API / 빅카인즈)**
+- **시세 데이터로 과거 급등 이벤트 추출**
+- Streamlit 기본 조회 화면
+
+### 중기 (1~2개월)
+
+- 임베딩 모델 비교 실험 → 선정
+- Vector Store 구축 (DuckDB VSS, point-in-time 필터 레이어)
+- **급등 사례 라이브러리 + LLM 이벤트 분류 (taxonomy 기반)**
+- **비급등(negative) 라이브러리 구축**
+- **Market Context features 생성 파이프라인** — 시세 수집이 초기부터 있으므로 추가 비용이 작다. 종목 레벨 feature부터 구현, 섹터/시장 레벨은 순차 확장 (v2.2)
+- Entity 추출, Contrastive Similarity 점수
+- 콘텐츠 기반 중복 제거
+
+### 후기 (2~3개월)
+
+- 학습 기반 점수화 (LightGBM / 로지스틱 회귀) — **뉴스 팩터 + Market Context 결합 입력** (v2.2)
+- "뉴스 단독 vs 뉴스+시장" 성능 비교 실험 (v2.2)
+- 백테스트 엔진 (체결 가능성, 비용, 베이스라인)
+- 감성 분석 (KR-FinBERT), Source Trust 팩터
+- RAG 설명 + 인용 강제
+- Dashboard 고도화
+
+### 확장 (장기)
+
+- Qdrant 이전 검토
+- FinLabs 캔들 토큰화 연구와 결합 → **뉴스 토큰 + 캔들 토큰 멀티모달 예측** (논문 주제 후보)
+
+---
+
+## 13. 주요 리스크 요약
+
+| 리스크 | 대응 |
+|---|---|
+| Look-ahead bias | Point-in-time 필터를 검색 레이어에서 강제. Market feature는 전일 종가 기준으로만 계산 |
+| 흔한 호재 기사의 고득점 (Precision 붕괴) | Negative library + Contrastive 점수 |
+| 뉴스 단독 신호의 한계 | Market Context features 결합 — 거래대금·변동성·테마 확산·시장 국면을 학습 모델에 함께 입력 (8.2절) |
+| Cold Start (라이브러리 빈약) | 과거 2~3년 뉴스 백필을 초기 단계에 수행 |
+| 라이브러리 노이즈 | LLM 이벤트 분류로 market_commentary·simple_mention 유형을 검색 대상에서 제외 (7.3절) |
+| LLM 분류 오류 | 샘플 100~200건 사람 검증, 혼동 행렬 분석, few-shot 보강 루프, enum 검증, prompt_version·taxonomy_version 추적 |
+| 백테스트 과대평가 | 익일 시가 진입, 체결 가능성, 비용, 베이스라인 비교 |
+| 생존 편향 | 상장폐지 종목 포함한 시세 데이터로 백테스트 (8.2.4절) |
+| 전재 기사로 인한 확산도 부풀림 | 콘텐츠 기반 중복 제거 후 클러스터 단위 카운트 |
+| 작전성 보도자료 | Source Trust 팩터 |
+| RAG 환각 | 근거 기사 인용 강제 |
+| 저작권 | raw_html 보존 기간 정책, cleaned_text 위주 보관 |

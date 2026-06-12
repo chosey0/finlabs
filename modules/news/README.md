@@ -1,17 +1,17 @@
 <div align="center">
 
-# FinLabs News Pipeline
+# FinLabs News Intelligence
 
-**RSS 수집부터 기사 본문 저장과 기초 분석까지 연결하는 로컬 뉴스 파이프라인**
+**과거 급등 직전 뉴스 패턴과의 유사도로 급등 후보 종목을 조기 탐지하는 시스템 — 현재는 그 기반인 뉴스 수집 파이프라인 단계**
 
 [![Python](https://img.shields.io/badge/Python_3.12+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![DuckDB](https://img.shields.io/badge/DuckDB-FFF000?style=for-the-badge&logo=duckdb&logoColor=black)](https://duckdb.org/)
 [![Typer](https://img.shields.io/badge/Typer-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://typer.tiangolo.com/)
-[![Tests](https://img.shields.io/badge/Tests-19_Passing-00C853?style=for-the-badge&logo=pytest&logoColor=white)](./tests/test_rss_pipeline.py)
+[![Tests](https://img.shields.io/badge/Tests-25_Passing-00C853?style=for-the-badge&logo=pytest&logoColor=white)](./tests/)
 
 Investing.com, 이데일리, 이투데이, 한국경제, 서울경제, 뉴스핌 RSS를 하나의 표준 모델로 정규화하고 **멱등하게 수집·저장·분석**합니다.
 
-[FinLabs](../../README.md) · [운영 계획](./PLAN.md) · [회귀 테스트](./tests/test_rss_pipeline.py)
+[FinLabs](../../README.md) · [프로젝트 계획서](./PLAN.md) · [회귀 테스트](./tests/test_rss_pipeline.py)
 
 </div>
 
@@ -19,9 +19,11 @@ Investing.com, 이데일리, 이투데이, 한국경제, 서울경제, 뉴스핌
 
 ## Overview
 
-`modules/news`는 FinLabs의 독립 실행형 뉴스 수집 모듈입니다. 언론사마다 다른 RSS 필드를 표준 스키마로 변환하고, 기사 URL 기반의 결정적 ID와 DuckDB 제약 조건으로 중복 저장을 방지합니다.
+`modules/news`는 **FinLabs News Intelligence**의 뉴스 수집 모듈입니다. 프로젝트의 최종 목표는 국내 주식 시장(코스피·코스닥)의 뉴스를 실시간 수집·분석해 익일 또는 3거래일 이내 +10% 이상 상승 가능성이 있는 종목을 조기에 탐지하는 것입니다.
 
-파이프라인은 RSS 메타데이터 수집, 기사 본문 수집, 기초 분석의 세 단계로 분리됩니다. 각 단계는 다시 실행해도 이미 처리한 항목을 건너뛰며, 성공·실패 상태와 처리 건수를 `pipeline_runs`에 기록합니다.
+핵심 아이디어는 단순 감성 분석이 아니라 **과거 급등 직전 뉴스 패턴과의 유사도(Contrastive Vector Similarity)**입니다. "좋은 뉴스인가?"가 아니라 "과거 급등 직전 뉴스와 얼마나 비슷한가? 급등하지 않은 유사 뉴스와는 얼마나 다른가?"를 판단하고, 여기에 거래대금·변동성·테마 확산·시장 국면 등 **Market Context features**를 결합해 학습 모델(LightGBM)로 점수화합니다. 전체 설계와 로드맵은 [PLAN.md](./PLAN.md)에 정리되어 있습니다.
+
+현재 구현된 범위는 그 기반이 되는 데이터 수집 파이프라인입니다. 언론사마다 다른 RSS 필드를 표준 스키마로 변환하고, 기사 URL 기반의 결정적 ID와 DuckDB 제약 조건으로 중복 저장을 방지합니다. 파이프라인은 RSS 메타데이터 수집, 기사 본문 수집, 기초 분석의 세 단계로 분리됩니다. 각 단계는 다시 실행해도 이미 처리한 항목을 건너뛰며, 성공·실패 상태와 처리 건수를 `pipeline_runs`에 기록합니다.
 
 ---
 
@@ -32,12 +34,14 @@ Investing.com, 이데일리, 이투데이, 한국경제, 서울경제, 뉴스핌
 | **[RSS 수집]** | 언론사별 파서 | 6개 매체의 전체·카테고리 RSS를 공통 `CanonicalRssEntry`로 변환 |
 | **[카테고리]** | 출처별 분리 저장 | 매체 도메인, 피드 카테고리, XML 원문 카테고리를 구분해 보존 |
 | **[중복 방지]** | 결정적 기사 ID | 기사 URL의 SHA-256 해시와 데이터베이스 제약으로 중복 적재 방지 |
+| **[진행 표시]** | 수집 진행바·집계 | `collect-rss` 실행 중 소스별 진행바를 표시하고 완료 후 언론사·카테고리별 수집 결과를 표로 출력 |
 | **[본문 수집]** | HTML 텍스트 추출 | 스크립트·스타일·SVG를 제외하고 가시 텍스트를 정규화해 저장 |
 | **[기초 분석]** | 본문 통계 | 분석기 버전과 본문 해시를 기준으로 문자 수·단어 수 계산 |
 | **[멱등 실행]** | 단계별 재실행 | 이미 저장되거나 현재 버전으로 분석된 항목은 다시 처리하지 않음 |
 | **[실행 이력]** | 성공·실패 기록 | 명령, 매개변수, 상태, 처리 건수, 제한된 오류 메시지를 저장 |
 | **[동시성 보호]** | 단일 writer 잠금 | 파일 잠금으로 동일 DuckDB에 대한 중복 파이프라인 실행을 즉시 차단 |
 | **[정기 실행]** | systemd timer | 세 단계를 30분마다 순차 실행하는 Linux 서비스 예시 제공 |
+| **[종목 마스터]** | KIS 국내·해외 마스터 동기화 | 국내 2개·미국 3개 시장을 분리 테이블에 원자적으로 교체 |
 
 ---
 
@@ -147,6 +151,9 @@ uv sync --group news
 ### 파이프라인 실행
 
 ```bash
+# KOSPI·KOSDAQ·NASDAQ·NYSE·AMEX 종목 마스터 갱신
+uv run --group news python -m modules.news.main update-symbols
+
 # 전체 기본 RSS 수집
 uv run --group news python -m modules.news.main collect-rss
 
@@ -196,6 +203,8 @@ uv run --group news python -m modules.news.main collect-rss \
 | `articles` | 정규화된 기사 본문과 본문 해시 | `rss_item_id` 기본키 |
 | `article_analyses` | 분석기 버전별 현재 분석 결과 | `rss_item_id` 기본키 |
 | `pipeline_runs` | 명령 실행 상태와 처리 결과 | 실행별 UUID |
+| `domestic_symbols` | KIS KOSPI·KOSDAQ 종목 마스터 현재 스냅샷 | `(market, symbol)` 고유 제약 |
+| `overseas_symbols` | KIS NASDAQ·NYSE·AMEX 종목 마스터 현재 스냅샷 | `(market, symbol)` 고유 제약 |
 | `schema_migrations` | 스키마·데이터 마이그레이션 이력 | 마이그레이션 ID |
 
 발행 시각은 입력 형식을 검증한 뒤 `Asia/Seoul` 기준으로 정규화합니다. 기존 UTC-naive 데이터의 서울 시각 변환은 마이그레이션 이력으로 한 번만 수행됩니다.
@@ -216,22 +225,26 @@ uv run --group news python -m modules.news.main collect-rss \
 modules/news/
 ├── main.py                    Typer CLI와 DB별 단일 writer 실행 경계
 ├── pipeline.py                RSS·본문·분석 단계와 실행 이력 조율
-├── utils.py                   DB 파일 단일 writer 잠금
 ├── db/
 │   ├── init.py                DuckDB 스키마 생성과 안전한 마이그레이션
+│   ├── locking.py             DB 파일 단일 writer 잠금
 │   └── sql.py                 RSS·본문·분석·실행 이력 저장 연산
 ├── schema/
-│   ├── base.py                표준 RSS 모델과 검증
-│   └── article.py             기사 및 분석 모델
+│   ├── article.py             기사 및 분석 모델
+│   └── symbol.py              뉴스 DB용 종목 마스터 모델
 ├── rss/
-│   ├── parsers.py             공통 파서 계약, 설정 기반 파서, 언론사 레지스트리
-│   └── collect.py             RSS 수집 확장 위치
+│   ├── models.py              표준 RSS 모델과 검증
+│   └── parsers.py             공통 파서 계약, 설정 기반 파서, 언론사 레지스트리
 ├── systemd/
 │   ├── finlabs-news.service   세 단계 순차 실행 서비스
-│   └── finlabs-news.timer     30분 주기 타이머
+│   ├── finlabs-news.timer     30분 주기 타이머
+│   ├── finlabs-news-symbols.service  종목 마스터 갱신 서비스
+│   └── finlabs-news-symbols.timer    매일 09:00 KST 갱신 타이머
 ├── tests/
-│   └── test_rss_pipeline.py   파서·CRUD·멱등성·마이그레이션 회귀 테스트
-└── PLAN.md                    Airflow 도입 판단 기준
+│   ├── test_rss_pipeline.py   파서·CRUD·멱등성·마이그레이션 회귀 테스트
+│   └── test_symbols.py        종목 마스터 스냅샷 갱신 회귀 테스트
+├── symbols.py                 KIS 다운로드와 뉴스 DB 동기화
+└── PLAN.md                    News Intelligence 프로젝트 계획서 (개정판 v2.3)
 ```
 
 ---
@@ -243,12 +256,18 @@ modules/news/
 ```bash
 sudo cp modules/news/systemd/finlabs-news.service /etc/systemd/system/
 sudo cp modules/news/systemd/finlabs-news.timer /etc/systemd/system/
+sudo cp modules/news/systemd/finlabs-news-symbols.service /etc/systemd/system/
+sudo cp modules/news/systemd/finlabs-news-symbols.timer /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now finlabs-news.timer
+sudo systemctl enable --now finlabs-news-symbols.timer
 sudo systemctl status finlabs-news.timer
+sudo systemctl status finlabs-news-symbols.timer
 ```
 
-DuckDB 쓰기는 파일 잠금으로 직렬화됩니다. `collect-rss`, `collect-articles`, `analyze` 실행 중에는 DuckDB CLI나 다른 프로세스가 같은 DB 파일을 쓰기 가능한 상태로 열고 있으면 안 됩니다. 여러 서버나 컨테이너가 동시에 동일 파일을 쓰는 구조도 지원하지 않습니다. 백필, 단계별 재시도, 다중 노드 실행 요구가 커질 때의 Airflow 도입 기준은 [PLAN.md](./PLAN.md)에 정리되어 있습니다.
+`finlabs-news-symbols.timer`는 매일 오전 9시(Asia/Seoul)에 KOSPI·KOSDAQ·NASDAQ·NYSE·AMEX 마스터를 갱신합니다. 다운로드가 비어 있거나 한 시장이라도 실패하면 두 테이블의 기존 스냅샷을 모두 유지합니다.
+
+DuckDB 쓰기는 파일 잠금으로 직렬화됩니다. `update-symbols`, `collect-rss`, `collect-articles`, `analyze` 실행 중에는 DuckDB CLI나 다른 프로세스가 같은 DB 파일을 쓰기 가능한 상태로 열고 있으면 안 됩니다. 여러 서버나 컨테이너가 동시에 동일 파일을 쓰는 구조도 지원하지 않습니다.
 
 ---
 
@@ -258,6 +277,7 @@ DuckDB 쓰기는 파일 잠금으로 직렬화됩니다. `collect-rss`, `collect
 
 ```bash
 uv run --group news python -m pytest modules/news/tests/test_rss_pipeline.py -q
+uv run --group news python -m pytest modules/news/tests/test_symbols.py -q
 uv run ruff check modules/news
 ```
 
@@ -272,6 +292,8 @@ uv run ruff check modules/news
 - 성공·실패 실행 이력
 - 빈 구버전 스키마 교체와 시간대 마이그레이션
 - 동일 DB에 대한 중복 writer 차단
+- 국내·해외 종목 마스터 분리 저장과 5개 시장의 원자적 스냅샷 교체
+- 빈 다운로드 결과에서 기존 종목 마스터 보존
 
 ---
 
@@ -279,7 +301,30 @@ uv run ruff check modules/news
 
 현재 `collect-articles`는 언론사별 본문 선택자가 아니라 HTML 전체에서 스크립트·스타일·SVG를 제외한 가시 텍스트를 추출합니다. 따라서 메뉴, 관련 기사, 광고 문구가 포함될 수 있습니다.
 
-`analyze` 단계는 `basic-stats-v1` 분석기로 문자 수와 공백 기준 단어 수만 계산합니다. 카테고리 표준화, AI 요약, 종목 연결, 감성 분석, 검색 API, 웹 대시보드는 아직 구현되어 있지 않습니다.
+`analyze` 단계는 `basic-stats-v1` 분석기로 문자 수와 공백 기준 단어 수만 계산합니다. 종목 별칭 사전, 과거 뉴스 백필, 임베딩·Vector Store, LLM 이벤트 분류, 점수화, 백테스트, 대시보드는 아직 구현되어 있지 않으며 아래 로드맵의 대상입니다.
+
+---
+
+## Roadmap
+
+[PLAN.md](./PLAN.md)의 개발 로드맵 요약입니다. 데이터 축적(백필, 급등 사례 라벨링)에 시간이 걸리므로 Cold Start 해소 작업을 가장 앞에 배치합니다.
+
+| 단계 | 범위 | 상태 |
+|------|------|:----:|
+| **초기** (2~4주) | RSS 수집·본문 수집·DuckDB 저장 | ✅ 구현됨 |
+| | KIS 종목 마스터 자동 갱신 | ✅ 구현됨 |
+| | 별칭 사전, 과거 뉴스 백필(네이버 API·빅카인즈), 시세 기반 급등 이벤트 추출, Streamlit 기본 조회 | 예정 |
+| **중기** (1~2개월) | 임베딩 모델 비교·선정, Vector Store(DuckDB VSS, point-in-time 필터), 급등/비급등 사례 라이브러리, LLM 이벤트 분류(taxonomy 기반), Market Context features, Entity 추출, Contrastive Similarity, 콘텐츠 기반 중복 제거 | 예정 |
+| **후기** (2~3개월) | 학습 기반 점수화(LightGBM), "뉴스 단독 vs 뉴스+시장" 비교 실험, 백테스트 엔진(체결 가능성·비용·베이스라인), 감성 분석(KR-FinBERT), RAG 설명 + 인용 강제, Dashboard 고도화 | 예정 |
+| **확장** (장기) | Qdrant 이전 검토, 뉴스 토큰 + 캔들 토큰 멀티모달 예측 연구 | 예정 |
+
+시스템 전반에 강제되는 설계 원칙은 다음 다섯 가지입니다.
+
+1. **Point-in-Time 무결성** — 모든 검색·점수 계산은 평가 시점 이전 데이터만 사용하며, 백테스트 엔진이 미래 데이터를 참조할 수 없도록 구조적으로 차단
+2. **Contrastive 비교** — 급등 사례뿐 아니라 비급등 유사 사례와 함께 비교해 흔한 호재 기사의 고득점(Precision 붕괴)을 방지
+3. **데이터 우선** — 과거 뉴스 백필과 급등 사례 라벨링을 로드맵 초·중기로 전진 배치
+4. **베이스라인 대비 검증** — 랜덤 선택, 키워드 점수, 거래대금 모멘텀 대비 상대 성능으로 보고
+5. **뉴스 + 시장의 결합** — 뉴스 팩터와 Market Context features를 하나의 학습 모델에 함께 입력해 상호작용을 학습
 
 ---
 
