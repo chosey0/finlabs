@@ -9,7 +9,13 @@ from modules.brokers.toss.models import (
     CandlePage,
     CurrentPrice,
     KoreanMarketDetail,
+    KrMarketCalendar,
+    KrMarketDay,
+    KrMarketHours,
+    MarketSession,
     StockInfo,
+    UsMarketCalendar,
+    UsMarketDay,
 )
 from modules.brokers.toss.types import Currency
 
@@ -83,6 +89,87 @@ def parse_stock_info(row: dict[str, Any]) -> StockInfo:
     )
 
 
+def parse_kr_market_calendar(payload: dict[str, Any]) -> KrMarketCalendar:
+    result = payload.get("result")
+    if not isinstance(result, dict):
+        raise ValueError("response result must be an object")
+    return KrMarketCalendar(
+        today=_parse_kr_market_day(_required_object(result, "today")),
+        previous_business_day=_parse_kr_market_day(
+            _required_object(result, "previousBusinessDay")
+        ),
+        next_business_day=_parse_kr_market_day(
+            _required_object(result, "nextBusinessDay")
+        ),
+        raw=dict(result),
+    )
+
+
+def parse_us_market_calendar(payload: dict[str, Any]) -> UsMarketCalendar:
+    result = payload.get("result")
+    if not isinstance(result, dict):
+        raise ValueError("response result must be an object")
+    return UsMarketCalendar(
+        today=_parse_us_market_day(_required_object(result, "today")),
+        previous_business_day=_parse_us_market_day(
+            _required_object(result, "previousBusinessDay")
+        ),
+        next_business_day=_parse_us_market_day(
+            _required_object(result, "nextBusinessDay")
+        ),
+        raw=dict(result),
+    )
+
+
+def _parse_kr_market_day(row: dict[str, Any]) -> KrMarketDay:
+    integrated = row.get("integrated")
+    return KrMarketDay(
+        date=_required_date(row, "date"),
+        integrated=(
+            _parse_kr_market_hours(integrated) if isinstance(integrated, dict) else None
+        ),
+        raw=dict(row),
+    )
+
+
+def _parse_kr_market_hours(row: dict[str, Any]) -> KrMarketHours:
+    return KrMarketHours(
+        pre_market=_optional_session(row.get("preMarket")),
+        regular_market=_optional_session(row.get("regularMarket")),
+        after_market=_optional_session(row.get("afterMarket")),
+        raw=dict(row),
+    )
+
+
+def _parse_us_market_day(row: dict[str, Any]) -> UsMarketDay:
+    return UsMarketDay(
+        date=_required_date(row, "date"),
+        day_market=_optional_session(row.get("dayMarket")),
+        pre_market=_optional_session(row.get("preMarket")),
+        regular_market=_optional_session(row.get("regularMarket")),
+        after_market=_optional_session(row.get("afterMarket")),
+        raw=dict(row),
+    )
+
+
+def _optional_session(value: Any) -> MarketSession | None:
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError("expected session object or null")
+    return MarketSession(
+        start_time=_required_datetime(value, "startTime"),
+        end_time=_required_datetime(value, "endTime"),
+        single_price_auction_start_time=_optional_datetime(
+            value.get("singlePriceAuctionStartTime")
+        ),
+        single_price_auction_end_time=_optional_datetime(
+            value.get("singlePriceAuctionEndTime")
+        ),
+        raw=dict(value),
+    )
+
+
 def _parse_korean_market_detail(row: dict[str, Any]) -> KoreanMarketDetail:
     return KoreanMarketDetail(
         liquidation_trading=_required_bool(row, "liquidationTrading"),
@@ -91,6 +178,13 @@ def _parse_korean_market_detail(row: dict[str, Any]) -> KoreanMarketDetail:
         nxt_trading_suspended=_optional_bool(row.get("nxtTradingSuspended")),
         raw=dict(row),
     )
+
+
+def _required_object(row: dict[str, Any], key: str) -> dict[str, Any]:
+    value = row.get(key)
+    if not isinstance(value, dict):
+        raise ValueError(f"missing or invalid {key}")
+    return value
 
 
 def _required_text(row: dict[str, Any], key: str) -> str:
@@ -144,6 +238,13 @@ def _optional_datetime(value: Any) -> datetime | None:
     if not isinstance(value, str):
         raise ValueError("expected ISO 8601 datetime string or null")
     return datetime.fromisoformat(value)
+
+
+def _required_date(row: dict[str, Any], key: str) -> date:
+    value = _optional_date(row.get(key))
+    if value is None:
+        raise ValueError(f"missing or invalid {key}")
+    return value
 
 
 def _optional_date(value: Any) -> date | None:

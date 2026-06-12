@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 import httpx
@@ -174,6 +174,167 @@ def test_stocks_parse_domestic_market_detail() -> None:
         assert stocks[0].shares_outstanding == Decimal("5919637922")
         assert stocks[0].korean_market_detail is not None
         assert stocks[0].korean_market_detail.nxt_supported is True
+
+    asyncio.run(run())
+
+
+def test_kr_market_calendar_parses_sessions_and_holiday() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/oauth2/token":
+            return httpx.Response(
+                200,
+                json={"access_token": "t", "token_type": "Bearer", "expires_in": 3600},
+            )
+        assert request.url.path == "/api/v1/market-calendar/KR"
+        assert request.url.params["date"] == "2026-05-05"
+        return httpx.Response(
+            200,
+            json={
+                "result": {
+                    "today": {"date": "2026-05-05", "integrated": None},
+                    "previousBusinessDay": {
+                        "date": "2026-05-04",
+                        "integrated": {
+                            "preMarket": {
+                                "startTime": "2026-05-04T08:00:00+09:00",
+                                "singlePriceAuctionStartTime": "2026-05-04T08:50:00+09:00",
+                                "endTime": "2026-05-04T09:00:00+09:00",
+                            },
+                            "regularMarket": {
+                                "startTime": "2026-05-04T09:00:00+09:00",
+                                "singlePriceAuctionStartTime": "2026-05-04T15:20:00+09:00",
+                                "endTime": "2026-05-04T15:30:00+09:00",
+                            },
+                            "afterMarket": {
+                                "startTime": "2026-05-04T15:30:00+09:00",
+                                "singlePriceAuctionEndTime": "2026-05-04T15:40:00+09:00",
+                                "endTime": "2026-05-04T20:00:00+09:00",
+                            },
+                        },
+                    },
+                    "nextBusinessDay": {
+                        "date": "2026-05-06",
+                        "integrated": {
+                            "preMarket": None,
+                            "regularMarket": {
+                                "startTime": "2026-05-06T09:00:00+09:00",
+                                "singlePriceAuctionStartTime": None,
+                                "endTime": "2026-05-06T15:30:00+09:00",
+                            },
+                            "afterMarket": None,
+                        },
+                    },
+                }
+            },
+        )
+
+    async def run() -> None:
+        http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        async with TossClient(
+            credentials=Credentials("client-id", "client-secret"),
+            http_client=http_client,
+        ) as client:
+            calendar = await client.market.kr_market_calendar(date=date(2026, 5, 5))
+        await http_client.aclose()
+        assert calendar.today.date == date(2026, 5, 5)
+        assert calendar.today.integrated is None
+        previous = calendar.previous_business_day.integrated
+        assert previous is not None
+        assert previous.regular_market is not None
+        assert previous.regular_market.start_time == datetime(
+            2026, 5, 4, 9, tzinfo=timezone(timedelta(hours=9))
+        )
+        assert previous.after_market is not None
+        assert previous.after_market.single_price_auction_end_time is not None
+        next_day = calendar.next_business_day.integrated
+        assert next_day is not None
+        assert next_day.pre_market is None
+        assert next_day.regular_market is not None
+        assert next_day.regular_market.single_price_auction_start_time is None
+
+    asyncio.run(run())
+
+
+def test_us_market_calendar_parses_four_sessions() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/oauth2/token":
+            return httpx.Response(
+                200,
+                json={"access_token": "t", "token_type": "Bearer", "expires_in": 3600},
+            )
+        assert request.url.path == "/api/v1/market-calendar/US"
+        assert "date" not in request.url.params
+        return httpx.Response(
+            200,
+            json={
+                "result": {
+                    "today": {
+                        "date": "2026-07-03",
+                        "dayMarket": None,
+                        "preMarket": None,
+                        "regularMarket": None,
+                        "afterMarket": None,
+                    },
+                    "previousBusinessDay": {
+                        "date": "2026-07-02",
+                        "dayMarket": {
+                            "startTime": "2026-07-02T09:00:00+09:00",
+                            "endTime": "2026-07-02T16:50:00+09:00",
+                        },
+                        "preMarket": {
+                            "startTime": "2026-07-02T17:00:00+09:00",
+                            "endTime": "2026-07-02T22:30:00+09:00",
+                        },
+                        "regularMarket": {
+                            "startTime": "2026-07-02T22:30:00+09:00",
+                            "endTime": "2026-07-03T05:00:00+09:00",
+                        },
+                        "afterMarket": {
+                            "startTime": "2026-07-03T05:00:00+09:00",
+                            "endTime": "2026-07-03T07:00:00+09:00",
+                        },
+                    },
+                    "nextBusinessDay": {
+                        "date": "2026-07-06",
+                        "dayMarket": {
+                            "startTime": "2026-07-06T09:00:00+09:00",
+                            "endTime": "2026-07-06T16:50:00+09:00",
+                        },
+                        "preMarket": {
+                            "startTime": "2026-07-06T17:00:00+09:00",
+                            "endTime": "2026-07-06T22:30:00+09:00",
+                        },
+                        "regularMarket": {
+                            "startTime": "2026-07-06T22:30:00+09:00",
+                            "endTime": "2026-07-07T05:00:00+09:00",
+                        },
+                        "afterMarket": {
+                            "startTime": "2026-07-07T05:00:00+09:00",
+                            "endTime": "2026-07-07T07:00:00+09:00",
+                        },
+                    },
+                }
+            },
+        )
+
+    async def run() -> None:
+        http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        async with TossClient(
+            credentials=Credentials("client-id", "client-secret"),
+            http_client=http_client,
+        ) as client:
+            calendar = await client.market.us_market_calendar()
+        await http_client.aclose()
+        assert calendar.today.date == date(2026, 7, 3)
+        assert calendar.today.day_market is None
+        assert calendar.today.regular_market is None
+        previous = calendar.previous_business_day
+        assert previous.regular_market is not None
+        assert previous.regular_market.end_time == datetime(
+            2026, 7, 3, 5, tzinfo=timezone(timedelta(hours=9))
+        )
+        assert previous.regular_market.single_price_auction_start_time is None
+        assert calendar.next_business_day.after_market is not None
 
     asyncio.run(run())
 

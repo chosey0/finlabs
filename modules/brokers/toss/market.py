@@ -1,13 +1,20 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import date, datetime
 from typing import TYPE_CHECKING, Iterable
 
-from modules.brokers.toss.models import CandlePage, CurrentPrice
+from modules.brokers.toss.models import (
+    CandlePage,
+    CurrentPrice,
+    KrMarketCalendar,
+    UsMarketCalendar,
+)
 from modules.brokers.toss.parsers import (
     parse_candle_page,
     parse_current_price,
+    parse_kr_market_calendar,
+    parse_us_market_calendar,
     result_list,
 )
 from modules.brokers.toss.types import CandleInterval
@@ -55,6 +62,28 @@ class MarketDataAPI:
             )
         payload = await self._parent.request("GET", "/api/v1/candles", params=params)
         return parse_candle_page(payload, symbol=normalized_symbol)
+
+    async def kr_market_calendar(
+        self, *, date: date | str | None = None
+    ) -> KrMarketCalendar:
+        payload = await self._parent.request(
+            "GET", "/api/v1/market-calendar/KR", params=_calendar_params(date)
+        )
+        return parse_kr_market_calendar(payload)
+
+    async def us_market_calendar(
+        self, *, date: date | str | None = None
+    ) -> UsMarketCalendar:
+        payload = await self._parent.request(
+            "GET", "/api/v1/market-calendar/US", params=_calendar_params(date)
+        )
+        return parse_us_market_calendar(payload)
+
+
+def _calendar_params(value: date | str | None) -> dict[str, str] | None:
+    if value is None:
+        return None
+    return {"date": value if isinstance(value, str) else value.isoformat()}
 
 
 def normalize_symbols(

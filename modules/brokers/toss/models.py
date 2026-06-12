@@ -47,6 +47,56 @@ class KoreanMarketDetail:
 
 
 @dataclass(frozen=True)
+class MarketSession:
+    start_time: datetime
+    end_time: datetime
+    single_price_auction_start_time: datetime | None
+    single_price_auction_end_time: datetime | None
+    raw: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class KrMarketHours:
+    pre_market: MarketSession | None
+    regular_market: MarketSession | None
+    after_market: MarketSession | None
+    raw: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class KrMarketDay:
+    date: date
+    integrated: KrMarketHours | None
+    raw: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class KrMarketCalendar:
+    today: KrMarketDay
+    previous_business_day: KrMarketDay
+    next_business_day: KrMarketDay
+    raw: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class UsMarketDay:
+    date: date
+    day_market: MarketSession | None
+    pre_market: MarketSession | None
+    regular_market: MarketSession | None
+    after_market: MarketSession | None
+    raw: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class UsMarketCalendar:
+    today: UsMarketDay
+    previous_business_day: UsMarketDay
+    next_business_day: UsMarketDay
+    raw: dict[str, Any]
+
+
+@dataclass(frozen=True)
 class StockInfo:
     symbol: str
     name: str
