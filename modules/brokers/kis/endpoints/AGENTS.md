@@ -10,13 +10,14 @@ Manages KIS REST/WebSocket endpoint metadata as a **data-driven registry**. `End
 
 | File | Description |
 |------|-------------|
-| `__init__.py` | Imports `overseas` submodules to trigger spec registration + re-exports `EndpointSpec`/`lookup`/`names`/`register` |
+| `__init__.py` | Imports `domestic`/`overseas` submodules to trigger spec registration + re-exports `EndpointSpec`/`lookup`/`names`/`register` |
 | `registry.py` | `EndpointSpec` frozen dataclass (`tr_id_for(env)` with `MockNotSupportedError` guard), `_EndpointRegistry` (rejects duplicate registrations), module-level helpers `register`/`lookup`/`names` |
 
 ## Subdirectories
 
 | Directory | Purpose |
 |-----------|---------|
+| `domestic/` | Domestic (KRX/KOSPI/KOSDAQ) endpoint registrations — realtime trades/orderbook (`H0STCNT0`/`H0STASP0`, mock-supported) |
 | `overseas/` | Overseas exchange endpoint registrations — basic_quote, analysis, realtime (see `overseas/AGENTS.md`) |
 
 ## For AI Agents

@@ -4,7 +4,7 @@
 # modules/brokers/kis
 
 ## Purpose
-`modules.brokers.kis` is a pure Python SDK package wrapping overseas-stock data APIs from the Korea Investment & Securities Open API. It is responsible only for transport (REST via `httpx` / WebSocket via `websockets`) and payload normalization (frozen dataclass models + parsers). It contains no filesystem, DB, or CLI code. Persistence and user workflows are handled by `modules.orchestration`, `modules.storage`, and thin transport packages such as `kis_cli/`.
+`modules.brokers.kis` is a pure Python SDK package wrapping overseas-stock data APIs (REST + realtime WebSocket) and domestic-stock (KRX/KOSPI/KOSDAQ) realtime WebSocket APIs from the Korea Investment & Securities Open API. It is responsible only for transport (REST via `httpx` / WebSocket via `websockets`) and payload normalization (frozen dataclass models + parsers). It contains no filesystem, DB, or CLI code. Persistence and user workflows are handled by `modules.orchestration`, `modules.storage`, and thin transport packages such as `kis_cli/`.
 
 ## Key Files
 
@@ -27,7 +27,7 @@
 | `models/` | Normalized response dataclass models (see `models/AGENTS.md`) |
 | `parsers/` | KIS payload → model conversion (REST + realtime, see `parsers/AGENTS.md`) |
 | `overseas/` | High-level client for overseas exchange APIs (see `overseas/AGENTS.md`) |
-| `realtime/` | WebSocket realtime session (`RealtimeSession`) (see `realtime/AGENTS.md`) |
+| `realtime/` | WebSocket realtime session (`RealtimeSession`) — overseas + domestic trades/orderbook (see `realtime/AGENTS.md`) |
 
 ## For AI Agents
 

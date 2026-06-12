@@ -40,18 +40,21 @@ class RealtimeConnection:
             raise RuntimeError("RealtimeConnection is not connected")
         return await self._websocket.recv()
 
+    async def send_text(self, message: str) -> None:
+        if self._websocket is None:
+            raise RuntimeError("RealtimeConnection is not connected")
+        await self._websocket.send(message)
+
     async def send_subscription(
         self,
         subscription: RealtimeSubscription,
         *,
         tr_type: str,
     ) -> None:
-        if self._websocket is None:
-            raise RuntimeError("RealtimeConnection is not connected")
         message = build_websocket_subscribe_message(
             approval_key=self._approval_key,
             tr_id=subscription.tr_id,
             tr_key=subscription.tr_key,
             tr_type=tr_type,
         )
-        await self._websocket.send(json.dumps(message, ensure_ascii=False))
+        await self.send_text(json.dumps(message, ensure_ascii=False))

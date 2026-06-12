@@ -65,9 +65,14 @@ def test_issue_websocket_approval_key_async_with_shared_client() -> None:
     assert asyncio.run(run()) == "async-approval-key"
 
 
-def test_realtime_endpoint_specs_are_overseas_only() -> None:
+def test_realtime_endpoint_specs_cover_overseas_and_domestic() -> None:
     assert lookup("overseas.realtime.trades").tr_id_for("real") == "HDFSCNT0"
     assert lookup("overseas.realtime.orderbook").tr_id_for("real") == "HDFSASP0"
+    assert lookup("domestic.realtime.trades").tr_id_for("real") == "H0STCNT0"
+    assert lookup("domestic.realtime.orderbook").tr_id_for("real") == "H0STASP0"
+    # KIS supports domestic realtime on the mock environment with the same TR IDs
+    assert lookup("domestic.realtime.trades").tr_id_for("mock") == "H0STCNT0"
+    assert lookup("domestic.realtime.orderbook").tr_id_for("mock") == "H0STASP0"
 
 
 def test_parse_overseas_trade_frame() -> None:
@@ -97,7 +102,42 @@ def test_parse_overseas_orderbook_frame() -> None:
     assert overseas.asks[0].bid_volume == 350
 
 
-def test_realtime_rejects_domestic_subscription(monkeypatch) -> None:
+def test_parse_domestic_trade_frame() -> None:
+    domestic = parse_realtime_frame(
+        f"0|H0STCNT0|001|{'^'.join(_domestic_trade_values())}",
+        received_at="2026-06-12T00:30:15+00:00",
+    )[0]
+
+    assert isinstance(domestic, RealtimeTick)
+    assert domestic.market == "KRX"
+    assert domestic.symbol == "005930"
+    assert domestic.tr_key == "005930"
+    assert domestic.price == Decimal("72000")
+    assert domestic.volume == 10
+    assert domestic.total_volume == 1234567
+    assert domestic.bid_price == Decimal("72000")
+    assert domestic.ask_price == Decimal("72100")
+    assert domestic.exchange_ts == "2026-06-12 09:30:15"
+
+
+def test_parse_domestic_orderbook_frame() -> None:
+    domestic = parse_realtime_frame(
+        f"0|H0STASP0|001|{'^'.join(_domestic_orderbook_values())}",
+        received_at="2026-06-12T00:30:15+00:00",
+    )[0]
+
+    assert isinstance(domestic, OrderBookSnapshot)
+    assert domestic.market == "KRX"
+    assert domestic.symbol == "005930"
+    assert domestic.asks[0].ask_price == Decimal("72100")
+    assert domestic.asks[0].bid_price == Decimal("72000")
+    assert domestic.asks[9].ask_volume == 1009
+    assert domestic.total_ask_volume == 50000
+    assert domestic.total_bid_volume == 60000
+    assert domestic.exchange_ts == "093015"
+
+
+def test_realtime_domestic_subscription_uses_bare_symbol_tr_key(monkeypatch) -> None:
     websocket = FakeWebSocket([])
 
     async def fake_connect(url):
@@ -113,14 +153,66 @@ def test_realtime_rejects_domestic_subscription(monkeypatch) -> None:
     async def run() -> None:
         async with KisClient(credentials=Credentials("app-key", "app-secret")) as client:
             async with client.realtime.session() as ws:
-                await ws.subscribe_trades("005930", market="KRX")
+                await ws.subscribe_trades("005930", market="KOSPI")
+                await ws.subscribe_orderbook("035720", market="KOSDAQ")
+
+    asyncio.run(run())
+
+    sent = [json.loads(message) for message in websocket.sent]
+    assert sent[0]["body"]["input"] == {"tr_id": "H0STCNT0", "tr_key": "005930"}
+    assert sent[1]["body"]["input"] == {"tr_id": "H0STASP0", "tr_key": "035720"}
+
+
+def test_realtime_domestic_subscription_rejects_delayed_feed(monkeypatch) -> None:
+    websocket = FakeWebSocket([])
+
+    async def fake_connect(url):
+        websocket.url = url
+        return websocket
+
+    async def fake_approval(self):
+        return "approval-key"
+
+    monkeypatch.setattr("modules.brokers.kis.realtime.connection.websockets.connect", fake_connect)
+    monkeypatch.setattr("modules.brokers.kis.client.KisClient.ensure_approval_key", fake_approval)
+
+    async def run() -> None:
+        async with KisClient(credentials=Credentials("app-key", "app-secret")) as client:
+            async with client.realtime.session() as ws:
+                await ws.subscribe_trades("005930", market="KRX", feed="delayed")
 
     try:
         asyncio.run(run())
     except ValueError as exc:
-        assert "overseas" in str(exc)
+        assert "delayed" in str(exc)
     else:
         raise AssertionError("expected ValueError")
+
+
+def test_realtime_overseas_feed_selects_tr_key_prefix(monkeypatch) -> None:
+    websocket = FakeWebSocket([])
+
+    async def fake_connect(url):
+        websocket.url = url
+        return websocket
+
+    async def fake_approval(self):
+        return "approval-key"
+
+    monkeypatch.setattr("modules.brokers.kis.realtime.connection.websockets.connect", fake_connect)
+    monkeypatch.setattr("modules.brokers.kis.client.KisClient.ensure_approval_key", fake_approval)
+
+    async def run() -> None:
+        async with KisClient(credentials=Credentials("app-key", "app-secret")) as client:
+            async with client.realtime.session() as ws:
+                await ws.subscribe_trades("AAPL", market="NAS", feed="realtime")
+                await ws.subscribe_trades("TSLA", market="NAS")
+
+    asyncio.run(run())
+
+    sent = [json.loads(message) for message in websocket.sent]
+    assert sent[0]["body"]["input"] == {"tr_id": "HDFSCNT0", "tr_key": "RNASAAPL"}
+    assert sent[1]["body"]["input"] == {"tr_id": "HDFSCNT0", "tr_key": "DNASTSLA"}
 
 
 def test_realtime_subscribe_unsubscribe_state_machine(monkeypatch) -> None:
@@ -189,6 +281,43 @@ def test_realtime_quick_start_with_mock_websocket(monkeypatch) -> None:
     assert event.symbol == "AAPL"
     assert event.price == Decimal("182.86")
     assert event.exchange_ts == "2024-05-06 20:22:23"
+
+
+def test_realtime_stream_echoes_pingpong_frames(monkeypatch) -> None:
+    pingpong = json.dumps(
+        {"header": {"tr_id": "PINGPONG", "datetime": "20260612090000"}}
+    )
+    websocket = FakeWebSocket(
+        [
+            pingpong,
+            f"0|HDFSCNT0|001|{'^'.join(_overseas_trade_values())}",
+        ]
+    )
+
+    async def fake_connect(url):
+        websocket.url = url
+        return websocket
+
+    async def fake_approval(self):
+        return "approval-key"
+
+    monkeypatch.setattr("modules.brokers.kis.realtime.connection.websockets.connect", fake_connect)
+    monkeypatch.setattr("modules.brokers.kis.client.KisClient.ensure_approval_key", fake_approval)
+
+    async def run() -> RealtimeTick:
+        async with KisClient(credentials=Credentials("app-key", "app-secret")) as client:
+            async with client.realtime.session() as ws:
+                await ws.subscribe_trades("AAPL", market="NAS")
+                async for event in ws.stream():
+                    if isinstance(event, RealtimeTick):
+                        return event
+        raise AssertionError("expected realtime tick")
+
+    event = asyncio.run(run())
+
+    assert event.symbol == "AAPL"
+    # sent[0] is the subscribe message; the PINGPONG frame must be echoed verbatim
+    assert websocket.sent[1] == pingpong
 
 
 def test_realtime_received_seq_does_not_overlap_across_multi_record_frames(monkeypatch) -> None:
@@ -274,6 +403,86 @@ def _overseas_trade_values() -> list[str]:
         "50.0",
         "1",
     ]
+
+
+def _domestic_trade_values() -> list[str]:
+    return [
+        "005930",
+        "093015",
+        "72000",
+        "2",
+        "500",
+        "0.70",
+        "71900.50",
+        "71500",
+        "72100",
+        "71400",
+        "72100",
+        "72000",
+        "10",
+        "1234567",
+        "88888888888",
+        "100",
+        "200",
+        "100",
+        "120.50",
+        "500000",
+        "600000",
+        "1",
+        "54.30",
+        "80.50",
+        "090001",
+        "2",
+        "500",
+        "092000",
+        "5",
+        "-100",
+        "090500",
+        "2",
+        "600",
+        "20260612",
+        "20",
+        "N",
+        "1000",
+        "2000",
+        "50000",
+        "60000",
+        "0.50",
+        "1000000",
+        "123.40",
+        "0",
+        "N",
+        "71000",
+    ]
+
+
+def _domestic_orderbook_values() -> list[str]:
+    values = ["005930", "093015", "0"]
+    values.extend(str(72100 + level * 100) for level in range(10))  # ASKP1-10
+    values.extend(str(72000 - level * 100) for level in range(10))  # BIDP1-10
+    values.extend(str(1000 + level) for level in range(10))  # ASKP_RSQN1-10
+    values.extend(str(2000 + level) for level in range(10))  # BIDP_RSQN1-10
+    values.extend(
+        [
+            "50000",
+            "60000",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "3",
+            "0.00",
+            "1234567",
+            "0",
+            "0",
+            "0",
+            "0",
+            "00",
+        ]
+    )
+    return values
 
 
 def _overseas_orderbook_values() -> list[str]:

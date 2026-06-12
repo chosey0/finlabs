@@ -23,7 +23,9 @@ def test_kis_package_exports_core_sdk_api() -> None:
     assert kis.Credentials is Credentials
     assert kis.IssuedToken is IssuedToken
     assert kis.__version__ == "0.1.0"
-    assert not any(name.startswith("domestic.") for name in kis.names())
+    # domestic coverage is realtime-only; domestic REST stays out of this SDK
+    domestic = {name for name in kis.names() if name.startswith("domestic.")}
+    assert domestic == {"domestic.realtime.trades", "domestic.realtime.orderbook"}
     assert "overseas.chart.minute" in kis.names()
 
 

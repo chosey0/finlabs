@@ -4,7 +4,7 @@
 # realtime
 
 ## Purpose
-Provides a KIS WebSocket realtime quote session. `RealtimeSession`, returned by `KisClient.realtime.session()`, is an async context manager that: (1) obtains an approval key, (2) establishes a WebSocket connection, (3) sends subscribe/unsubscribe messages, and (4) parses incoming frames into `RealtimeTick`/`OrderBookSnapshot` and exposes them as an async iterator. This module was added in Stage 4.
+Provides a KIS WebSocket realtime quote session for both overseas (NAS/NYS/...) and domestic (KRX/KOSPI/KOSDAQ) trades/orderbook channels. `RealtimeSession`, returned by `KisClient.realtime.session()`, is an async context manager that: (1) obtains an approval key, (2) establishes a WebSocket connection, (3) sends subscribe/unsubscribe messages, (4) echoes server PINGPONG keepalive frames, and (5) parses incoming frames into `RealtimeTick`/`OrderBookSnapshot` and exposes them as an async iterator. This module was added in Stage 4.
 
 ## Key Files
 
@@ -18,9 +18,12 @@ Provides a KIS WebSocket realtime quote session. `RealtimeSession`, returned by 
 ### Working In This Directory
 - Retrieve the WebSocket URL from `modules.brokers.kis.config.websocket_url(environment)`. KIS provides both real and paper-trading on the same domain with different ports.
 - The approval key uses a **separate cache key** (`f"ws:{environment}:{app_key}"`) from the REST token, assumed valid for 24 hours (`KisClient.ensure_approval_key()`).
-- Subscriptions use `EndpointSpec` (e.g. `overseas.realtime.orderbook`) to retrieve `tr_id`/`path`, then build messages via `build_websocket_subscribe_message(tr_type="1")`. Unsubscription uses `tr_type="2"`.
+- Subscriptions use `EndpointSpec` (e.g. `overseas.realtime.orderbook`, `domestic.realtime.trades`) to retrieve `tr_id`/`path`, then build messages via `build_websocket_subscribe_message(tr_type="1")`. Unsubscription uses `tr_type="2"`.
+- Venue routing lives in `subscription_for()`: KRX/KOSPI/KOSDAQ venues map to `domestic.realtime.*` specs with the bare 6-digit code as `tr_key`; any other venue maps to `overseas.realtime.*` with a feed prefix on `tr_key` — `"D"` (delayed, default) or `"R"` (`feed="realtime"`, requires a paid realtime subscription on the KIS account). Domestic has no delayed feed; passing `feed="delayed"` for a domestic venue raises `ValueError`.
+- Overseas realtime is real-environment only (`tr_id_mock=None` → `MockNotSupportedError`); domestic realtime works on both real and mock with the same TR IDs (`H0STCNT0`/`H0STASP0`).
 - Incoming frames are split by `parse_realtime_frame(text)`, then dispatched to `parse_trade_payload` / `parse_orderbook_payload` based on `tr_id`.
-- To add a new realtime channel: (1) register spec in `endpoints/overseas/realtime.py` → (2) add `subscribe_*` method to `RealtimeSession` → (3) add payload parser in `parsers/realtime.py`.
+- `stream()` detects application-level PINGPONG JSON frames via `is_pingpong_frame()` (`frame.py`) and echoes them back verbatim before parsing; do not treat them as data frames.
+- To add a new realtime channel: (1) register spec in `endpoints/overseas/realtime.py` or `endpoints/domestic/realtime.py` → (2) add `subscribe_*` method to `RealtimeSession` → (3) add payload parser in `parsers/realtime.py`.
 - Never log raw WebSocket messages — they may contain quote or account information.
 
 ### Testing Requirements

@@ -11,6 +11,22 @@ from modules.brokers.kis.realtime.subscription import SubscriptionRegistry
 logger = logging.getLogger(__name__)
 
 
+def is_pingpong_frame(frame: str) -> bool:
+    """Return True for KIS application-level PINGPONG keepalive frames.
+
+    The server expects these JSON frames to be echoed back verbatim;
+    otherwise it eventually drops the connection.
+    """
+    if not frame.lstrip().startswith("{"):
+        return False
+    try:
+        payload = json.loads(frame)
+    except json.JSONDecodeError:
+        return False
+    header = payload.get("header")
+    return isinstance(header, dict) and header.get("tr_id") == "PINGPONG"
+
+
 class RealtimeFrameProcessor:
     """Handle realtime control/data frames and preserve received_seq ordering."""
 

@@ -16,7 +16,12 @@ from modules.brokers.kis import (
 
 def test_stage5_overseas_endpoint_specs_are_registered() -> None:
     assert len(names()) >= 20
-    assert not any(name.startswith("domestic.") for name in names())
+    # domestic coverage is realtime-only; domestic REST stays out of this SDK
+    assert all(
+        name.startswith("domestic.realtime.")
+        for name in names()
+        if name.startswith("domestic.")
+    )
     assert lookup("overseas.analysis.volume_surge").tr_id_mock is None
 
 

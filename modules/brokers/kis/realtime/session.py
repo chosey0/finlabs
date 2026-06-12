@@ -4,8 +4,9 @@ import logging
 from typing import TYPE_CHECKING
 
 from modules.brokers.kis.realtime.connection import RealtimeConnection
-from modules.brokers.kis.realtime.frame import RealtimeFrameProcessor
+from modules.brokers.kis.realtime.frame import RealtimeFrameProcessor, is_pingpong_frame
 from modules.brokers.kis.realtime.subscription import (
+    Feed,
     RealtimeSubscription,
     SubscriptionRegistry,
     subscription_for,
@@ -44,6 +45,7 @@ class RealtimeSession:
         *,
         market: str | None = None,
         exchange: str | None = None,
+        feed: Feed | None = None,
     ) -> RealtimeSubscription:
         venue = market_or_exchange or market or exchange
         if not venue:
@@ -52,6 +54,7 @@ class RealtimeSession:
             channel="trades",
             symbol=symbol,
             venue=venue,
+            feed=feed,
             tr_type="1",
         )
 
@@ -62,6 +65,7 @@ class RealtimeSession:
         *,
         market: str | None = None,
         exchange: str | None = None,
+        feed: Feed | None = None,
     ) -> RealtimeSubscription:
         venue = market_or_exchange or market or exchange
         if not venue:
@@ -70,6 +74,7 @@ class RealtimeSession:
             channel="orderbook",
             symbol=symbol,
             venue=venue,
+            feed=feed,
             tr_type="1",
         )
 
@@ -80,6 +85,7 @@ class RealtimeSession:
         channel: str = "trades",
         market: str | None = None,
         exchange: str | None = None,
+        feed: Feed | None = None,
     ) -> None:
         if isinstance(subscription, RealtimeSubscription):
             target = subscription
@@ -87,7 +93,13 @@ class RealtimeSession:
             venue = market or exchange
             if not venue:
                 raise ValueError("market or exchange must be provided")
-            target = subscription_for(channel=channel, symbol=subscription, venue=venue)
+            target = subscription_for(
+                channel=channel,
+                symbol=subscription,
+                venue=venue,
+                feed=feed,
+                environment=self._client.environment,
+            )
         await self._send_subscription(target, tr_type="2")
         self._registry.discard(target)
 
@@ -104,6 +116,9 @@ class RealtimeSession:
                 continue
             if not isinstance(frame, str):
                 logger.warning("ignored non-text realtime websocket frame")
+                continue
+            if is_pingpong_frame(frame):
+                await self._connection.send_text(frame)
                 continue
             for event in self._frame_processor.process(frame):
                 yield event
@@ -127,9 +142,16 @@ class RealtimeSession:
         channel: str,
         symbol: str,
         venue: str,
+        feed: Feed | None,
         tr_type: str,
     ) -> RealtimeSubscription:
-        subscription = subscription_for(channel=channel, symbol=symbol, venue=venue)
+        subscription = subscription_for(
+            channel=channel,
+            symbol=symbol,
+            venue=venue,
+            feed=feed,
+            environment=self._client.environment,
+        )
         await self._send_subscription(subscription, tr_type=tr_type)
         self._registry.add(subscription)
         return subscription
