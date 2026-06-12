@@ -23,7 +23,7 @@ Investing.com, 이데일리, 이투데이, 한국경제, 서울경제, 뉴스핌
 
 핵심 아이디어는 단순 감성 분석이 아니라 **과거 급등 직전 뉴스 패턴과의 유사도(Contrastive Vector Similarity)**입니다. "좋은 뉴스인가?"가 아니라 "과거 급등 직전 뉴스와 얼마나 비슷한가? 급등하지 않은 유사 뉴스와는 얼마나 다른가?"를 판단하고, 여기에 거래대금·변동성·테마 확산·시장 국면 등 **Market Context features**를 결합해 학습 모델(LightGBM)로 점수화합니다. 뉴스 설계는 [뉴스 모듈 PLAN](./PLAN.md), 전체 데이터 플랫폼과 구현 순서는 [통합 PLAN](../../PLAN.md)에 정리되어 있습니다.
 
-현재 구현된 범위는 그 기반이 되는 데이터 수집 파이프라인입니다. 언론사마다 다른 RSS 필드를 표준 스키마로 변환하고, 기사 URL 기반의 결정적 ID와 DuckDB 제약 조건으로 중복 저장을 방지합니다. 파이프라인은 RSS 메타데이터 수집, 기사 본문 수집, 기초 분석의 세 단계로 분리됩니다. 각 단계는 다시 실행해도 이미 처리한 항목을 건너뛰며, 성공·실패 상태와 처리 건수를 `pipeline_runs`에 기록합니다.
+현재 구현된 범위는 그 기반이 되는 데이터 수집 파이프라인입니다. 언론사마다 다른 RSS 필드를 표준 스키마로 변환하고, 기사 URL 기반의 결정적 ID와 DuckDB 제약 조건으로 중복 저장을 방지합니다. 파이프라인은 RSS 메타데이터 수집, 기사 본문 수집, 기초 분석 단계로 분리되며, 이 중 **본문 직접 수집은 언론사 이용약관에 따라 비활성화**되어 있고 네이버 뉴스 검색 API 연동으로 대체할 예정입니다. 각 단계는 다시 실행해도 이미 처리한 항목을 건너뛰며, 성공·실패 상태와 처리 건수를 `pipeline_runs`에 기록합니다.
 
 ---
 
@@ -35,7 +35,7 @@ Investing.com, 이데일리, 이투데이, 한국경제, 서울경제, 뉴스핌
 | **[카테고리]** | 출처별 분리 저장 | 매체 도메인, 피드 카테고리, XML 원문 카테고리를 구분해 보존 |
 | **[중복 방지]** | 결정적 기사 ID | 기사 URL의 SHA-256 해시와 데이터베이스 제약으로 중복 적재 방지 |
 | **[진행 표시]** | 수집 진행바·집계 | `collect-rss` 실행 중 소스별 진행바를 표시하고 완료 후 언론사·카테고리별 수집 결과를 표로 출력 |
-| **[본문 수집]** | 언론사별 본문 선택자 | 5개 매체의 지정 본문 요소만 정규화해 저장하고 원문 HTML은 폐기 |
+| **[본문 수집]** | 비활성화 (이용약관) | 언론사 페이지 직접 수집은 약관 위배로 중단. 코드·선택자 registry는 보존, 네이버 뉴스 API 전환 예정 |
 | **[오류 격리]** | 기사 단위 실패 격리 | 차단·삭제된 기사 한 건의 실패가 배치를 중단시키지 않고 다음 실행에서 재시도 |
 | **[본문 재처리]** | Parser 버전 추적 | 언론사 parser 버전이 바뀌면 기존 기사 본문을 자동으로 다시 수집 |
 | **[기초 분석]** | 본문 통계 | 분석기 버전과 본문 해시를 기준으로 문자 수·단어 수 계산 |
@@ -44,7 +44,7 @@ Investing.com, 이데일리, 이투데이, 한국경제, 서울경제, 뉴스핌
 | **[멱등 실행]** | 단계별 재실행 | 이미 저장되거나 현재 버전으로 분석된 항목은 다시 처리하지 않음 |
 | **[실행 이력]** | 성공·실패 기록 | 명령, 매개변수, 상태, 처리 건수, 제한된 오류 메시지를 저장 |
 | **[동시성 보호]** | 단일 writer 잠금 | 파일 잠금으로 동일 DuckDB에 대한 중복 파이프라인 실행을 즉시 차단 |
-| **[정기 실행]** | systemd timer | 세 단계를 30분마다 순차 실행하는 Linux 서비스 예시 제공 |
+| **[정기 실행]** | systemd timer | RSS 수집·분석을 30분마다 순차 실행하는 Linux 서비스 예시 제공 |
 | **[종목 마스터]** | KIS 국내·해외 마스터 동기화 | 국내 2개·미국 3개 시장을 분리 테이블에 원자적으로 교체 |
 
 ---
@@ -61,7 +61,7 @@ collect-rss
 rss_items
     │
     ▼
-collect-articles
+collect-articles (비활성화 — 이용약관, 네이버 뉴스 API 전환 예정)
     │  publisher parser → cleaned text → content hash + parser version
     ▼
 articles
@@ -96,16 +96,23 @@ article_analyses
 
 ## Data Sources
 
-| 언론사 | 기본 RSS URL | 요약 필드 | 본문 수집 |
-|--------|--------------|:---------:|:---------:|
-| Investing.com Korea | `https://kr.investing.com/rss/news.rss` | 미사용 | 제외 (로그인 장벽) |
-| 이데일리 | `http://rss.edaily.co.kr/edaily_news.xml` | 사용 | 수집 |
-| 이투데이 | `https://rss.etoday.co.kr/eto/etoday_news_all.xml` | 사용 | 수집 |
-| 한국경제 | `https://www.hankyung.com/feed/all-news` | 미사용 | 수집 |
-| 서울경제 | `https://www.sedaily.com/rss/newsall` | 미사용 | 수집 |
-| 뉴스핌 | `http://rss.newspim.com/news/category/1` | 사용 | 수집 |
+| 언론사 | 기본 RSS URL | 요약 필드 |
+|--------|--------------|:---------:|
+| Investing.com Korea | `https://kr.investing.com/rss/news.rss` | 미사용 |
+| 이데일리 | `http://rss.edaily.co.kr/edaily_news.xml` | 사용 |
+| 이투데이 | `https://rss.etoday.co.kr/eto/etoday_news_all.xml` | 사용 |
+| 한국경제 | `https://www.hankyung.com/feed/all-news` | 미사용 |
+| 서울경제 | `https://www.sedaily.com/rss/newsall` | 미사용 |
+| 뉴스핌 | `http://rss.newspim.com/news/category/1` | 사용 |
 
-모든 소스는 API 키 없이 수집합니다. Investing.com은 기사 본문이 로그인 장벽 뒤에 있어 RSS 메타데이터만 수집하고 `collect-articles` 대상에서 제외합니다.
+모든 RSS 소스는 API 키 없이 수집합니다.
+
+> **본문 수집 정책**: 언론사 웹페이지에서 자동화 수단으로 본문을 수집하는
+> 행위는 언론사 이용약관(데이터 크롤링 금지 조항)에 위배되어 모든 매체의
+> 본문 직접 수집(`collect-articles`)을 비활성화했습니다. 본문·요약 확보는
+> [네이버 뉴스 검색 API](https://developers.naver.com/docs/serviceapi/search/news/news.md)만
+> 사용할 예정입니다 (빅카인즈는 유료 전환으로 제외). 상세 정책은
+> [PLAN.md 4.4절](./PLAN.md)을 참고하세요.
 
 기본 소스는 총 63개이며 `collect-rss` 실행 시 전체 피드와 제공된 카테고리별 피드를 함께 수집합니다. 매체별 구성은 Investing.com 16개, 이데일리 1개, 이투데이 11개, 한국경제 12개, 서울경제 12개, 뉴스핌 11개입니다. URL과 카테고리 설정의 기준은 [`pipeline.py`](./pipeline.py)의 `DEFAULT_FEED_SOURCES`입니다.
 
@@ -163,8 +170,9 @@ uv run --group news python -m modules.news.main update-symbols
 # 전체 기본 RSS 수집
 uv run --group news python -m modules.news.main collect-rss
 
-# 본문이 없거나 parser 버전이 지난 기사 수집
-uv run --group news python -m modules.news.main collect-articles --limit 100
+# (비활성화) 본문 직접 수집 — 언론사 이용약관 위배로 실행이 차단됨
+# 본문·요약 확보는 네이버 뉴스 검색 API 연동으로 대체 예정 (PLAN.md 4.4절)
+# uv run --group news python -m modules.news.main collect-articles --limit 100
 
 # 아직 현재 버전으로 분석되지 않은 기사 분석
 uv run --group news python -m modules.news.main analyze --limit 100
@@ -254,7 +262,7 @@ modules/news/
 │   ├── models.py              표준 RSS 모델과 검증
 │   └── parsers.py             공통 파서 계약, 설정 기반 파서, 언론사 레지스트리
 ├── systemd/
-│   ├── finlabs-news.service   세 단계 순차 실행 서비스
+│   ├── finlabs-news.service   RSS 수집·분석 순차 실행 서비스
 │   ├── finlabs-news.timer     30분 주기 타이머
 │   ├── finlabs-news-symbols.service  종목 마스터 갱신 서비스
 │   └── finlabs-news-symbols.timer    매일 09:00 KST 갱신 타이머
@@ -287,7 +295,7 @@ sudo systemctl status finlabs-news-symbols.timer
 
 `finlabs-news-symbols.timer`는 매일 오전 9시(Asia/Seoul)에 KOSPI·KOSDAQ·NASDAQ·NYSE·AMEX 마스터를 갱신합니다. 다운로드가 비어 있거나 한 시장이라도 실패하면 두 테이블의 기존 스냅샷을 모두 유지합니다.
 
-DuckDB 쓰기는 파일 잠금으로 직렬화됩니다. `update-symbols`, `collect-rss`, `collect-articles`, `analyze` 실행 중에는 DuckDB CLI나 다른 프로세스가 같은 DB 파일을 쓰기 가능한 상태로 열고 있으면 안 됩니다. 여러 서버나 컨테이너가 동시에 동일 파일을 쓰는 구조도 지원하지 않습니다.
+DuckDB 쓰기는 파일 잠금으로 직렬화됩니다. `update-symbols`, `collect-rss`, `extract-entities`, `analyze` 실행 중에는 DuckDB CLI나 다른 프로세스가 같은 DB 파일을 쓰기 가능한 상태로 열고 있으면 안 됩니다. 여러 서버나 컨테이너가 동시에 동일 파일을 쓰는 구조도 지원하지 않습니다.
 
 ---
 
@@ -319,7 +327,7 @@ uv run ruff check modules/news
 
 ## Current Scope
 
-현재 `collect-articles`는 이데일리, 뉴스핌, 이투데이, 한국경제, 서울경제의 언론사별 본문 선택자를 사용합니다. Investing.com은 본문이 로그인 장벽 뒤에 있어 RSS 메타데이터만 수집합니다. 선택자가 바뀌면 해당 parser의 버전을 올려 기존 기사를 재처리하며, 원문 HTML은 저장하지 않습니다. 기사 한 건의 수집 실패는 경고로 기록하고 배치를 계속 진행합니다.
+`collect-articles`(언론사 페이지 본문 직접 수집)는 언론사 이용약관 위배로 **비활성화**되어 실행 시 안내 메시지와 함께 종료됩니다. 언론사별 본문 선택자 registry, parser 버전 기반 재처리, 기사 단위 오류 격리 코드는 네이버 뉴스 검색 API 연동 시 재사용을 위해 보존되어 있습니다. 원문 HTML은 저장하지 않는 정책도 유지됩니다.
 
 `analyze` 단계는 `basic-stats-v1` 분석기로 문자 수와 공백 기준 단어 수만 계산합니다. `extract-entities` 단계는 종목 마스터와 소규모 별칭 시드(삼전, 하이닉스, 네이버)로 종목 entity만 추출하며, 기업·산업·키워드 entity는 아직 추출하지 않습니다. 이벤트 분류는 16종 taxonomy와 `ArticleEvent` DTO까지 구현되어 있고 LLM 호출 파이프라인은 미구현입니다. 전면적인 별칭 사전 구축, 과거 뉴스 백필, 임베딩·Vector Store, 점수화, 백테스트, 대시보드는 아래 로드맵의 대상입니다.
 
@@ -334,7 +342,7 @@ uv run ruff check modules/news
 | **초기** (2~4주) | RSS 수집·본문 수집·DuckDB 저장 | ✅ 구현됨 |
 | | KIS 종목 마스터 자동 갱신 | ✅ 구현됨 |
 | | 종목 마스터 기반 entity 추출, 이벤트 taxonomy·분류 DTO | ✅ 구현됨 |
-| | 별칭 사전 확장, 과거 뉴스 백필(네이버 API·빅카인즈), 시세 기반 급등 이벤트 추출, Streamlit 기본 조회 | 예정 |
+| | 네이버 뉴스 검색 API 연동 (본문·요약 확보 단일 경로), 별칭 사전 확장, 과거 뉴스 백필, 시세 기반 급등 이벤트 추출, Streamlit 기본 조회 | 예정 |
 | **중기** (1~2개월) | 임베딩 모델 비교·선정, Vector Store(DuckDB VSS, point-in-time 필터), 급등/비급등 사례 라이브러리, LLM 이벤트 분류(taxonomy 기반), Market Context features, Entity 추출, Contrastive Similarity, 콘텐츠 기반 중복 제거 | 예정 |
 | **후기** (2~3개월) | 학습 기반 점수화(LightGBM), "뉴스 단독 vs 뉴스+시장" 비교 실험, 백테스트 엔진(체결 가능성·비용·베이스라인), 감성 분석(KR-FinBERT), RAG 설명 + 인용 강제, Dashboard 고도화 | 예정 |
 | **확장** (장기) | Qdrant 이전 검토, 뉴스 토큰 + 캔들 토큰 멀티모달 예측 연구 | 예정 |

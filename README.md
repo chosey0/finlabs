@@ -37,7 +37,7 @@ FinLabs는 증권사 Open API를 독립적인 Python SDK로 구현하고, 그 �
 | **[Broker SDK]** | [Toss SDK](./modules/brokers/toss/README.md) | 구현됨 | 토스증권 현재가·캔들·종목정보와 국내·해외 장 운영 정보 조회, calendar adapter |
 | **[Market CLI]** | [KIS CLI](./kis_cli/README.md) | 구현 중 | 해외 심볼 다운로드, OHLCV·분봉 수집, DuckDB 저장, 조회와 내보내기 |
 | **[Core]** | `modules/` 계층형 코어 | 이전 중 | broker adapter, canonical domain, orchestration, warehouse read repository |
-| **[News]** | [News Pipeline](./modules/news/README.md) | 초기 구현 | RSS 정규화, 기사 본문 수집, 멱등 저장, 기초 통계 분석, systemd 실행 |
+| **[News]** | [News Pipeline](./modules/news/README.md) | 초기 구현 | RSS 정규화, 멱등 저장, 기초 통계 분석, systemd 실행. 본문 직접 수집은 언론사 약관 사유로 비활성화 (네이버 뉴스 API 전환 예정) |
 | **[Dashboard]** | `dashboard/` | 구현 중 | `modules.orchestration`을 통해 저장된 시장 데이터를 읽는 Streamlit UI |
 | **[Research]** | [Market Representation](./research/README.md) | 초기 연구 | Candlestick VQ-VAE Tokenizer 중심의 시장 표현 학습 |
 | **[Platform]** | PostgreSQL·TimescaleDB·Redis·Parquet | 계획 확정 | [통합 PLAN](./PLAN.md) 단계 1~6의 신규 데이터 플랫폼, 구현 전 |
@@ -229,7 +229,8 @@ uv run python -m kis_cli query ohlcv --symbol AAPL --limit 10
 
 ```bash
 uv run --group news python -m modules.news.main collect-rss
-uv run --group news python -m modules.news.main collect-articles --limit 100
+# collect-articles는 언론사 이용약관에 따라 비활성화됨
+# 본문·요약 확보는 네이버 뉴스 검색 API 연동으로 대체 예정
 uv run --group news python -m modules.news.main analyze --limit 100
 ```
 

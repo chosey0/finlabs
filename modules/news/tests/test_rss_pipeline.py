@@ -440,6 +440,19 @@ def test_collect_articles_reports_pending_and_per_item_results():
     assert ("Progress ok title", 1, 0) in item_results
 
 
+def test_collect_articles_cli_is_disabled_for_publisher_terms():
+    """본문 직접 수집 명령은 언론사 이용약관에 따라 실행이 차단된다."""
+
+    from typer.testing import CliRunner
+
+    from modules.news.main import COLLECT_ARTICLES_DISABLED_NOTICE, app
+
+    result = CliRunner().invoke(app, ["collect-articles"])
+
+    assert result.exit_code == 1
+    assert COLLECT_ARTICLES_DISABLED_NOTICE in result.output.replace("\n", "")
+
+
 def test_collect_articles_excludes_metadata_only_investing_source():
     """본문 parser가 없는 investing.com 항목은 수집 대상에서 제외된다."""
 

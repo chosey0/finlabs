@@ -269,12 +269,29 @@ def _article_progress_description(
     return "수집 완료"
 
 
+COLLECT_ARTICLES_DISABLED_NOTICE = (
+    "collect-articles는 언론사 이용약관(자동화 수단을 통한 콘텐츠 수집·복제 금지)에 "
+    "위배되어 비활성화되었습니다. 본문 확보는 네이버 뉴스 검색 API 연동으로 대체할 "
+    "예정입니다. 자세한 정책은 modules/news/PLAN.md 4.4절을 참고하세요."
+)
+
+
 @app.command("collect-articles")
 def collect_articles_command(
     db_path: DbPathOption = _default_db_path(),
     limit: Annotated[int, typer.Option(min=1)] = 100,
 ) -> None:
-    """본문이 없거나 parser 버전이 지난 기사를 수집한다."""
+    """(비활성화) 언론사 이용약관에 따라 본문 직접 수집을 중단했다."""
+
+    typer.echo(COLLECT_ARTICLES_DISABLED_NOTICE)
+    raise typer.Exit(code=1)
+
+
+def _collect_articles_with_progress(db_path: Path, limit: int) -> None:
+    """언론사 페이지 본문 수집 CLI 구현 (약관 사유로 명령에서 분리해 보관).
+
+    네이버 뉴스 API 기반 수집이 구현되면 진행 표시 부분을 재사용한다.
+    """
 
     with Progress(
         TextColumn("[progress.description]{task.description}"),
