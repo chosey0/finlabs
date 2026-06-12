@@ -7,7 +7,7 @@ import fcntl
 import re
 from collections.abc import Callable, Iterable, Mapping
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any, Protocol
@@ -27,9 +27,12 @@ from .db.sql import (
 )
 from .schema.article import ArticleAnalysis, CanonicalArticle, make_content_hash
 from .schema.base import BaseRssParser
+from .schema.edaily import EdailyRssParser
 from .schema.etoday import EtodayRssParser
+from .schema.hankyung import HankyungRssParser
 from .schema.investingcom import InvestingComRssParser
 from .schema.newspim import NewspimRssParser
+from .schema.sedaily import SedailyRssParser
 
 
 ANALYZER_VERSION = "basic-stats-v1"
@@ -50,6 +53,8 @@ class FeedSource:
     publisher: str
     url: str
     parser: BaseRssParser
+    domain_category: str | None = None
+    feed_category: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,33 +68,339 @@ class OperationResult:
 
 PARSERS: Mapping[str, BaseRssParser] = {
     "investing.com": InvestingComRssParser(),
+    "edaily": EdailyRssParser(),
     "etoday": EtodayRssParser(),
+    "hankyung": HankyungRssParser(),
     "newspim": NewspimRssParser(),
+    "sedaily": SedailyRssParser(),
 }
+
+HANKYUNG_CATEGORY_FEEDS = {
+    "증권": "https://www.hankyung.com/feed/finance",
+    "경제": "https://www.hankyung.com/feed/economy",
+    "부동산": "https://www.hankyung.com/feed/realestate",
+    "IT": "https://www.hankyung.com/feed/it",
+    "정치": "https://www.hankyung.com/feed/politics",
+    "국제": "https://www.hankyung.com/feed/international",
+    "사회": "https://www.hankyung.com/feed/society",
+    "생활": "https://www.hankyung.com/feed/life",
+    "오피니언": "https://www.hankyung.com/feed/opinion",
+    "스포츠": "https://www.hankyung.com/feed/sports",
+    "연예": "https://www.hankyung.com/feed/entertainment",
+}
+SEDAILY_CATEGORY_FEEDS = {
+    "증권": "https://www.sedaily.com/rss/finance",
+    "부동산": "https://www.sedaily.com/rss/realestate",
+    "경제": "https://www.sedaily.com/rss/economy",
+    "정치": "https://www.sedaily.com/rss/politics",
+    "사회": "https://www.sedaily.com/rss/society",
+    "국제": "https://www.sedaily.com/rss/international",
+    "IT": "https://www.sedaily.com/rss/it",
+    "오피니언": "https://www.sedaily.com/rss/opinion",
+    "생활": "https://www.sedaily.com/rss/life",
+    "스포츠": "https://www.sedaily.com/rss/sports",
+    "연예": "https://www.sedaily.com/rss/entertainment",
+}
+
+
+def _category_feed_sources(
+    publisher: str,
+    feeds: Mapping[str, str],
+) -> tuple[FeedSource, ...]:
+    """카테고리명과 URL 매핑을 기본 피드 소스 목록으로 변환한다."""
+
+    parser = PARSERS[publisher]
+    return tuple(
+        FeedSource(
+            publisher=publisher,
+            url=url,
+            parser=parser,
+            feed_category=category,
+        )
+        for category, url in feeds.items()
+    )
+
+
 DEFAULT_FEED_SOURCES = (
     FeedSource(
         publisher="investing.com",
         url="https://kr.investing.com/rss/news.rss",
         parser=PARSERS["investing.com"],
+        domain_category="금융",
     ),
+    FeedSource(
+        "investing.com",
+        "https://kr.investing.com/rss/news_357.rss",
+        PARSERS["investing.com"],
+        "금융",
+        "내부자거래",
+    ),
+    FeedSource(
+        "investing.com",
+        "https://kr.investing.com/rss/news_1065.rss",
+        PARSERS["investing.com"],
+        "금융",
+        "주식시장투자아이디어",
+    ),
+    FeedSource(
+        "investing.com",
+        "https://kr.investing.com/rss/news_1064.rss",
+        PARSERS["investing.com"],
+        "금융",
+        "SEC 공시",
+    ),
+    FeedSource(
+        "investing.com",
+        "https://kr.investing.com/rss/news_1063.rss",
+        PARSERS["investing.com"],
+        "금융",
+        "어닝콜 스크립트",
+    ),
+    FeedSource(
+        "investing.com",
+        "https://kr.investing.com/rss/news_1062.rss",
+        PARSERS["investing.com"],
+        "금융",
+        "실적보고서와 발표예정일",
+    ),
+    FeedSource(
+        "investing.com",
+        "https://kr.investing.com/rss/news_1061.rss",
+        PARSERS["investing.com"],
+        "금융",
+        "애널리스트 투자의견",
+    ),
+    FeedSource(
+        "investing.com",
+        "https://kr.investing.com/rss/news_450.rss",
+        PARSERS["investing.com"],
+        "금융",
+        "IPO",
+    ),
+    FeedSource(
+        "investing.com",
+        "https://kr.investing.com/rss/news_301.rss",
+        PARSERS["investing.com"],
+        "금융",
+        "암호화폐",
+    ),
+    FeedSource(
+        "investing.com",
+        "https://kr.investing.com/rss/news_1.rss",
+        PARSERS["investing.com"],
+        "금융",
+        "외환",
+    ),
+    FeedSource(
+        "investing.com",
+        "https://kr.investing.com/rss/news_285.rss",
+        PARSERS["investing.com"],
+        "금융",
+        "많이 본 기사",
+    ),
+    FeedSource(
+        "investing.com",
+        "https://kr.investing.com/rss/news_25.rss",
+        PARSERS["investing.com"],
+        "금융",
+        "주식 시장 뉴스",
+    ),
+    FeedSource(
+        "investing.com",
+        "https://kr.investing.com/rss/news_11.rss",
+        PARSERS["investing.com"],
+        "금융",
+        "상품과 선물 뉴스",
+    ),
+    FeedSource(
+        "investing.com",
+        "https://kr.investing.com/rss/news_95.rss",
+        PARSERS["investing.com"],
+        "금융",
+        "경제 지표 뉴스",
+    ),
+    FeedSource(
+        "investing.com",
+        "https://kr.investing.com/rss/news_12.rss",
+        PARSERS["investing.com"],
+        "금융",
+        "스포츠 및 일반 뉴스",
+    ),
+    FeedSource(
+        "investing.com",
+        "https://kr.investing.com/rss/news_14.rss",
+        PARSERS["investing.com"],
+        "금융",
+        "경제 뉴스",
+    ),
+    FeedSource(
+        publisher="edaily",
+        url="http://rss.edaily.co.kr/edaily_news.xml",
+        parser=PARSERS["edaily"],
+    ),
+    FeedSource(
+        publisher="hankyung",
+        url="https://www.hankyung.com/feed/all-news",
+        parser=PARSERS["hankyung"],
+    ),
+    *_category_feed_sources("hankyung", HANKYUNG_CATEGORY_FEEDS),
+    FeedSource(
+        publisher="sedaily",
+        url="https://www.sedaily.com/rss/newsall",
+        parser=PARSERS["sedaily"],
+    ),
+    *_category_feed_sources("sedaily", SEDAILY_CATEGORY_FEEDS),
     FeedSource(
         publisher="etoday",
         url="https://rss.etoday.co.kr/eto/etoday_news_all.xml",
         parser=PARSERS["etoday"],
     ),
     FeedSource(
+        "etoday",
+        "https://rss.etoday.co.kr/eto/finance_news.xml",
+        PARSERS["etoday"],
+        feed_category="금융",
+    ),
+    FeedSource(
+        "etoday",
+        "https://rss.etoday.co.kr/eto/market_news.xml",
+        PARSERS["etoday"],
+        feed_category="마켓",
+    ),
+    FeedSource(
+        "etoday",
+        "https://rss.etoday.co.kr/eto/land_news.xml",
+        PARSERS["etoday"],
+        feed_category="부동산",
+    ),
+    FeedSource(
+        "etoday",
+        "https://rss.etoday.co.kr/eto/industry_news.xml",
+        PARSERS["etoday"],
+        feed_category="산업",
+    ),
+    FeedSource(
+        "etoday",
+        "https://rss.etoday.co.kr/eto/economy_news.xml",
+        PARSERS["etoday"],
+        feed_category="경제",
+    ),
+    FeedSource(
+        "etoday",
+        "https://rss.etoday.co.kr/eto/global_news.xml",
+        PARSERS["etoday"],
+        feed_category="국제",
+    ),
+    FeedSource(
+        "etoday",
+        "https://rss.etoday.co.kr/eto/politics_news.xml",
+        PARSERS["etoday"],
+        feed_category="정치",
+    ),
+    FeedSource(
+        "etoday",
+        "https://rss.etoday.co.kr/eto/society_news.xml",
+        PARSERS["etoday"],
+        feed_category="사회",
+    ),
+    FeedSource(
+        "etoday",
+        "https://rss.etoday.co.kr/eto/opinion_news.xml",
+        PARSERS["etoday"],
+        feed_category="오피니언",
+    ),
+    FeedSource(
+        "etoday",
+        "https://rss.etoday.co.kr/eto/culture-life_news.xml",
+        PARSERS["etoday"],
+        feed_category="문화/라이프",
+    ),
+    FeedSource(
         publisher="newspim",
         url="http://rss.newspim.com/news/category/1",
         parser=PARSERS["newspim"],
     ),
+    FeedSource(
+        "newspim",
+        "http://rss.newspim.com/news/category/101",
+        PARSERS["newspim"],
+        feed_category="정치",
+    ),
+    FeedSource(
+        "newspim",
+        "http://rss.newspim.com/news/category/103",
+        PARSERS["newspim"],
+        feed_category="경제",
+    ),
+    FeedSource(
+        "newspim",
+        "http://rss.newspim.com/news/category/102",
+        PARSERS["newspim"],
+        feed_category="사회",
+    ),
+    FeedSource(
+        "newspim",
+        "http://rss.newspim.com/news/category/107",
+        PARSERS["newspim"],
+        feed_category="글로벌",
+    ),
+    FeedSource(
+        "newspim",
+        "http://rss.newspim.com/news/category/106",
+        PARSERS["newspim"],
+        feed_category="산업",
+    ),
+    FeedSource(
+        "newspim",
+        "http://rss.newspim.com/news/category/105",
+        PARSERS["newspim"],
+        feed_category="증권/금융",
+    ),
+    FeedSource(
+        "newspim",
+        "http://rss.newspim.com/news/category/104",
+        PARSERS["newspim"],
+        feed_category="부동산",
+    ),
+    FeedSource(
+        "newspim",
+        "http://rss.newspim.com/news/category/112",
+        PARSERS["newspim"],
+        feed_category="라이프/여행",
+    ),
+    FeedSource(
+        "newspim",
+        "http://rss.newspim.com/news/category/110",
+        PARSERS["newspim"],
+        feed_category="문화/연예",
+    ),
+    FeedSource(
+        "newspim",
+        "http://rss.newspim.com/news/category/111",
+        PARSERS["newspim"],
+        feed_category="스포츠",
+    ),
 )
+
+
+def load_feed(url: str) -> Any:
+    """RSS 원문을 HTTP로 가져온 뒤 feedparser 항목으로 변환한다."""
+
+    response = httpx.get(
+        url,
+        follow_redirects=True,
+        timeout=30.0,
+        headers={"User-Agent": DEFAULT_USER_AGENT},
+    )
+    response.raise_for_status()
+    return feedparser.parse(response.content)
 
 
 def collect_rss(
     connection: duckdb.DuckDBPyConnection,
     *,
     sources: Iterable[FeedSource] = DEFAULT_FEED_SOURCES,
-    feed_loader: FeedLoader = feedparser.parse,
+    feed_loader: FeedLoader = load_feed,
 ) -> OperationResult:
     """RSS 피드를 파싱해 표준 항목을 중복 없이 저장한다."""
 
@@ -106,6 +417,11 @@ def collect_rss(
         for raw_entry in entries:
             processed += 1
             item = source.parser.parse(raw_entry)
+            item = replace(
+                item,
+                domain_category=source.domain_category,
+                feed_categories=(source.feed_category,) if source.feed_category else (),
+            )
             created += int(insert_rss_item(connection, item))
     return OperationResult(
         processed=processed,

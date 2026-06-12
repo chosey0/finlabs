@@ -69,7 +69,7 @@ def collect_rss_command(
         list[str] | None,
         typer.Option(
             "--feed",
-            help="Repeatable publisher=URL override. Defaults to Investing.com.",
+            help="Repeatable publisher=URL override. Defaults to configured feeds.",
         ),
     ] = None,
 ) -> None:

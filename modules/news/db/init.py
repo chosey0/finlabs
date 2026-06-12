@@ -17,8 +17,16 @@ RSS_ITEM_SCHEMA = {
     "title": "VARCHAR",
     "author": "VARCHAR",
     "summary": "VARCHAR",
+    "domain_category": "VARCHAR",
+    "feed_categories": "VARCHAR[]",
+    "source_categories": "VARCHAR[]",
     "published_at": "TIMESTAMP",
     "created_at": "TIMESTAMP",
+}
+LEGACY_RSS_ITEM_SCHEMA = {
+    key: value
+    for key, value in RSS_ITEM_SCHEMA.items()
+    if key not in {"domain_category", "feed_categories", "source_categories"}
 }
 PUBLISHED_AT_SEOUL_MIGRATION = "published_at_utc_to_asia_seoul_v1"
 
@@ -64,11 +72,28 @@ def create_schema(connection: duckdb.DuckDBPyConnection) -> None:
             title VARCHAR NOT NULL,
             author VARCHAR,
             summary VARCHAR,
+            domain_category VARCHAR,
+            feed_categories VARCHAR[] NOT NULL DEFAULT [],
+            source_categories VARCHAR[] NOT NULL DEFAULT [],
             published_at TIMESTAMP NOT NULL,
             created_at TIMESTAMP NOT NULL DEFAULT current_timestamp
         )
         """
     )
+    connection.execute(
+        "ALTER TABLE rss_items ADD COLUMN IF NOT EXISTS domain_category VARCHAR"
+    )
+    connection.execute(
+        "ALTER TABLE rss_items ADD COLUMN IF NOT EXISTS feed_categories VARCHAR[]"
+    )
+    connection.execute(
+        "ALTER TABLE rss_items ADD COLUMN IF NOT EXISTS source_categories VARCHAR[]"
+    )
+    for column in ("feed_categories", "source_categories"):
+        connection.execute(f"UPDATE rss_items SET {column} = [] WHERE {column} IS NULL")
+        connection.execute(
+            f"ALTER TABLE rss_items ALTER COLUMN {column} SET DEFAULT []"
+        )
     connection.execute(
         """
         CREATE TABLE IF NOT EXISTS articles (
@@ -154,7 +179,7 @@ def _reset_empty_legacy_schema(connection: duckdb.DuckDBPyConnection) -> None:
     columns = {
         row[0]: row[1] for row in connection.execute("DESCRIBE rss_items").fetchall()
     }
-    if columns == RSS_ITEM_SCHEMA:
+    if columns == RSS_ITEM_SCHEMA or columns == LEGACY_RSS_ITEM_SCHEMA:
         return
 
     rss_count = connection.execute("SELECT count(*) FROM rss_items").fetchone()[0]

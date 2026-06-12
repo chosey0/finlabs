@@ -28,6 +28,9 @@ class CanonicalRssEntry:
     author: str | None
     summary: str | None
     published_at: datetime
+    domain_category: str | None = None
+    feed_categories: tuple[str, ...] = ()
+    source_categories: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         """필수값, URL, 시간대, URL 기반 ID의 유효성을 검증한다."""
@@ -38,6 +41,19 @@ class CanonicalRssEntry:
         _require_text("title", self.title)
         _require_optional_text("author", self.author)
         _require_optional_text("summary", self.summary)
+        _require_optional_text("domain_category", self.domain_category)
+        _require_text_tuple("feed_categories", self.feed_categories)
+        _require_text_tuple("source_categories", self.source_categories)
+        object.__setattr__(
+            self,
+            "feed_categories",
+            _unique_texts(self.feed_categories),
+        )
+        object.__setattr__(
+            self,
+            "source_categories",
+            _unique_texts(self.source_categories),
+        )
         if not isinstance(self.published_at, datetime):
             raise TypeError("published_at must be a datetime")
         if self.published_at.utcoffset() is None:
@@ -79,6 +95,7 @@ class BaseRssParser(ABC):
             author=extract_author(data),
             summary=summary,
             published_at=extract_published_at(data),
+            source_categories=extract_source_categories(data),
         )
 
 
@@ -116,6 +133,23 @@ def extract_author(data: Mapping[str, Any]) -> str | None:
     return optional_text(data.get("author"))
 
 
+def extract_source_categories(data: Mapping[str, Any]) -> tuple[str, ...]:
+    """feedparser의 category/tags 값을 가공하지 않은 카테고리명으로 추출한다."""
+
+    categories: list[str] = []
+    category = optional_text(data.get("category"))
+    if category is not None:
+        categories.append(category)
+    tags = data.get("tags")
+    if isinstance(tags, (list, tuple)):
+        for tag in tags:
+            if isinstance(tag, Mapping):
+                term = optional_text(tag.get("term"))
+                if term is not None:
+                    categories.append(term)
+    return _unique_texts(categories)
+
+
 def extract_published_at(data: Mapping[str, Any]) -> datetime:
     """RSS 발행 시각을 추출해 서울 기준 datetime으로 정규화한다."""
 
@@ -123,9 +157,9 @@ def extract_published_at(data: Mapping[str, Any]) -> datetime:
     if published is not None:
         value = _parse_published_text(published)
         if value is not None:
-            return value.replace(
-                tzinfo=value.tzinfo or SEOUL_TIMEZONE
-            ).astimezone(SEOUL_TIMEZONE)
+            return value.replace(tzinfo=value.tzinfo or SEOUL_TIMEZONE).astimezone(
+                SEOUL_TIMEZONE
+            )
 
     parsed = data.get("published_parsed")
     if isinstance(parsed, time.struct_time):
@@ -163,6 +197,21 @@ def _require_optional_text(field_name: str, value: object) -> None:
 
     if value is not None:
         _require_text(field_name, value)
+
+
+def _require_text_tuple(field_name: str, value: object) -> None:
+    """카테고리 목록이 비어 있지 않은 문자열의 tuple인지 검증한다."""
+
+    if not isinstance(value, tuple):
+        raise TypeError(f"{field_name} must be a tuple")
+    for item in value:
+        _require_text(field_name, item)
+
+
+def _unique_texts(values: Any) -> tuple[str, ...]:
+    """문자열 목록의 공백과 중복을 제거하되 입력 순서를 유지한다."""
+
+    return tuple(dict.fromkeys(str(value).strip() for value in values))
 
 
 def _require_url(field_name: str, value: object) -> None:

@@ -18,15 +18,7 @@ def create_rss_item(
 ) -> str:
     """RSS 항목을 중복 없이 삽입하고 결정적 ID를 반환한다."""
 
-    connection.execute(
-        """
-        INSERT INTO rss_items (
-            id, publisher, url, title, author, summary, published_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT (id) DO NOTHING
-        """,
-        _item_values(item),
-    )
+    insert_rss_item(connection, item)
     return item.id
 
 
@@ -39,14 +31,34 @@ def insert_rss_item(
     row = connection.execute(
         """
         INSERT INTO rss_items (
-            id, publisher, url, title, author, summary, published_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            id, publisher, url, title, author, summary, domain_category,
+            feed_categories, source_categories, published_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT (id) DO NOTHING
         RETURNING id
         """,
         _item_values(item),
     ).fetchone()
-    return row is not None
+    if row is not None:
+        return True
+    existing = read_rss_item(connection, item.id)
+    if existing is None:
+        return False
+    merged = CanonicalRssEntry(
+        id=existing.id,
+        publisher=existing.publisher,
+        url=existing.url,
+        title=existing.title,
+        author=existing.author,
+        summary=existing.summary,
+        published_at=existing.published_at,
+        domain_category=existing.domain_category or item.domain_category,
+        feed_categories=existing.feed_categories + item.feed_categories,
+        source_categories=existing.source_categories + item.source_categories,
+    )
+    if merged != existing:
+        update_rss_item(connection, merged)
+    return False
 
 
 def read_rss_item(
@@ -57,7 +69,8 @@ def read_rss_item(
 
     row = connection.execute(
         """
-        SELECT id, publisher, url, title, author, summary, published_at
+        SELECT id, publisher, url, title, author, summary, domain_category,
+               feed_categories, source_categories, published_at
         FROM rss_items
         WHERE id = ?
         """,
@@ -75,7 +88,9 @@ def update_rss_item(
     row = connection.execute(
         """
         UPDATE rss_items
-        SET publisher = ?, url = ?, title = ?, author = ?, summary = ?, published_at = ?
+        SET publisher = ?, url = ?, title = ?, author = ?, summary = ?,
+            domain_category = ?, feed_categories = ?, source_categories = ?,
+            published_at = ?
         WHERE id = ?
         RETURNING id
         """,
@@ -85,6 +100,9 @@ def update_rss_item(
             item.title,
             item.author,
             item.summary,
+            item.domain_category,
+            list(item.feed_categories),
+            list(item.source_categories),
             item.published_at.astimezone(SEOUL_TIMEZONE).replace(tzinfo=None),
             item.id,
         ],
@@ -118,7 +136,8 @@ def list_rss_items(
     if publisher is None:
         rows = connection.execute(
             """
-            SELECT id, publisher, url, title, author, summary, published_at
+            SELECT id, publisher, url, title, author, summary, domain_category,
+                   feed_categories, source_categories, published_at
             FROM rss_items
             ORDER BY published_at DESC, id
             LIMIT ?
@@ -128,7 +147,8 @@ def list_rss_items(
     else:
         rows = connection.execute(
             """
-            SELECT id, publisher, url, title, author, summary, published_at
+            SELECT id, publisher, url, title, author, summary, domain_category,
+                   feed_categories, source_categories, published_at
             FROM rss_items
             WHERE publisher = ?
             ORDER BY published_at DESC, id
@@ -150,7 +170,9 @@ def list_rss_items_without_articles(
         raise ValueError("limit must be greater than zero")
     rows = connection.execute(
         """
-        SELECT r.id, r.publisher, r.url, r.title, r.author, r.summary, r.published_at
+        SELECT r.id, r.publisher, r.url, r.title, r.author, r.summary,
+               r.domain_category, r.feed_categories, r.source_categories,
+               r.published_at
         FROM rss_items AS r
         LEFT JOIN articles AS a ON a.rss_item_id = r.id
         WHERE a.rss_item_id IS NULL
@@ -305,6 +327,9 @@ def _item_values(item: CanonicalRssEntry) -> list[object]:
         item.title,
         item.author,
         item.summary,
+        item.domain_category,
+        list(item.feed_categories),
+        list(item.source_categories),
         item.published_at.astimezone(SEOUL_TIMEZONE).replace(tzinfo=None),
     ]
 
@@ -319,5 +344,8 @@ def _row_to_item(row: Sequence[object]) -> CanonicalRssEntry:
         title=str(row[3]),
         author=None if row[4] is None else str(row[4]),
         summary=None if row[5] is None else str(row[5]),
-        published_at=row[6].replace(tzinfo=SEOUL_TIMEZONE),
+        domain_category=None if row[6] is None else str(row[6]),
+        feed_categories=tuple(row[7]),
+        source_categories=tuple(row[8]),
+        published_at=row[9].replace(tzinfo=SEOUL_TIMEZONE),
     )

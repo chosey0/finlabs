@@ -20,6 +20,7 @@ from modules.news.db.sql import (
 )
 from modules.news.pipeline import (
     DEFAULT_FEED_SOURCES,
+    FeedSource,
     OperationResult,
     analyze_articles,
     collect_articles,
@@ -28,9 +29,12 @@ from modules.news.pipeline import (
     single_writer_lock,
 )
 from modules.news.schema.base import CanonicalRssEntry
+from modules.news.schema.edaily import EdailyRssParser
 from modules.news.schema.etoday import EtodayRssParser
+from modules.news.schema.hankyung import HankyungRssParser
 from modules.news.schema.investingcom import InvestingComRssParser
 from modules.news.schema.newspim import NewspimRssParser
+from modules.news.schema.sedaily import SedailyRssParser
 
 
 SEOUL = ZoneInfo("Asia/Seoul")
@@ -58,6 +62,20 @@ def _published_parsed() -> time.struct_time:
             None,
         ),
         (
+            EdailyRssParser(),
+            {
+                "author": "최효은",
+                "author_detail": {"name": "최효은"},
+                "link": "https://www.edaily.co.kr/News/Read?newsId=1",
+                "published": "Wed, 10 Jun 2026 21:00:00 +0900",
+                "published_parsed": _published_parsed(),
+                "summary": "이데일리 요약",
+                "title": "Edaily title",
+            },
+            "edaily",
+            "이데일리 요약",
+        ),
+        (
             EtodayRssParser(),
             {
                 "author": "기자 (writer@etoday.co.kr)",
@@ -72,6 +90,17 @@ def _published_parsed() -> time.struct_time:
             "이투데이 요약",
         ),
         (
+            HankyungRssParser(),
+            {
+                "author": "한국경제 기자",
+                "link": "https://www.hankyung.com/article/1",
+                "published": "Wed, 10 Jun 2026 21:00:00 +0900",
+                "title": "Hankyung title",
+            },
+            "hankyung",
+            None,
+        ),
+        (
             NewspimRssParser(),
             {
                 "author": "최현민 기자",
@@ -83,6 +112,17 @@ def _published_parsed() -> time.struct_time:
             },
             "newspim",
             "뉴스핌 요약",
+        ),
+        (
+            SedailyRssParser(),
+            {
+                "author": "서울경제 기자",
+                "link": "https://www.sedaily.com/article/1",
+                "published": "Wed, 10 Jun 2026 21:00:00 +0900",
+                "title": "Sedaily title",
+            },
+            "sedaily",
+            None,
         ),
     ],
 )
@@ -99,6 +139,23 @@ def test_provider_parser_returns_canonical_entry(parser, raw, publisher, summary
     assert entry.published_at.tzinfo == SEOUL
 
 
+def test_parser_preserves_source_categories_without_normalizing():
+    """XML category 값은 매체 원문 그대로 중복 없이 보존한다."""
+
+    entry = EdailyRssParser().parse(
+        {
+            "author": "기자",
+            "link": "https://www.edaily.co.kr/News/Read?newsId=category",
+            "published": "Wed, 10 Jun 2026 21:00:00 +0900",
+            "summary": "요약",
+            "tags": [{"term": "증권"}, {"term": "증권"}, {"term": "금융·재테크"}],
+            "title": "Category title",
+        }
+    )
+
+    assert entry.source_categories == ("증권", "금융·재테크")
+
+
 def test_parser_rejects_invalid_url_before_database_write():
     """잘못된 기사 URL이 데이터베이스 적재 전에 거부되는지 검증한다."""
 
@@ -112,6 +169,48 @@ def test_parser_rejects_invalid_url_before_database_write():
 
     with pytest.raises(ValueError, match=r"HTTP\(S\) URL"):
         InvestingComRssParser().parse(raw)
+
+
+def test_default_feed_sources_include_edaily():
+    """기본 RSS 수집 대상에 이데일리 피드가 포함되는지 검증한다."""
+
+    sources = {source.publisher: source.url for source in DEFAULT_FEED_SOURCES}
+
+    assert sources["edaily"] == "http://rss.edaily.co.kr/edaily_news.xml"
+
+
+def test_default_feed_sources_include_configured_categories():
+    """제공된 카테고리별 RSS URL과 Investing.com 도메인을 기본값으로 유지한다."""
+
+    categorized = {
+        (source.publisher, source.feed_category): source.url
+        for source in DEFAULT_FEED_SOURCES
+        if source.feed_category is not None
+    }
+
+    assert categorized[("investing.com", "내부자거래")].endswith("news_357.rss")
+    assert categorized[("investing.com", "경제 뉴스")].endswith("news_14.rss")
+    assert categorized[("etoday", "금융")].endswith("finance_news.xml")
+    assert categorized[("etoday", "문화/라이프")].endswith("culture-life_news.xml")
+    assert categorized[("newspim", "정치")].endswith("category/101")
+    assert categorized[("newspim", "스포츠")].endswith("category/111")
+    assert categorized[("hankyung", "증권")].endswith("feed/finance")
+    assert categorized[("hankyung", "연예")].endswith("feed/entertainment")
+    assert categorized[("sedaily", "증권")].endswith("rss/finance")
+    assert categorized[("sedaily", "연예")].endswith("rss/entertainment")
+    assert all(
+        source.domain_category == "금융"
+        for source in DEFAULT_FEED_SOURCES
+        if source.publisher == "investing.com"
+    )
+
+    uncategorized = {
+        source.publisher: source.url
+        for source in DEFAULT_FEED_SOURCES
+        if source.feed_category is None
+    }
+    assert uncategorized["hankyung"] == "https://www.hankyung.com/feed/all-news"
+    assert uncategorized["sedaily"] == "https://www.sedaily.com/rss/newsall"
 
 
 def test_crud_uses_one_canonical_contract():
@@ -212,6 +311,55 @@ def test_three_pipeline_stages_are_idempotent():
     ).fetchone() == (18, 3)
 
 
+def test_collect_rss_merges_categories_for_duplicate_article_urls():
+    """같은 기사가 여러 피드에 있으면 행은 하나만 두고 카테고리를 합친다."""
+
+    connection = duckdb.connect(":memory:")
+    create_schema(connection)
+    parser = EtodayRssParser()
+    sources = (
+        FeedSource(
+            "etoday",
+            "https://example.com/economy.xml",
+            parser,
+            feed_category="경제",
+        ),
+        FeedSource(
+            "etoday",
+            "https://example.com/market.xml",
+            parser,
+            feed_category="마켓",
+        ),
+    )
+
+    def load_feed(url):
+        source_category = "거시경제" if url.endswith("economy.xml") else "증권"
+        return SimpleNamespace(
+            entries=[
+                {
+                    "author": "기자",
+                    "link": "https://www.etoday.co.kr/news/view/duplicate",
+                    "published": "Wed, 10 Jun 2026 21:00:00 +0900",
+                    "summary": "요약",
+                    "tags": [{"term": source_category}],
+                    "title": "Duplicate article",
+                }
+            ],
+            bozo=False,
+        )
+
+    result = collect_rss(connection, sources=sources, feed_loader=load_feed)
+    item = read_rss_item(
+        connection,
+        hashlib.sha256(b"https://www.etoday.co.kr/news/view/duplicate").hexdigest(),
+    )
+
+    assert result == OperationResult(processed=2, created=1, skipped=1)
+    assert item is not None
+    assert item.feed_categories == ("경제", "마켓")
+    assert item.source_categories == ("거시경제", "증권")
+
+
 def test_recorded_operation_persists_success_and_failure():
     """각 단계의 성공·실패 상태와 오류 메시지가 실행 이력에 남는다."""
 
@@ -295,16 +443,49 @@ def test_create_schema_migrates_existing_utc_published_at_to_seoul_once():
     )
 
     create_schema(connection)
-    first_value = connection.execute(
-        "SELECT published_at FROM rss_items"
-    ).fetchone()[0]
+    first_value = connection.execute("SELECT published_at FROM rss_items").fetchone()[0]
     create_schema(connection)
-    second_value = connection.execute(
-        "SELECT published_at FROM rss_items"
-    ).fetchone()[0]
+    second_value = connection.execute("SELECT published_at FROM rss_items").fetchone()[
+        0
+    ]
 
     assert first_value == datetime(2026, 6, 10, 21, 0)
     assert second_value == first_value
+
+
+def test_create_schema_adds_category_columns_without_deleting_existing_rows():
+    """기존 RSS 데이터는 유지하면서 카테고리 컬럼과 빈 기본값을 추가한다."""
+
+    connection = duckdb.connect(":memory:")
+    connection.execute(
+        """
+        CREATE TABLE rss_items (
+            id VARCHAR PRIMARY KEY,
+            publisher VARCHAR NOT NULL,
+            url VARCHAR NOT NULL UNIQUE,
+            title VARCHAR NOT NULL,
+            author VARCHAR,
+            summary VARCHAR,
+            published_at TIMESTAMP NOT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT current_timestamp
+        )
+        """
+    )
+    connection.execute(
+        """
+        INSERT INTO rss_items (id, publisher, url, title, published_at)
+        VALUES (?, 'etoday', ?, 'Existing', TIMESTAMP '2026-06-10 12:00:00')
+        """,
+        ["b" * 64, "https://example.com/existing"],
+    )
+
+    create_schema(connection)
+
+    assert connection.execute(
+        """SELECT domain_category, feed_categories, source_categories
+        FROM rss_items WHERE id = ?""",
+        ["b" * 64],
+    ).fetchone() == (None, [], [])
 
 
 def test_single_writer_lock_rejects_overlapping_pipeline(tmp_path):
