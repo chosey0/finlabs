@@ -6,9 +6,12 @@ from decimal import Decimal
 
 import httpx
 
+import pytest
+
 from modules.brokers.kis import (
     Credentials,
     KisClient,
+    KisRealtimeError,
     OrderBookSnapshot,
     RealtimeTick,
     issue_websocket_approval_key,
@@ -16,7 +19,14 @@ from modules.brokers.kis import (
     lookup,
     mask_sensitive_message,
 )
-from modules.brokers.kis.parsers.realtime import parse_realtime_frame, parse_trade_payload
+from modules.brokers.kis.parsers.realtime import (
+    parse_realtime_frame,
+    parse_trade_payload,
+)
+from modules.brokers.kis.realtime.subscription import (
+    SubscriptionRegistry,
+    subscription_for,
+)
 
 
 def test_issue_websocket_approval_key_sync(monkeypatch) -> None:
@@ -147,11 +157,17 @@ def test_realtime_domestic_subscription_uses_bare_symbol_tr_key(monkeypatch) -> 
     async def fake_approval(self):
         return "approval-key"
 
-    monkeypatch.setattr("modules.brokers.kis.realtime.connection.websockets.connect", fake_connect)
-    monkeypatch.setattr("modules.brokers.kis.client.KisClient.ensure_approval_key", fake_approval)
+    monkeypatch.setattr(
+        "modules.brokers.kis.realtime.connection.websockets.connect", fake_connect
+    )
+    monkeypatch.setattr(
+        "modules.brokers.kis.client.KisClient.ensure_approval_key", fake_approval
+    )
 
     async def run() -> None:
-        async with KisClient(credentials=Credentials("app-key", "app-secret")) as client:
+        async with KisClient(
+            credentials=Credentials("app-key", "app-secret")
+        ) as client:
             async with client.realtime.session() as ws:
                 await ws.subscribe_trades("005930", market="KOSPI")
                 await ws.subscribe_orderbook("035720", market="KOSDAQ")
@@ -173,11 +189,17 @@ def test_realtime_domestic_subscription_rejects_delayed_feed(monkeypatch) -> Non
     async def fake_approval(self):
         return "approval-key"
 
-    monkeypatch.setattr("modules.brokers.kis.realtime.connection.websockets.connect", fake_connect)
-    monkeypatch.setattr("modules.brokers.kis.client.KisClient.ensure_approval_key", fake_approval)
+    monkeypatch.setattr(
+        "modules.brokers.kis.realtime.connection.websockets.connect", fake_connect
+    )
+    monkeypatch.setattr(
+        "modules.brokers.kis.client.KisClient.ensure_approval_key", fake_approval
+    )
 
     async def run() -> None:
-        async with KisClient(credentials=Credentials("app-key", "app-secret")) as client:
+        async with KisClient(
+            credentials=Credentials("app-key", "app-secret")
+        ) as client:
             async with client.realtime.session() as ws:
                 await ws.subscribe_trades("005930", market="KRX", feed="delayed")
 
@@ -199,11 +221,17 @@ def test_realtime_overseas_feed_selects_tr_key_prefix(monkeypatch) -> None:
     async def fake_approval(self):
         return "approval-key"
 
-    monkeypatch.setattr("modules.brokers.kis.realtime.connection.websockets.connect", fake_connect)
-    monkeypatch.setattr("modules.brokers.kis.client.KisClient.ensure_approval_key", fake_approval)
+    monkeypatch.setattr(
+        "modules.brokers.kis.realtime.connection.websockets.connect", fake_connect
+    )
+    monkeypatch.setattr(
+        "modules.brokers.kis.client.KisClient.ensure_approval_key", fake_approval
+    )
 
     async def run() -> None:
-        async with KisClient(credentials=Credentials("app-key", "app-secret")) as client:
+        async with KisClient(
+            credentials=Credentials("app-key", "app-secret")
+        ) as client:
             async with client.realtime.session() as ws:
                 await ws.subscribe_trades("AAPL", market="NAS", feed="realtime")
                 await ws.subscribe_trades("TSLA", market="NAS")
@@ -225,11 +253,17 @@ def test_realtime_subscribe_unsubscribe_state_machine(monkeypatch) -> None:
     async def fake_approval(self):
         return "approval-key"
 
-    monkeypatch.setattr("modules.brokers.kis.realtime.connection.websockets.connect", fake_connect)
-    monkeypatch.setattr("modules.brokers.kis.client.KisClient.ensure_approval_key", fake_approval)
+    monkeypatch.setattr(
+        "modules.brokers.kis.realtime.connection.websockets.connect", fake_connect
+    )
+    monkeypatch.setattr(
+        "modules.brokers.kis.client.KisClient.ensure_approval_key", fake_approval
+    )
 
     async def run() -> None:
-        async with KisClient(credentials=Credentials("app-key", "app-secret")) as client:
+        async with KisClient(
+            credentials=Credentials("app-key", "app-secret")
+        ) as client:
             async with client.realtime.session() as ws:
                 subscription = await ws.subscribe_trades("AAPL", market="NAS")
                 assert subscription in ws.subscriptions
@@ -249,7 +283,11 @@ def test_realtime_quick_start_with_mock_websocket(monkeypatch) -> None:
         [
             json.dumps(
                 {
-                    "header": {"tr_id": "HDFSCNT0", "tr_key": "DNASAAPL", "encrypt": "N"},
+                    "header": {
+                        "tr_id": "HDFSCNT0",
+                        "tr_key": "DNASAAPL",
+                        "encrypt": "N",
+                    },
                     "body": {"rt_cd": "0", "msg1": "SUBSCRIBE SUCCESS"},
                 }
             ),
@@ -264,11 +302,17 @@ def test_realtime_quick_start_with_mock_websocket(monkeypatch) -> None:
     async def fake_approval(self):
         return "approval-key"
 
-    monkeypatch.setattr("modules.brokers.kis.realtime.connection.websockets.connect", fake_connect)
-    monkeypatch.setattr("modules.brokers.kis.client.KisClient.ensure_approval_key", fake_approval)
+    monkeypatch.setattr(
+        "modules.brokers.kis.realtime.connection.websockets.connect", fake_connect
+    )
+    monkeypatch.setattr(
+        "modules.brokers.kis.client.KisClient.ensure_approval_key", fake_approval
+    )
 
     async def run() -> RealtimeTick:
-        async with KisClient(credentials=Credentials("app-key", "app-secret")) as client:
+        async with KisClient(
+            credentials=Credentials("app-key", "app-secret")
+        ) as client:
             async with client.realtime.session() as ws:
                 await ws.subscribe_trades("AAPL", market="NAS")
                 async for event in ws.stream():
@@ -301,11 +345,17 @@ def test_realtime_stream_echoes_pingpong_frames(monkeypatch) -> None:
     async def fake_approval(self):
         return "approval-key"
 
-    monkeypatch.setattr("modules.brokers.kis.realtime.connection.websockets.connect", fake_connect)
-    monkeypatch.setattr("modules.brokers.kis.client.KisClient.ensure_approval_key", fake_approval)
+    monkeypatch.setattr(
+        "modules.brokers.kis.realtime.connection.websockets.connect", fake_connect
+    )
+    monkeypatch.setattr(
+        "modules.brokers.kis.client.KisClient.ensure_approval_key", fake_approval
+    )
 
     async def run() -> RealtimeTick:
-        async with KisClient(credentials=Credentials("app-key", "app-secret")) as client:
+        async with KisClient(
+            credentials=Credentials("app-key", "app-secret")
+        ) as client:
             async with client.realtime.session() as ws:
                 await ws.subscribe_trades("AAPL", market="NAS")
                 async for event in ws.stream():
@@ -320,7 +370,9 @@ def test_realtime_stream_echoes_pingpong_frames(monkeypatch) -> None:
     assert websocket.sent[1] == pingpong
 
 
-def test_realtime_received_seq_does_not_overlap_across_multi_record_frames(monkeypatch) -> None:
+def test_realtime_received_seq_does_not_overlap_across_multi_record_frames(
+    monkeypatch,
+) -> None:
     first_payload = "^".join(_overseas_trade_values() + _overseas_trade_values())
     second_payload = "^".join(_overseas_trade_values())
     websocket = FakeWebSocket(
@@ -337,12 +389,18 @@ def test_realtime_received_seq_does_not_overlap_across_multi_record_frames(monke
     async def fake_approval(self):
         return "approval-key"
 
-    monkeypatch.setattr("modules.brokers.kis.realtime.connection.websockets.connect", fake_connect)
-    monkeypatch.setattr("modules.brokers.kis.client.KisClient.ensure_approval_key", fake_approval)
+    monkeypatch.setattr(
+        "modules.brokers.kis.realtime.connection.websockets.connect", fake_connect
+    )
+    monkeypatch.setattr(
+        "modules.brokers.kis.client.KisClient.ensure_approval_key", fake_approval
+    )
 
     async def run() -> list[int]:
         received_seq: list[int] = []
-        async with KisClient(credentials=Credentials("app-key", "app-secret")) as client:
+        async with KisClient(
+            credentials=Credentials("app-key", "app-secret")
+        ) as client:
             async with client.realtime.session() as ws:
                 await ws.subscribe_trades("AAPL", market="NAS")
                 async for event in ws.stream():
@@ -353,6 +411,155 @@ def test_realtime_received_seq_does_not_overlap_across_multi_record_frames(monke
         raise AssertionError("expected three realtime ticks")
 
     assert asyncio.run(run()) == [1, 2, 3]
+
+
+def test_realtime_stream_reconnects_and_resubscribes_after_disconnect(
+    monkeypatch,
+) -> None:
+    first_socket = FakeWebSocket([])  # recv가 즉시 실패해 연결 끊김을 모사한다
+    second_socket = FakeWebSocket(
+        [f"0|HDFSCNT0|001|{'^'.join(_overseas_trade_values())}"]
+    )
+    sockets = [first_socket, second_socket]
+
+    async def fake_connect(url):
+        return sockets.pop(0)
+
+    async def fake_approval(self):
+        return "approval-key"
+
+    monkeypatch.setattr(
+        "modules.brokers.kis.realtime.connection.websockets.connect", fake_connect
+    )
+    monkeypatch.setattr(
+        "modules.brokers.kis.client.KisClient.ensure_approval_key", fake_approval
+    )
+
+    async def run() -> RealtimeTick:
+        async with KisClient(
+            credentials=Credentials("app-key", "app-secret")
+        ) as client:
+            async with client.realtime.session() as ws:
+                await ws.subscribe_trades("AAPL", market="NAS")
+                async for event in ws.stream():
+                    if isinstance(event, RealtimeTick):
+                        return event
+        raise AssertionError("expected realtime tick after reconnect")
+
+    event = asyncio.run(run())
+
+    assert event.symbol == "AAPL"
+    assert first_socket.closed
+    # 재연결된 소켓에 등록 구독이 자동으로 다시 전송되어야 한다
+    resubscribed = json.loads(second_socket.sent[0])
+    assert resubscribed["header"]["tr_type"] == "1"
+    assert resubscribed["body"]["input"] == {"tr_id": "HDFSCNT0", "tr_key": "DNASAAPL"}
+
+
+def test_realtime_subscribe_requires_market_or_exchange(monkeypatch) -> None:
+    websocket = FakeWebSocket([])
+
+    async def fake_connect(url):
+        return websocket
+
+    async def fake_approval(self):
+        return "approval-key"
+
+    monkeypatch.setattr(
+        "modules.brokers.kis.realtime.connection.websockets.connect", fake_connect
+    )
+    monkeypatch.setattr(
+        "modules.brokers.kis.client.KisClient.ensure_approval_key", fake_approval
+    )
+
+    async def run() -> None:
+        async with KisClient(
+            credentials=Credentials("app-key", "app-secret")
+        ) as client:
+            async with client.realtime.session() as ws:
+                await ws.subscribe_trades("005930")
+
+    with pytest.raises(ValueError, match="market or exchange"):
+        asyncio.run(run())
+
+
+def test_realtime_unsubscribe_by_symbol_sends_release_message(monkeypatch) -> None:
+    websocket = FakeWebSocket([])
+
+    async def fake_connect(url):
+        return websocket
+
+    async def fake_approval(self):
+        return "approval-key"
+
+    monkeypatch.setattr(
+        "modules.brokers.kis.realtime.connection.websockets.connect", fake_connect
+    )
+    monkeypatch.setattr(
+        "modules.brokers.kis.client.KisClient.ensure_approval_key", fake_approval
+    )
+
+    async def run() -> int:
+        async with KisClient(
+            credentials=Credentials("app-key", "app-secret")
+        ) as client:
+            async with client.realtime.session() as ws:
+                await ws.subscribe_trades("005930", market="KOSPI")
+                await ws.unsubscribe("005930", channel="trades", market="KOSPI")
+                return len(ws.subscriptions)
+
+    assert asyncio.run(run()) == 0
+
+    sent = [json.loads(message) for message in websocket.sent]
+    assert sent[1]["header"]["tr_type"] == "2"
+    assert sent[1]["body"]["input"] == {"tr_id": "H0STCNT0", "tr_key": "005930"}
+
+
+def test_parse_realtime_frame_rejects_malformed_and_unsupported_frames() -> None:
+    with pytest.raises(KisRealtimeError, match="four pipe-delimited parts"):
+        parse_realtime_frame("0|HDFSCNT0|001")
+    with pytest.raises(KisRealtimeError, match="encryption flag"):
+        parse_realtime_frame("X|HDFSCNT0|001|payload")
+    with pytest.raises(KisRealtimeError, match="encrypted"):
+        parse_realtime_frame("1|HDFSCNT0|001|payload")
+    with pytest.raises(KisRealtimeError, match="unsupported realtime tr_id"):
+        parse_realtime_frame("0|H0UNKNOWN|001|payload")
+
+
+def test_parse_trade_payload_returns_none_for_blank_numeric_fields() -> None:
+    values = _overseas_trade_values()
+    values[11] = ""  # LAST
+    values[19] = " "  # EVOL
+    values[21] = "1,234,567"  # TAMT — 쉼표 포함 숫자
+
+    tick = parse_trade_payload(
+        tr_id="HDFSCNT0",
+        payload="^".join(values),
+        received_at="2026-06-13T00:00:00+00:00",
+    )[0]
+
+    assert tick.price is None
+    assert tick.volume is None
+    assert tick.amount == Decimal("1234567")
+
+
+def test_subscription_registry_validates_events_against_active_keys() -> None:
+    registry = SubscriptionRegistry()
+    subscription = subscription_for(
+        channel="trades", symbol="AAPL", venue="NAS", environment="real"
+    )
+    registry.add(subscription)
+
+    tick = parse_trade_payload(
+        tr_id="HDFSCNT0",
+        payload="^".join(_overseas_trade_values()),
+        received_at="2026-06-13T00:00:00+00:00",
+    )[0]
+    registry.validate_event(tick)
+
+    registry.discard(subscription)
+    with pytest.raises(KisRealtimeError, match="unsubscribed"):
+        registry.validate_event(tick)
 
 
 class FakeWebSocket:
