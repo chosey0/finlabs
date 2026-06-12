@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
 import duckdb
+import httpx
 import pytest
 
 from modules.news.articles.parsers import ARTICLE_PARSERS, SelectorArticleParser
@@ -259,33 +260,50 @@ def test_naive_korean_feed_time_is_interpreted_as_seoul_time():
     assert entry.published_at == datetime(2026, 6, 10, 21, 0, tzinfo=SEOUL)
 
 
+_EDAILY_SOURCE = next(
+    source for source in DEFAULT_FEED_SOURCES if source.publisher == "edaily"
+)
+
+
+def _edaily_html(body: str) -> str:
+    return (
+        "<html><style>ignored</style><div id='contents'>"
+        "<section class='position_r center1080'><section class='aside_left'>"
+        "<div class='article_news'><div class='newscontainer'>"
+        f"<div class='news_body'>{body}<script>ignored()</script></div>"
+        "</div></div></section></section></div></html>"
+    )
+
+
+def _edaily_entry(link: str, title: str) -> dict:
+    return {
+        "author": "edaily",
+        "link": link,
+        "published": "2026-06-10 21:00:00",
+        "published_parsed": _published_parsed(),
+        "title": title,
+    }
+
+
 def test_three_pipeline_stages_are_idempotent():
     """RSS 수집, 본문 수집, 분석을 재실행해도 중복 행이 생기지 않는다."""
 
     connection = duckdb.connect(":memory:")
     create_schema(connection)
-    raw_entry = {
-        "author": "Investing.com",
-        "link": "https://kr.investing.com/news/article-1",
-        "published": "2026-06-10 21:00:00",
-        "published_parsed": _published_parsed(),
-        "title": "Pipeline title",
-    }
+    raw_entry = _edaily_entry(
+        "https://www.edaily.co.kr/news/article-1", "Pipeline title"
+    )
 
     def load_feed(url):
-        assert url == DEFAULT_FEED_SOURCES[0].url
+        assert url == _EDAILY_SOURCE.url
         return SimpleNamespace(entries=[raw_entry], bozo=False)
 
-    sources = (DEFAULT_FEED_SOURCES[0],)
+    sources = (_EDAILY_SOURCE,)
     first_rss = collect_rss(connection, sources=sources, feed_loader=load_feed)
     second_rss = collect_rss(connection, sources=sources, feed_loader=load_feed)
     first_articles = collect_articles(
         connection,
-        fetch_html=lambda url: (
-            "<html><style>ignored</style><div id='article'><div><div><div>"
-            "<p>Pipeline body text</p></div></div></div></div>"
-            "<script>ignored()</script></html>"
-        ),
+        fetch_html=lambda url: _edaily_html("Pipeline body text"),
     )
     second_articles = collect_articles(
         connection,
@@ -304,7 +322,7 @@ def test_three_pipeline_stages_are_idempotent():
         "Pipeline body text",
     )
     assert connection.execute("SELECT parser_version FROM articles").fetchone() == (
-        ARTICLE_PARSERS["investing.com"].version,
+        ARTICLE_PARSERS["edaily"].version,
     )
     assert connection.execute(
         "SELECT character_count, word_count FROM article_analyses"
@@ -316,40 +334,138 @@ def test_collect_articles_reprocesses_when_parser_version_changes():
 
     connection = duckdb.connect(":memory:")
     create_schema(connection)
-    raw_entry = {
-        "author": "Investing.com",
-        "link": "https://kr.investing.com/news/reparse-version",
-        "published": "2026-06-10 21:00:00",
-        "published_parsed": _published_parsed(),
-        "title": "Reparse title",
-    }
+    raw_entry = _edaily_entry(
+        "https://www.edaily.co.kr/news/reparse-version", "Reparse title"
+    )
     collect_rss(
         connection,
-        sources=(DEFAULT_FEED_SOURCES[0],),
+        sources=(_EDAILY_SOURCE,),
         feed_loader=lambda url: SimpleNamespace(entries=[raw_entry], bozo=False),
     )
-    html = (
-        "<div id='article'><div><div><div><p>Versioned body</p>"
-        "</div></div></div></div>"
-    )
+    html = _edaily_html("Versioned body")
     first = collect_articles(connection, fetch_html=lambda url: html)
-    current = ARTICLE_PARSERS["investing.com"]
+    current = ARTICLE_PARSERS["edaily"]
     upgraded = SelectorArticleParser(
         publisher=current.publisher,
-        version="investing-article-body-v2",
+        version="edaily-news-body-v2",
         selectors=current.selectors,
     )
     second = collect_articles(
         connection,
         fetch_html=lambda url: html,
-        article_parsers={**ARTICLE_PARSERS, "investing.com": upgraded},
+        article_parsers={**ARTICLE_PARSERS, "edaily": upgraded},
     )
 
     assert first == OperationResult(processed=1, created=1, skipped=0)
     assert second == OperationResult(processed=1, created=1, skipped=0)
     assert connection.execute(
         "SELECT count(*), parser_version FROM articles GROUP BY parser_version"
-    ).fetchone() == (1, "investing-article-body-v2")
+    ).fetchone() == (1, "edaily-news-body-v2")
+
+
+def test_collect_articles_isolates_per_article_failures_and_retries():
+    """기사 한 건의 수집 실패가 배치를 중단시키지 않고 다음 실행에서 재시도된다."""
+
+    connection = duckdb.connect(":memory:")
+    create_schema(connection)
+    failing_url = "https://www.edaily.co.kr/news/blocked"
+    entries = [
+        _edaily_entry(failing_url, "Blocked title"),
+        _edaily_entry("https://www.edaily.co.kr/news/ok", "OK title"),
+    ]
+    collect_rss(
+        connection,
+        sources=(_EDAILY_SOURCE,),
+        feed_loader=lambda url: SimpleNamespace(entries=entries, bozo=False),
+    )
+
+    def failing_fetch(url):
+        if url == failing_url:
+            raise httpx.HTTPError("403 Forbidden")
+        return _edaily_html("Recovered body")
+
+    first = collect_articles(connection, fetch_html=failing_fetch)
+    second = collect_articles(
+        connection,
+        fetch_html=lambda url: _edaily_html("Recovered body"),
+    )
+
+    assert (first.processed, first.created, first.skipped) == (2, 1, 1)
+    assert len(first.errors) == 1
+    assert "403 Forbidden" in first.errors[0]
+    assert failing_url in first.errors[0]
+    assert second == OperationResult(processed=1, created=1, skipped=0)
+    assert connection.execute("SELECT count(*) FROM articles").fetchone() == (2,)
+
+
+def test_collect_articles_reports_pending_and_per_item_results():
+    """진행 표시용 콜백이 수집 대상과 기사별 결과를 순서대로 전달한다."""
+
+    connection = duckdb.connect(":memory:")
+    create_schema(connection)
+    failing_url = "https://www.edaily.co.kr/news/progress-fail"
+    entries = [
+        _edaily_entry(failing_url, "Progress fail title"),
+        _edaily_entry("https://www.edaily.co.kr/news/progress-ok", "Progress ok title"),
+    ]
+    collect_rss(
+        connection,
+        sources=(_EDAILY_SOURCE,),
+        feed_loader=lambda url: SimpleNamespace(entries=entries, bozo=False),
+    )
+    pending_batches = []
+    item_results = []
+
+    def failing_fetch(url):
+        if url == failing_url:
+            raise httpx.HTTPError("403 Forbidden")
+        return _edaily_html("Progress body")
+
+    collect_articles(
+        connection,
+        fetch_html=failing_fetch,
+        on_pending=pending_batches.append,
+        on_item_result=lambda item, result: item_results.append(
+            (item.title, result.created, len(result.errors))
+        ),
+    )
+
+    assert len(pending_batches) == 1
+    assert {item.title for item in pending_batches[0]} == {
+        "Progress fail title",
+        "Progress ok title",
+    }
+    assert len(item_results) == 2
+    assert ("Progress fail title", 0, 1) in item_results
+    assert ("Progress ok title", 1, 0) in item_results
+
+
+def test_collect_articles_excludes_metadata_only_investing_source():
+    """본문 parser가 없는 investing.com 항목은 수집 대상에서 제외된다."""
+
+    connection = duckdb.connect(":memory:")
+    create_schema(connection)
+    raw_entry = {
+        "author": "Investing.com",
+        "link": "https://kr.investing.com/news/login-walled",
+        "published": "2026-06-10 21:00:00",
+        "published_parsed": _published_parsed(),
+        "title": "Investing title",
+    }
+    collect_rss(
+        connection,
+        sources=(DEFAULT_FEED_SOURCES[0],),
+        feed_loader=lambda url: SimpleNamespace(entries=[raw_entry], bozo=False),
+    )
+
+    result = collect_articles(
+        connection,
+        fetch_html=lambda url: pytest.fail(f"must not fetch: {url}"),
+    )
+
+    assert result == OperationResult(processed=0, created=0, skipped=0)
+    assert connection.execute("SELECT count(*) FROM rss_items").fetchone() == (1,)
+    assert connection.execute("SELECT count(*) FROM articles").fetchone() == (0,)
 
 
 def test_collect_rss_merges_categories_for_duplicate_article_urls():

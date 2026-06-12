@@ -11,16 +11,6 @@ from modules.news.articles.parsers import ARTICLE_PARSERS
     ("publisher", "html", "expected"),
     [
         (
-            "investing.com",
-            """
-            <html><body><p>outside</p><div id="article"><div><div>
-              <div><p>Investing <strong>first</strong></p><p>second</p></div>
-              <div><p>advertisement</p></div>
-            </div></div></div></body></html>
-            """,
-            "Investing first second",
-        ),
-        (
             "edaily",
             """
             <div>outside</div><div id="contents">
@@ -87,11 +77,11 @@ def test_article_parser_extracts_only_configured_body(
 
 
 def test_article_parser_versions_are_present_and_publisher_specific() -> None:
+    # investing.com은 본문이 로그인 장벽 뒤라 본문 수집 registry에 없다
     assert set(ARTICLE_PARSERS) == {
         "edaily",
         "etoday",
         "hankyung",
-        "investing.com",
         "newspim",
         "sedaily",
     }

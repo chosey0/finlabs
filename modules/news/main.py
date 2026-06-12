@@ -27,6 +27,7 @@ from .pipeline import (
     analyze_articles,
     collect_articles,
     collect_rss,
+    extract_entities,
     parse_feed_source,
     run_recorded_operation,
 )
@@ -137,8 +138,7 @@ def update_symbols_command(
         typer.Option(
             "--market",
             help=(
-                "Repeatable market. Defaults to KOSPI, KOSDAQ, NASDAQ, NYSE, "
-                "and AMEX."
+                "Repeatable market. Defaults to KOSPI, KOSDAQ, NASDAQ, NYSE, and AMEX."
             ),
         ),
     ] = None,
@@ -252,6 +252,23 @@ def collect_rss_command(
     _print_result("collect-rss", result)
 
 
+def _article_label(item: object, *, width: int = 48) -> str:
+    publisher = getattr(item, "publisher", "")
+    title = getattr(item, "title", "")
+    if len(title) > width:
+        title = f"{title[: width - 1]}…"
+    return f"{publisher} · {title}"
+
+
+def _article_progress_description(
+    pending: Sequence[object],
+    next_index: int,
+) -> str:
+    if next_index < len(pending):
+        return f"수집 중 · {_article_label(pending[next_index])}"
+    return "수집 완료"
+
+
 @app.command("collect-articles")
 def collect_articles_command(
     db_path: DbPathOption = _default_db_path(),
@@ -259,15 +276,48 @@ def collect_articles_command(
 ) -> None:
     """본문이 없거나 parser 버전이 지난 기사를 수집한다."""
 
-    result = _execute(
-        db_path=db_path,
-        command="collect-articles",
-        parameters={"limit": limit},
-        operation_factory=lambda connection: collect_articles(
-            connection,
-            limit=limit,
-        ),
-    )
+    with Progress(
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        MofNCompleteColumn(),
+        TimeElapsedColumn(),
+    ) as progress:
+        task = progress.add_task("수집 대상 조회 중…", total=None)
+        pending_items: list[object] = []
+        finished = 0
+
+        def on_pending(items: Sequence[object]) -> None:
+            pending_items.extend(items)
+            progress.update(
+                task,
+                total=len(pending_items),
+                description=_article_progress_description(pending_items, 0),
+            )
+
+        def on_item_result(item: object, item_result: OperationResult) -> None:
+            nonlocal finished
+            finished += 1
+            progress.update(
+                task,
+                advance=1,
+                description=_article_progress_description(pending_items, finished),
+            )
+
+        result = _execute(
+            db_path=db_path,
+            command="collect-articles",
+            parameters={"limit": limit},
+            operation_factory=lambda connection: collect_articles(
+                connection,
+                limit=limit,
+                on_pending=on_pending,
+                on_item_result=on_item_result,
+            ),
+        )
+    if result.errors:
+        console = Console(stderr=True)
+        for msg in result.errors:
+            console.print(f"[yellow]경고: 본문 수집 실패 — {msg}[/yellow]")
     _print_result("collect-articles", result)
 
 
@@ -288,6 +338,28 @@ def analyze_command(
         ),
     )
     _print_result("analyze", result)
+
+
+@app.command("extract-entities")
+def extract_entities_command(
+    db_path: DbPathOption = _default_db_path(),
+    limit: Annotated[int, typer.Option(min=1)] = 100,
+) -> None:
+    """종목 마스터 어휘집으로 기사별 종목 entity를 추출한다."""
+
+    try:
+        result = _execute(
+            db_path=db_path,
+            command="extract-entities",
+            parameters={"limit": limit},
+            operation_factory=lambda connection: extract_entities(
+                connection,
+                limit=limit,
+            ),
+        )
+    except ValueError as error:
+        raise typer.BadParameter(str(error)) from error
+    _print_result("extract-entities", result)
 
 
 def main() -> None:

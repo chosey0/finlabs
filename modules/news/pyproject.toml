@@ -28,6 +28,7 @@ only-include = [
     "__init__.py",
     "articles",
     "db",
+    "entities.py",
     "main.py",
     "pipeline.py",
     "rss",

@@ -15,16 +15,23 @@ from .db.sql import (
     finish_pipeline_run,
     insert_article,
     insert_rss_item,
+    list_articles_requiring_entity_extraction,
     list_articles_without_current_analysis,
+    list_domestic_symbol_names,
     list_rss_items_requiring_article_parse,
+    replace_article_entities,
     start_pipeline_run,
     upsert_article_analysis,
 )
+from .entities import build_symbol_lexicon, match_stock_entities
+from .rss.models import CanonicalRssEntry
 from .rss.parsers import PARSERS, BaseRssParser
 from .schema.article import ArticleAnalysis, CanonicalArticle, make_content_hash
+from .schema.entity import ArticleEntity
 
 
 ANALYZER_VERSION = "basic-stats-v1"
+ENTITY_EXTRACTOR_VERSION = "symbol-master-v1"
 DEFAULT_USER_AGENT = "FinLabsNewsCollector/0.1"
 
 
@@ -449,8 +456,15 @@ def collect_articles(
     limit: int = 100,
     fetch_html: Callable[[str], str] | None = None,
     article_parsers: Mapping[str, BaseArticleParser] = ARTICLE_PARSERS,
+    on_pending: Callable[[tuple[CanonicalRssEntry, ...]], None] | None = None,
+    on_item_result: Callable[[CanonicalRssEntry, OperationResult], None] | None = None,
 ) -> OperationResult:
-    """본문이 없거나 parser 버전이 지난 RSS 항목을 정제해 저장한다."""
+    """본문이 없거나 parser 버전이 지난 RSS 항목을 정제해 저장한다.
+
+    ``on_pending``은 수집 대상이 확정된 직후 한 번 호출되고,
+    ``on_item_result``는 기사 하나가 끝날 때마다 해당 기사의 결과를
+    전달하므로 호출자가 진행 상황과 기사 제목을 표시할 수 있다.
+    """
 
     if fetch_html is None:
         with httpx.Client(
@@ -469,31 +483,61 @@ def collect_articles(
                 limit=limit,
                 fetch_html=fetch_with_client,
                 article_parsers=article_parsers,
+                on_pending=on_pending,
+                on_item_result=on_item_result,
             )
 
     pending = list_rss_items_requiring_article_parse(
         connection,
         parser_versions={
-            publisher: parser.version
-            for publisher, parser in article_parsers.items()
+            publisher: parser.version for publisher, parser in article_parsers.items()
         },
         limit=limit,
     )
+    if on_pending is not None:
+        on_pending(pending)
     created = 0
+    errors: list[str] = []
     for item in pending:
         parser = article_parsers[item.publisher]
-        content = parser.parse(fetch_html(item.url))
+        # 기사 한 건의 수집 실패(차단, 삭제, 선택자 불일치)가 배치 전체를
+        # 중단시키지 않도록 격리한다. 실패한 기사는 pending으로 남아
+        # 다음 실행에서 다시 시도된다.
+        try:
+            content = parser.parse(fetch_html(item.url))
+        except (httpx.HTTPError, ValueError) as error:
+            message = f"{item.publisher}: {item.url} — {_safe_error_message(error)}"
+            errors.append(message)
+            if on_item_result is not None:
+                on_item_result(
+                    item,
+                    OperationResult(
+                        processed=1, created=0, skipped=1, errors=(message,)
+                    ),
+                )
+            continue
         article = CanonicalArticle(
             rss_item_id=item.id,
             content=content,
             content_hash=make_content_hash(content),
             parser_version=parser.version,
         )
-        created += int(insert_article(connection, article))
+        item_created = int(insert_article(connection, article))
+        created += item_created
+        if on_item_result is not None:
+            on_item_result(
+                item,
+                OperationResult(
+                    processed=1,
+                    created=item_created,
+                    skipped=1 - item_created,
+                ),
+            )
     return OperationResult(
         processed=len(pending),
         created=created,
         skipped=len(pending) - created,
+        errors=tuple(errors),
     )
 
 
@@ -525,6 +569,60 @@ def analyze_articles(
         processed=len(pending),
         created=len(pending),
         skipped=0,
+    )
+
+
+def extract_entities(
+    connection: duckdb.DuckDBPyConnection,
+    *,
+    limit: int = 100,
+    extractor_version: str = ENTITY_EXTRACTOR_VERSION,
+    aliases: Mapping[str, tuple[str, ...]] | None = None,
+) -> OperationResult:
+    """종목 마스터 어휘집으로 기사별 종목 entity를 추출해 저장한다.
+
+    추출은 결정적이며, 추출기 버전이나 본문 해시가 바뀐 기사만
+    재처리한다. created는 entity가 1개 이상 발견된 기사 수이다.
+    """
+
+    lexicon = build_symbol_lexicon(
+        list_domestic_symbol_names(connection),
+        aliases=aliases,
+    )
+    if not lexicon:
+        raise ValueError(
+            "domestic symbol master is empty; run update-symbols before extract-entities"
+        )
+    pending = list_articles_requiring_entity_extraction(
+        connection,
+        extractor_version=extractor_version,
+        limit=limit,
+    )
+    created = 0
+    for article, title in pending:
+        matches = match_stock_entities(f"{title}\n{article.content}", lexicon)
+        entities = tuple(
+            ArticleEntity(
+                rss_item_id=article.rss_item_id,
+                entity_type="stock",
+                entity_name=match.canonical_name,
+                ticker=match.ticker,
+                confidence=match.confidence,
+            )
+            for match in matches
+        )
+        replace_article_entities(
+            connection,
+            rss_item_id=article.rss_item_id,
+            content_hash=article.content_hash,
+            extractor_version=extractor_version,
+            entities=entities,
+        )
+        created += int(bool(entities))
+    return OperationResult(
+        processed=len(pending),
+        created=created,
+        skipped=len(pending) - created,
     )
 
 

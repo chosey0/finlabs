@@ -174,7 +174,9 @@ def test_duplicate_symbols_are_deduplicated_keeping_last():
 
     def duplicate_download(market: str, *, downloaded_at: str):
         return [
-            _record(market, "005930", "삼성전자구버전").with_downloaded_at(downloaded_at),
+            _record(market, "005930", "삼성전자구버전").with_downloaded_at(
+                downloaded_at
+            ),
             _record(market, "005930", "삼성전자최신").with_downloaded_at(downloaded_at),
         ]
 

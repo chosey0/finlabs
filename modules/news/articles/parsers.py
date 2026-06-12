@@ -162,9 +162,7 @@ class SelectorArticleParser(BaseArticleParser):
         ]
         selected_ids = {id(node) for node in selected}
         top_level = [
-            node
-            for node in selected
-            if not _has_selected_ancestor(node, selected_ids)
+            node for node in selected if not _has_selected_ancestor(node, selected_ids)
         ]
         content = _normalize_text(
             " ".join(text for node in top_level for text in _visible_text(node))
@@ -215,22 +213,10 @@ def _element(
     return ElementSelector(tag, element_id, frozenset(classes), nth_child)
 
 
+# investing.com은 기사 본문이 로그인 장벽 뒤에 있어 본문을 수집하지 않는다.
+# RSS 메타데이터(rss_items)만 유지하며, 이 registry에 없는 언론사의 항목은
+# collect-articles 대상에서 제외된다.
 ARTICLE_PARSERS: Mapping[str, BaseArticleParser] = {
-    "investing.com": SelectorArticleParser(
-        publisher="investing.com",
-        version="investing-article-body-v1",
-        selectors=(
-            SelectorPath(
-                (
-                    _element(element_id="article"),
-                    _element("div"),
-                    _element("div"),
-                    _element("div", nth_child=1),
-                    _element("p"),
-                )
-            ),
-        ),
-    ),
     "edaily": SelectorArticleParser(
         publisher="edaily",
         version="edaily-news-body-v1",
@@ -251,9 +237,7 @@ ARTICLE_PARSERS: Mapping[str, BaseArticleParser] = {
         publisher="newspim",
         version="newspim-news-contents-v1",
         selectors=(
-            SelectorPath(
-                (_element(element_id="news-contents"), _element("p"))
-            ),
+            SelectorPath((_element(element_id="news-contents"), _element("p"))),
         ),
     ),
     "etoday": SelectorArticleParser(

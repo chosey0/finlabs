@@ -9,6 +9,7 @@ from uuid import uuid4
 import duckdb
 
 from ..schema.article import ArticleAnalysis, CanonicalArticle
+from ..schema.entity import ArticleEntity
 from ..schema.symbol import NewsSymbol
 from ..rss.models import CanonicalRssEntry, SEOUL_TIMEZONE
 
@@ -202,9 +203,7 @@ def list_rss_items_requiring_article_parse(
     for publisher, version in sorted(parser_versions.items()):
         if not publisher.strip() or not version.strip():
             raise ValueError("parser publisher and version must not be empty")
-        conditions.append(
-            "(r.publisher = ? AND a.parser_version IS DISTINCT FROM ?)"
-        )
+        conditions.append("(r.publisher = ? AND a.parser_version IS DISTINCT FROM ?)")
         parameters.extend((publisher, version))
     parameters.append(limit)
     rows = connection.execute(
@@ -322,6 +321,142 @@ def upsert_article_analysis(
             analysis.character_count,
             analysis.word_count,
         ],
+    )
+
+
+def list_domestic_symbol_names(
+    connection: duckdb.DuckDBPyConnection,
+) -> tuple[tuple[str, str], ...]:
+    """국내 종목 마스터의 (한글명, 종목코드) 목록을 반환한다."""
+
+    rows = connection.execute(
+        """
+        SELECT korean_name, symbol
+        FROM domestic_symbols
+        WHERE korean_name IS NOT NULL AND trim(korean_name) != ''
+        ORDER BY symbol
+        """
+    ).fetchall()
+    return tuple((str(row[0]), str(row[1])) for row in rows)
+
+
+def list_articles_requiring_entity_extraction(
+    connection: duckdb.DuckDBPyConnection,
+    *,
+    extractor_version: str,
+    limit: int = 100,
+) -> tuple[tuple[CanonicalArticle, str], ...]:
+    """현재 추출기 버전·본문 해시의 추출 이력이 없는 기사와 제목을 조회한다."""
+
+    if limit <= 0:
+        raise ValueError("limit must be greater than zero")
+    if not extractor_version.strip():
+        raise ValueError("extractor_version must not be empty")
+    rows = connection.execute(
+        """
+        SELECT a.rss_item_id, a.content, a.content_hash, a.parser_version, r.title
+        FROM articles AS a
+        JOIN rss_items AS r ON r.id = a.rss_item_id
+        LEFT JOIN article_entity_extractions AS x
+          ON x.rss_item_id = a.rss_item_id
+         AND x.content_hash = a.content_hash
+         AND x.extractor_version = ?
+        WHERE x.rss_item_id IS NULL
+        ORDER BY a.fetched_at, a.rss_item_id
+        LIMIT ?
+        """,
+        [extractor_version, limit],
+    ).fetchall()
+    return tuple(
+        (
+            CanonicalArticle(
+                rss_item_id=str(row[0]),
+                content=str(row[1]),
+                content_hash=str(row[2]),
+                parser_version=str(row[3]),
+            ),
+            str(row[4]),
+        )
+        for row in rows
+    )
+
+
+def replace_article_entities(
+    connection: duckdb.DuckDBPyConnection,
+    *,
+    rss_item_id: str,
+    content_hash: str,
+    extractor_version: str,
+    entities: Sequence[ArticleEntity],
+) -> None:
+    """기사 하나의 entity 목록과 추출 이력을 원자적으로 교체한다."""
+
+    if any(entity.rss_item_id != rss_item_id for entity in entities):
+        raise ValueError("all entities must belong to the given rss_item_id")
+    connection.execute("BEGIN TRANSACTION")
+    try:
+        connection.execute(
+            "DELETE FROM article_entities WHERE rss_item_id = ?",
+            [rss_item_id],
+        )
+        for entity in entities:
+            connection.execute(
+                """
+                INSERT INTO article_entities (
+                    rss_item_id, entity_type, entity_name, ticker, confidence
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                [
+                    entity.rss_item_id,
+                    entity.entity_type,
+                    entity.entity_name,
+                    entity.ticker,
+                    entity.confidence,
+                ],
+            )
+        connection.execute(
+            """
+            INSERT INTO article_entity_extractions (
+                rss_item_id, extractor_version, content_hash, entity_count
+            ) VALUES (?, ?, ?, ?)
+            ON CONFLICT (rss_item_id) DO UPDATE SET
+                extractor_version = excluded.extractor_version,
+                content_hash = excluded.content_hash,
+                entity_count = excluded.entity_count,
+                extracted_at = now()
+            """,
+            [rss_item_id, extractor_version, content_hash, len(entities)],
+        )
+        connection.execute("COMMIT")
+    except Exception:
+        connection.execute("ROLLBACK")
+        raise
+
+
+def list_article_entities(
+    connection: duckdb.DuckDBPyConnection,
+    rss_item_id: str,
+) -> tuple[ArticleEntity, ...]:
+    """기사 하나의 entity 목록을 신뢰도 내림차순으로 조회한다."""
+
+    rows = connection.execute(
+        """
+        SELECT rss_item_id, entity_type, entity_name, ticker, confidence
+        FROM article_entities
+        WHERE rss_item_id = ?
+        ORDER BY confidence DESC, entity_name
+        """,
+        [rss_item_id],
+    ).fetchall()
+    return tuple(
+        ArticleEntity(
+            rss_item_id=str(row[0]),
+            entity_type=str(row[1]),
+            entity_name=str(row[2]),
+            ticker=None if row[3] is None else str(row[3]),
+            confidence=float(row[4]),
+        )
+        for row in rows
     )
 
 
@@ -449,10 +584,24 @@ def _item_values(item: CanonicalRssEntry) -> list[object]:
 
 
 _SYMBOL_COLS = (
-    "market", "symbol", "standard_code", "realtime_symbol", "korean_name",
-    "english_name", "security_type", "currency", "exchange_id", "exchange_code",
-    "exchange_name", "country_code", "listed_date", "base_price", "lot_size",
-    "raw_source", "raw", "downloaded_at",
+    "market",
+    "symbol",
+    "standard_code",
+    "realtime_symbol",
+    "korean_name",
+    "english_name",
+    "security_type",
+    "currency",
+    "exchange_id",
+    "exchange_code",
+    "exchange_name",
+    "country_code",
+    "listed_date",
+    "base_price",
+    "lot_size",
+    "raw_source",
+    "raw",
+    "downloaded_at",
 )
 
 

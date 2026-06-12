@@ -13,6 +13,8 @@ TABLE_NAMES = (
     "rss_items",
     "articles",
     "article_analyses",
+    "article_entities",
+    "article_entity_extractions",
     "pipeline_runs",
     "domestic_symbols",
     "overseas_symbols",
@@ -131,6 +133,29 @@ def create_schema(connection: duckdb.DuckDBPyConnection) -> None:
             character_count BIGINT NOT NULL,
             word_count BIGINT NOT NULL,
             analyzed_at TIMESTAMP NOT NULL DEFAULT current_timestamp
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS article_entities (
+            rss_item_id VARCHAR NOT NULL REFERENCES articles(rss_item_id),
+            entity_type VARCHAR NOT NULL,
+            entity_name VARCHAR NOT NULL,
+            ticker VARCHAR,
+            confidence DOUBLE NOT NULL,
+            PRIMARY KEY (rss_item_id, entity_type, entity_name)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS article_entity_extractions (
+            rss_item_id VARCHAR PRIMARY KEY REFERENCES articles(rss_item_id),
+            extractor_version VARCHAR NOT NULL,
+            content_hash VARCHAR NOT NULL,
+            entity_count BIGINT NOT NULL,
+            extracted_at TIMESTAMP NOT NULL DEFAULT current_timestamp
         )
         """
     )

@@ -35,9 +35,12 @@ Investing.com, 이데일리, 이투데이, 한국경제, 서울경제, 뉴스핌
 | **[카테고리]** | 출처별 분리 저장 | 매체 도메인, 피드 카테고리, XML 원문 카테고리를 구분해 보존 |
 | **[중복 방지]** | 결정적 기사 ID | 기사 URL의 SHA-256 해시와 데이터베이스 제약으로 중복 적재 방지 |
 | **[진행 표시]** | 수집 진행바·집계 | `collect-rss` 실행 중 소스별 진행바를 표시하고 완료 후 언론사·카테고리별 수집 결과를 표로 출력 |
-| **[본문 수집]** | 언론사별 본문 선택자 | 6개 매체의 지정 본문 요소만 정규화해 저장하고 원문 HTML은 폐기 |
+| **[본문 수집]** | 언론사별 본문 선택자 | 5개 매체의 지정 본문 요소만 정규화해 저장하고 원문 HTML은 폐기 |
+| **[오류 격리]** | 기사 단위 실패 격리 | 차단·삭제된 기사 한 건의 실패가 배치를 중단시키지 않고 다음 실행에서 재시도 |
 | **[본문 재처리]** | Parser 버전 추적 | 언론사 parser 버전이 바뀌면 기존 기사 본문을 자동으로 다시 수집 |
 | **[기초 분석]** | 본문 통계 | 분석기 버전과 본문 해시를 기준으로 문자 수·단어 수 계산 |
+| **[Entity 추출]** | 종목 마스터 기반 매칭 | 종목 마스터·별칭 사전 어휘집으로 기사별 종목을 결정적으로 추출, 긴 이름 우선 매칭으로 오탐 방지 |
+| **[이벤트 체계]** | 닫힌 taxonomy DTO | LLM 이벤트 분류용 16종 event_type enum과 `taxonomy_version` 추적 DTO |
 | **[멱등 실행]** | 단계별 재실행 | 이미 저장되거나 현재 버전으로 분석된 항목은 다시 처리하지 않음 |
 | **[실행 이력]** | 성공·실패 기록 | 명령, 매개변수, 상태, 처리 건수, 제한된 오류 메시지를 저장 |
 | **[동시성 보호]** | 단일 writer 잠금 | 파일 잠금으로 동일 DuckDB에 대한 중복 파이프라인 실행을 즉시 차단 |
@@ -93,14 +96,16 @@ article_analyses
 
 ## Data Sources
 
-| 언론사 | 기본 RSS URL | 요약 필드 | API 키 |
-|--------|--------------|:---------:|:------:|
-| Investing.com Korea | `https://kr.investing.com/rss/news.rss` | 미사용 | 불필요 |
-| 이데일리 | `http://rss.edaily.co.kr/edaily_news.xml` | 사용 | 불필요 |
-| 이투데이 | `https://rss.etoday.co.kr/eto/etoday_news_all.xml` | 사용 | 불필요 |
-| 한국경제 | `https://www.hankyung.com/feed/all-news` | 미사용 | 불필요 |
-| 서울경제 | `https://www.sedaily.com/rss/newsall` | 미사용 | 불필요 |
-| 뉴스핌 | `http://rss.newspim.com/news/category/1` | 사용 | 불필요 |
+| 언론사 | 기본 RSS URL | 요약 필드 | 본문 수집 |
+|--------|--------------|:---------:|:---------:|
+| Investing.com Korea | `https://kr.investing.com/rss/news.rss` | 미사용 | 제외 (로그인 장벽) |
+| 이데일리 | `http://rss.edaily.co.kr/edaily_news.xml` | 사용 | 수집 |
+| 이투데이 | `https://rss.etoday.co.kr/eto/etoday_news_all.xml` | 사용 | 수집 |
+| 한국경제 | `https://www.hankyung.com/feed/all-news` | 미사용 | 수집 |
+| 서울경제 | `https://www.sedaily.com/rss/newsall` | 미사용 | 수집 |
+| 뉴스핌 | `http://rss.newspim.com/news/category/1` | 사용 | 수집 |
+
+모든 소스는 API 키 없이 수집합니다. Investing.com은 기사 본문이 로그인 장벽 뒤에 있어 RSS 메타데이터만 수집하고 `collect-articles` 대상에서 제외합니다.
 
 기본 소스는 총 63개이며 `collect-rss` 실행 시 전체 피드와 제공된 카테고리별 피드를 함께 수집합니다. 매체별 구성은 Investing.com 16개, 이데일리 1개, 이투데이 11개, 한국경제 12개, 서울경제 12개, 뉴스핌 11개입니다. URL과 카테고리 설정의 기준은 [`pipeline.py`](./pipeline.py)의 `DEFAULT_FEED_SOURCES`입니다.
 
@@ -163,6 +168,9 @@ uv run --group news python -m modules.news.main collect-articles --limit 100
 
 # 아직 현재 버전으로 분석되지 않은 기사 분석
 uv run --group news python -m modules.news.main analyze --limit 100
+
+# 종목 마스터 어휘집으로 기사별 종목 entity 추출 (update-symbols 선행 필요)
+uv run --group news python -m modules.news.main extract-entities --limit 100
 ```
 
 명령은 필요한 스키마를 자동으로 생성합니다. 기본 데이터베이스는 `modules/news/db/news.db`이며 Git에서 제외됩니다.
@@ -203,6 +211,8 @@ uv run --group news python -m modules.news.main collect-rss \
 | `rss_items` | 표준 RSS 메타데이터와 출처·피드 카테고리 | `id` 기본키, `url` 고유 제약 |
 | `articles` | 정제 기사 본문, 본문 해시와 parser 버전 | `rss_item_id` 기본키 |
 | `article_analyses` | 분석기 버전별 현재 분석 결과 | `rss_item_id` 기본키 |
+| `article_entities` | 기사별 종목 entity와 티커·신뢰도 | `(rss_item_id, entity_type, entity_name)` 기본키 |
+| `article_entity_extractions` | 추출기 버전·본문 해시 기준 추출 이력 | `rss_item_id` 기본키 |
 | `pipeline_runs` | 명령 실행 상태와 처리 결과 | 실행별 UUID |
 | `domestic_symbols` | KIS KOSPI·KOSDAQ 종목 마스터 현재 스냅샷 | `(market, symbol)` 고유 제약 |
 | `overseas_symbols` | KIS NASDAQ·NYSE·AMEX 종목 마스터 현재 스냅샷 | `(market, symbol)` 고유 제약 |
@@ -233,9 +243,12 @@ modules/news/
 ├── db/
 │   ├── init.py                DuckDB 스키마 생성과 안전한 마이그레이션
 │   ├── locking.py             DB 파일 단일 writer 잠금
-│   └── sql.py                 RSS·본문·분석·실행 이력 저장 연산
+│   └── sql.py                 RSS·본문·분석·entity·실행 이력 저장 연산
+├── entities.py                종목 마스터·별칭 사전 기반 entity 추출기
 ├── schema/
 │   ├── article.py             기사 및 분석 모델
+│   ├── entity.py              기사 entity 모델
+│   ├── event.py               이벤트 taxonomy와 LLM 분류 결과 DTO
 │   └── symbol.py              뉴스 DB용 종목 마스터 모델
 ├── rss/
 │   ├── models.py              표준 RSS 모델과 검증
@@ -247,6 +260,7 @@ modules/news/
 │   └── finlabs-news-symbols.timer    매일 09:00 KST 갱신 타이머
 ├── tests/
 │   ├── test_article_parsers.py  언론사별 본문 선택자 회귀 테스트
+│   ├── test_entity_extraction.py  entity 추출·이벤트 taxonomy 회귀 테스트
 │   ├── test_rss_pipeline.py   파서·CRUD·멱등성·마이그레이션 회귀 테스트
 │   └── test_symbols.py        종목 마스터 스냅샷 갱신 회귀 테스트
 ├── symbols.py                 KIS 다운로드와 뉴스 DB 동기화
@@ -305,9 +319,9 @@ uv run ruff check modules/news
 
 ## Current Scope
 
-현재 `collect-articles`는 Investing.com, 이데일리, 뉴스핌, 이투데이, 한국경제, 서울경제의 언론사별 본문 선택자를 사용합니다. 선택자가 바뀌면 해당 parser의 버전을 올려 기존 기사를 재처리하며, 원문 HTML은 저장하지 않습니다.
+현재 `collect-articles`는 이데일리, 뉴스핌, 이투데이, 한국경제, 서울경제의 언론사별 본문 선택자를 사용합니다. Investing.com은 본문이 로그인 장벽 뒤에 있어 RSS 메타데이터만 수집합니다. 선택자가 바뀌면 해당 parser의 버전을 올려 기존 기사를 재처리하며, 원문 HTML은 저장하지 않습니다. 기사 한 건의 수집 실패는 경고로 기록하고 배치를 계속 진행합니다.
 
-`analyze` 단계는 `basic-stats-v1` 분석기로 문자 수와 공백 기준 단어 수만 계산합니다. 종목 별칭 사전, 과거 뉴스 백필, 임베딩·Vector Store, LLM 이벤트 분류, 점수화, 백테스트, 대시보드는 아직 구현되어 있지 않으며 아래 로드맵의 대상입니다.
+`analyze` 단계는 `basic-stats-v1` 분석기로 문자 수와 공백 기준 단어 수만 계산합니다. `extract-entities` 단계는 종목 마스터와 소규모 별칭 시드(삼전, 하이닉스, 네이버)로 종목 entity만 추출하며, 기업·산업·키워드 entity는 아직 추출하지 않습니다. 이벤트 분류는 16종 taxonomy와 `ArticleEvent` DTO까지 구현되어 있고 LLM 호출 파이프라인은 미구현입니다. 전면적인 별칭 사전 구축, 과거 뉴스 백필, 임베딩·Vector Store, 점수화, 백테스트, 대시보드는 아래 로드맵의 대상입니다.
 
 ---
 
@@ -319,7 +333,8 @@ uv run ruff check modules/news
 |------|------|:----:|
 | **초기** (2~4주) | RSS 수집·본문 수집·DuckDB 저장 | ✅ 구현됨 |
 | | KIS 종목 마스터 자동 갱신 | ✅ 구현됨 |
-| | 별칭 사전, 과거 뉴스 백필(네이버 API·빅카인즈), 시세 기반 급등 이벤트 추출, Streamlit 기본 조회 | 예정 |
+| | 종목 마스터 기반 entity 추출, 이벤트 taxonomy·분류 DTO | ✅ 구현됨 |
+| | 별칭 사전 확장, 과거 뉴스 백필(네이버 API·빅카인즈), 시세 기반 급등 이벤트 추출, Streamlit 기본 조회 | 예정 |
 | **중기** (1~2개월) | 임베딩 모델 비교·선정, Vector Store(DuckDB VSS, point-in-time 필터), 급등/비급등 사례 라이브러리, LLM 이벤트 분류(taxonomy 기반), Market Context features, Entity 추출, Contrastive Similarity, 콘텐츠 기반 중복 제거 | 예정 |
 | **후기** (2~3개월) | 학습 기반 점수화(LightGBM), "뉴스 단독 vs 뉴스+시장" 비교 실험, 백테스트 엔진(체결 가능성·비용·베이스라인), 감성 분석(KR-FinBERT), RAG 설명 + 인용 강제, Dashboard 고도화 | 예정 |
 | **확장** (장기) | Qdrant 이전 검토, 뉴스 토큰 + 캔들 토큰 멀티모달 예측 연구 | 예정 |
