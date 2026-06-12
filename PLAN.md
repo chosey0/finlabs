@@ -132,7 +132,7 @@ Monitoring Core
 |---|---|
 | 뉴스 RSS 수집과 SQLite 기반 초기 파이프라인 | 구현됨, PostgreSQL 전환 예정 |
 | 국내·해외 종목 마스터 갱신 CLI | 구현됨 |
-| Toss 장 운영 정보 SDK | 작업 중인 변경사항 존재 |
+| Toss 장 운영 정보 SDK와 calendar adapter | 구현됨 |
 | PostgreSQL/TimescaleDB·Redis·Parquet 신규 플랫폼 | 계획 확정, 구현 전 |
 | KIS 실시간 구독 파이프라인 | 계획 확정, 구현 전 |
 | 실시간 모니터링·Discord·백업 자동화 | 계획 확정, 구현 전 |

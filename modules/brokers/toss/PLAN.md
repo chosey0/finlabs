@@ -7,7 +7,7 @@ Toss 국내·해외 장 운영 정보 API의 순수 SDK와 canonical calendar ad
 
 ## SDK
 
-- `modules/brokers/toss/market_info.py`에서 국내·해외 장 운영 정보 API 호출
+- `modules/brokers/toss/market.py`에서 국내·해외 장 운영 정보 API 호출
 - 공식 OpenAPI 계약에 따른 요청, 응답 모델과 파싱
 - 인증, HTTP 오류와 응답 오류를 SDK 예외로 노출
 - FinLabs domain, storage와 orchestration을 import하지 않음
