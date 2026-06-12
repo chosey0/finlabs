@@ -217,7 +217,7 @@ DEFAULT_FEED_SOURCES = (
     ),
     FeedSource(
         publisher="edaily",
-        url="https://rss.edaily.co.kr/edaily_news.xml",
+        url="http://rss.edaily.co.kr/edaily_news.xml",
         parser=PARSERS["edaily"],
     ),
     FeedSource(
@@ -401,7 +401,9 @@ def collect_rss(
             error = getattr(feed, "bozo_exception", "invalid feed")
             errors.append(f"{source.publisher}: {error}")
             if on_source_result is not None:
-                on_source_result(source, OperationResult(processed=0, created=0, skipped=0))
+                on_source_result(
+                    source, OperationResult(processed=0, created=0, skipped=0)
+                )
             continue
         source_processed = 0
         source_created = 0
