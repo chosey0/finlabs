@@ -26,6 +26,7 @@ only-include = [
     "pipeline.py",
     "rss",
     "schema",
+    "utils.py",
 ]
 
 [tool.hatch.build.targets.wheel.sources]

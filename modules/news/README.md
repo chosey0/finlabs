@@ -216,18 +216,16 @@ uv run --group news python -m modules.news.main collect-rss \
 modules/news/
 ├── main.py                    Typer CLI와 DB별 단일 writer 실행 경계
 ├── pipeline.py                RSS·본문·분석 단계와 실행 이력 조율
+├── utils.py                   DB 파일 단일 writer 잠금
 ├── db/
 │   ├── init.py                DuckDB 스키마 생성과 안전한 마이그레이션
 │   └── sql.py                 RSS·본문·분석·실행 이력 저장 연산
 ├── schema/
-│   ├── base.py                표준 RSS 모델과 공통 파싱·검증
-│   ├── article.py             기사 및 분석 모델
-│   ├── investingcom.py        Investing.com RSS 파서
-│   ├── edaily.py              이데일리 RSS 파서
-│   ├── etoday.py              이투데이 RSS 파서
-│   ├── hankyung.py            한국경제 RSS 파서
-│   ├── sedaily.py             서울경제 RSS 파서
-│   └── newspim.py             뉴스핌 RSS 파서
+│   ├── base.py                표준 RSS 모델과 검증
+│   └── article.py             기사 및 분석 모델
+├── rss/
+│   ├── parsers.py             공통 파서 계약, 설정 기반 파서, 언론사 레지스트리
+│   └── collect.py             RSS 수집 확장 위치
 ├── systemd/
 │   ├── finlabs-news.service   세 단계 순차 실행 서비스
 │   └── finlabs-news.timer     30분 주기 타이머

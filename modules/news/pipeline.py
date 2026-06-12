@@ -2,14 +2,10 @@
 
 from __future__ import annotations
 
-import errno
-import fcntl
 import re
 from collections.abc import Callable, Iterable, Mapping
-from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from html.parser import HTMLParser
-from pathlib import Path
 from typing import Any, Protocol
 
 import duckdb
@@ -25,14 +21,8 @@ from .db.sql import (
     start_pipeline_run,
     upsert_article_analysis,
 )
+from .rss.parsers import PARSERS, BaseRssParser
 from .schema.article import ArticleAnalysis, CanonicalArticle, make_content_hash
-from .schema.base import BaseRssParser
-from .schema.edaily import EdailyRssParser
-from .schema.etoday import EtodayRssParser
-from .schema.hankyung import HankyungRssParser
-from .schema.investingcom import InvestingComRssParser
-from .schema.newspim import NewspimRssParser
-from .schema.sedaily import SedailyRssParser
 
 
 ANALYZER_VERSION = "basic-stats-v1"
@@ -65,15 +55,6 @@ class OperationResult:
     created: int
     skipped: int
 
-
-PARSERS: Mapping[str, BaseRssParser] = {
-    "investing.com": InvestingComRssParser(),
-    "edaily": EdailyRssParser(),
-    "etoday": EtodayRssParser(),
-    "hankyung": HankyungRssParser(),
-    "newspim": NewspimRssParser(),
-    "sedaily": SedailyRssParser(),
-}
 
 HANKYUNG_CATEGORY_FEEDS = {
     "증권": "https://www.hankyung.com/feed/finance",
@@ -537,28 +518,6 @@ def run_recorded_operation(
         skipped_count=result.skipped,
     )
     return result
-
-
-@contextmanager
-def single_writer_lock(database_path: str | Path):
-    """한 데이터베이스에 하나의 CLI 파이프라인만 접근하도록 파일 잠금을 건다."""
-
-    path = Path(database_path).expanduser()
-    lock_path = path.with_suffix(f"{path.suffix}.lock")
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
-    with lock_path.open("a+") as lock_file:
-        try:
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except OSError as error:
-            if error.errno not in {errno.EACCES, errno.EAGAIN}:
-                raise
-            raise RuntimeError(
-                f"another news pipeline process is using {path}"
-            ) from error
-        try:
-            yield
-        finally:
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 
 def parse_feed_source(value: str) -> FeedSource:

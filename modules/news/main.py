@@ -18,8 +18,8 @@ from .pipeline import (
     collect_rss,
     parse_feed_source,
     run_recorded_operation,
-    single_writer_lock,
 )
+from .utils import single_writer_lock
 
 
 app = typer.Typer(no_args_is_help=True, help=__doc__)

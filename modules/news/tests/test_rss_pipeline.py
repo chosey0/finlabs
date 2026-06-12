@@ -26,15 +26,10 @@ from modules.news.pipeline import (
     collect_articles,
     collect_rss,
     run_recorded_operation,
-    single_writer_lock,
 )
+from modules.news.rss.parsers import PARSERS
 from modules.news.schema.base import CanonicalRssEntry
-from modules.news.schema.edaily import EdailyRssParser
-from modules.news.schema.etoday import EtodayRssParser
-from modules.news.schema.hankyung import HankyungRssParser
-from modules.news.schema.investingcom import InvestingComRssParser
-from modules.news.schema.newspim import NewspimRssParser
-from modules.news.schema.sedaily import SedailyRssParser
+from modules.news.utils import single_writer_lock
 
 
 SEOUL = ZoneInfo("Asia/Seoul")
@@ -50,7 +45,7 @@ def _published_parsed() -> time.struct_time:
     ("parser", "raw", "publisher", "summary"),
     [
         (
-            InvestingComRssParser(),
+            PARSERS["investing.com"],
             {
                 "author": "Investing.com",
                 "link": "https://kr.investing.com/news/article-1",
@@ -62,7 +57,7 @@ def _published_parsed() -> time.struct_time:
             None,
         ),
         (
-            EdailyRssParser(),
+            PARSERS["edaily"],
             {
                 "author": "최효은",
                 "author_detail": {"name": "최효은"},
@@ -76,7 +71,7 @@ def _published_parsed() -> time.struct_time:
             "이데일리 요약",
         ),
         (
-            EtodayRssParser(),
+            PARSERS["etoday"],
             {
                 "author": "기자 (writer@etoday.co.kr)",
                 "author_detail": {"name": "기자"},
@@ -90,7 +85,7 @@ def _published_parsed() -> time.struct_time:
             "이투데이 요약",
         ),
         (
-            HankyungRssParser(),
+            PARSERS["hankyung"],
             {
                 "author": "한국경제 기자",
                 "link": "https://www.hankyung.com/article/1",
@@ -101,7 +96,7 @@ def _published_parsed() -> time.struct_time:
             None,
         ),
         (
-            NewspimRssParser(),
+            PARSERS["newspim"],
             {
                 "author": "최현민 기자",
                 "link": "http://www.newspim.com/news/view/1",
@@ -114,7 +109,7 @@ def _published_parsed() -> time.struct_time:
             "뉴스핌 요약",
         ),
         (
-            SedailyRssParser(),
+            PARSERS["sedaily"],
             {
                 "author": "서울경제 기자",
                 "link": "https://www.sedaily.com/article/1",
@@ -142,7 +137,7 @@ def test_provider_parser_returns_canonical_entry(parser, raw, publisher, summary
 def test_parser_preserves_source_categories_without_normalizing():
     """XML category 값은 매체 원문 그대로 중복 없이 보존한다."""
 
-    entry = EdailyRssParser().parse(
+    entry = PARSERS["edaily"].parse(
         {
             "author": "기자",
             "link": "https://www.edaily.co.kr/News/Read?newsId=category",
@@ -168,7 +163,7 @@ def test_parser_rejects_invalid_url_before_database_write():
     }
 
     with pytest.raises(ValueError, match=r"HTTP\(S\) URL"):
-        InvestingComRssParser().parse(raw)
+        PARSERS["investing.com"].parse(raw)
 
 
 def test_default_feed_sources_include_edaily():
@@ -218,7 +213,7 @@ def test_crud_uses_one_canonical_contract():
 
     connection = duckdb.connect(":memory:")
     create_schema(connection)
-    item = InvestingComRssParser().parse(
+    item = PARSERS["investing.com"].parse(
         {
             "author": "Investing.com",
             "link": "https://kr.investing.com/news/article-1",
@@ -251,7 +246,7 @@ def test_crud_uses_one_canonical_contract():
 def test_naive_korean_feed_time_is_interpreted_as_seoul_time():
     """시간대가 없는 한국 RSS 발행 시각을 서울 현지 시각으로 해석한다."""
 
-    entry = InvestingComRssParser().parse(
+    entry = PARSERS["investing.com"].parse(
         {
             "author": "Investing.com",
             "link": "https://kr.investing.com/news/article-seoul-time",
@@ -316,7 +311,7 @@ def test_collect_rss_merges_categories_for_duplicate_article_urls():
 
     connection = duckdb.connect(":memory:")
     create_schema(connection)
-    parser = EtodayRssParser()
+    parser = PARSERS["etoday"]
     sources = (
         FeedSource(
             "etoday",
