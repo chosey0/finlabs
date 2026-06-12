@@ -22,6 +22,9 @@ class TokenCache(Protocol):
     Implementations may persist tokens to memory, files, or external stores.
     `key` is opaque from this layer's perspective; callers typically derive it
     from credentials + environment.
+
+    Implementations are plain stores: `get` may return an expired record.
+    `TokenProvider` is authoritative for validity (including expiry skew).
     """
 
     def get(self, key: str) -> TokenRecord | None: ...
@@ -38,10 +41,7 @@ class MemoryTokenCache:
         self._store: dict[str, TokenRecord] = {}
 
     def get(self, key: str) -> TokenRecord | None:
-        record = self._store.get(key)
-        if record is None or record.is_expired():
-            return None
-        return record
+        return self._store.get(key)
 
     def set(self, key: str, record: TokenRecord) -> None:
         self._store[key] = record

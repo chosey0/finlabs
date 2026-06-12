@@ -58,13 +58,19 @@ class AsyncHttpTransport:
                 "AsyncHttpTransport must be used as `async with` context manager"
             )
         url = f"{self._base_url}{spec.path}"
-        response = await self._client.request(
-            spec.method,
-            url,
-            headers=headers,
-            params=params,
-            json=json_body,
-        )
+        try:
+            response = await self._client.request(
+                spec.method,
+                url,
+                headers=headers,
+                params=params,
+                json=json_body,
+            )
+        except httpx.HTTPError as exc:
+            raise KisApiError(
+                f"KIS API request failed for {spec.name}: {exc}",
+                status_code=None,
+            ) from exc
         try:
             payload = response.json()
         except ValueError as exc:
