@@ -1,4 +1,4 @@
-"""뉴스 모듈 전반에서 사용하는 인프라 유틸리티를 제공한다."""
+"""뉴스 DuckDB 파일의 프로세스 간 writer 잠금을 제공한다."""
 
 from __future__ import annotations
 

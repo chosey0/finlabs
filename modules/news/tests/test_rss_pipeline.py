@@ -12,6 +12,7 @@ import duckdb
 import pytest
 
 from modules.news.db.init import create_schema
+from modules.news.db.locking import single_writer_lock
 from modules.news.db.sql import (
     create_rss_item,
     delete_rss_item,
@@ -28,8 +29,7 @@ from modules.news.pipeline import (
     run_recorded_operation,
 )
 from modules.news.rss.parsers import PARSERS
-from modules.news.schema.base import CanonicalRssEntry
-from modules.news.utils import single_writer_lock
+from modules.news.rss.models import CanonicalRssEntry
 
 
 SEOUL = ZoneInfo("Asia/Seoul")

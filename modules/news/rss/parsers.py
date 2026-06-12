@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from typing import Any, Mapping
 
-from ..schema.base import (
+from .models import (
     SEOUL_TIMEZONE,
     CanonicalRssEntry,
     make_rss_item_id,

@@ -9,7 +9,8 @@ from uuid import uuid4
 import duckdb
 
 from ..schema.article import ArticleAnalysis, CanonicalArticle
-from ..schema.base import CanonicalRssEntry, SEOUL_TIMEZONE
+from ..schema.symbol import NewsSymbol
+from ..rss.models import CanonicalRssEntry, SEOUL_TIMEZONE
 
 
 def create_rss_item(
