@@ -405,15 +405,24 @@ def collect_rss(
             continue
         source_processed = 0
         source_created = 0
+        source_invalid = 0
         for raw_entry in entries:
             source_processed += 1
-            item = source.parser.parse(raw_entry)
+            try:
+                item = source.parser.parse(raw_entry)
+            except (TypeError, ValueError):
+                source_invalid += 1
+                continue
             item = replace(
                 item,
                 domain_category=source.domain_category,
                 feed_categories=(source.feed_category,) if source.feed_category else (),
             )
             source_created += int(insert_rss_item(connection, item))
+        if source_invalid:
+            errors.append(
+                f"{source.publisher}: {source_invalid}개 항목이 필수 필드 누락으로 제외됨"
+            )
         processed += source_processed
         created += source_created
         if on_source_result is not None:

@@ -355,6 +355,42 @@ def test_collect_rss_merges_categories_for_duplicate_article_urls():
     assert item.source_categories == ("거시경제", "증권")
 
 
+def test_collect_rss_skips_entries_missing_required_fields():
+    """link 등 필수 필드가 없는 항목은 건너뛰고 나머지 항목과 소스는 계속 수집한다."""
+
+    connection = duckdb.connect(":memory:")
+    create_schema(connection)
+    parser = PARSERS["etoday"]
+    source = FeedSource("etoday", "https://example.com/feed.xml", parser)
+
+    def load_feed(url):
+        return SimpleNamespace(
+            entries=[
+                {
+                    "author": "기자",
+                    "published": "Wed, 10 Jun 2026 21:00:00 +0900",
+                    "summary": "link 없는 항목",
+                    "title": "Broken entry",
+                },
+                {
+                    "author": "기자",
+                    "link": "https://www.etoday.co.kr/news/view/valid",
+                    "published": "Wed, 10 Jun 2026 21:00:00 +0900",
+                    "summary": "정상 항목",
+                    "title": "Valid entry",
+                },
+            ],
+            bozo=False,
+        )
+
+    result = collect_rss(connection, sources=(source,), feed_loader=load_feed)
+
+    assert result.processed == 2
+    assert result.created == 1
+    assert len(result.errors) == 1
+    assert "etoday" in result.errors[0]
+
+
 def test_collect_rss_reports_each_source_result_in_order():
     """소스 하나의 수집이 끝날 때마다 소스별 결과가 순서대로 콜백에 전달된다."""
 
