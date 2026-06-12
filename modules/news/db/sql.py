@@ -185,22 +185,80 @@ def list_rss_items_without_articles(
     return tuple(_row_to_item(row) for row in rows)
 
 
+def list_rss_items_requiring_article_parse(
+    connection: duckdb.DuckDBPyConnection,
+    *,
+    parser_versions: dict[str, str],
+    limit: int = 100,
+) -> tuple[CanonicalRssEntry, ...]:
+    """본문이 없거나 현재 언론사 parser 버전과 다른 RSS 항목을 조회한다."""
+
+    if limit <= 0:
+        raise ValueError("limit must be greater than zero")
+    if not parser_versions:
+        return ()
+    conditions: list[str] = []
+    parameters: list[object] = []
+    for publisher, version in sorted(parser_versions.items()):
+        if not publisher.strip() or not version.strip():
+            raise ValueError("parser publisher and version must not be empty")
+        conditions.append(
+            "(r.publisher = ? AND a.parser_version IS DISTINCT FROM ?)"
+        )
+        parameters.extend((publisher, version))
+    parameters.append(limit)
+    rows = connection.execute(
+        f"""
+        SELECT r.id, r.publisher, r.url, r.title, r.author, r.summary,
+               r.domain_category, r.feed_categories, r.source_categories,
+               r.published_at
+        FROM rss_items AS r
+        LEFT JOIN articles AS a ON a.rss_item_id = r.id
+        WHERE {" OR ".join(conditions)}
+        ORDER BY r.published_at, r.id
+        LIMIT ?
+        """,
+        parameters,
+    ).fetchall()
+    return tuple(_row_to_item(row) for row in rows)
+
+
 def insert_article(
     connection: duckdb.DuckDBPyConnection,
     article: CanonicalArticle,
 ) -> bool:
-    """기사 본문을 중복 없이 저장하고 새 행 생성 여부를 반환한다."""
+    """기사 본문을 parser 버전에 따라 삽입·갱신하고 변경 여부를 반환한다."""
 
-    row = connection.execute(
+    existing = connection.execute(
         """
-        INSERT INTO articles (rss_item_id, content, content_hash)
-        VALUES (?, ?, ?)
-        ON CONFLICT (rss_item_id) DO NOTHING
-        RETURNING rss_item_id
+        SELECT content_hash, parser_version
+        FROM articles
+        WHERE rss_item_id = ?
         """,
-        [article.rss_item_id, article.content, article.content_hash],
+        [article.rss_item_id],
     ).fetchone()
-    return row is not None
+    changed = existing != (article.content_hash, article.parser_version)
+    if not changed:
+        return False
+    connection.execute(
+        """
+        INSERT INTO articles (
+            rss_item_id, content, content_hash, parser_version
+        ) VALUES (?, ?, ?, ?)
+        ON CONFLICT (rss_item_id) DO UPDATE SET
+            content = excluded.content,
+            content_hash = excluded.content_hash,
+            parser_version = excluded.parser_version,
+            fetched_at = now()
+        """,
+        [
+            article.rss_item_id,
+            article.content,
+            article.content_hash,
+            article.parser_version,
+        ],
+    )
+    return True
 
 
 def list_articles_without_current_analysis(
@@ -215,7 +273,7 @@ def list_articles_without_current_analysis(
         raise ValueError("limit must be greater than zero")
     rows = connection.execute(
         """
-        SELECT a.rss_item_id, a.content, a.content_hash
+        SELECT a.rss_item_id, a.content, a.content_hash, a.parser_version
         FROM articles AS a
         LEFT JOIN article_analyses AS x
           ON x.rss_item_id = a.rss_item_id
@@ -232,6 +290,7 @@ def list_articles_without_current_analysis(
             rss_item_id=str(row[0]),
             content=str(row[1]),
             content_hash=str(row[2]),
+            parser_version=str(row[3]),
         )
         for row in rows
     )

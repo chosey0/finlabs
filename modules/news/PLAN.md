@@ -94,11 +94,14 @@ unique_key, article_status
 
 ```
 id, rss_item_id, canonical_url, title, publisher,
-author, cleaned_text, published_at, fetched_at
+author, cleaned_text, parser_version, published_at, fetched_at
 ```
 
 > **저작권 정책 (v3)**: 정제 본문만 영구 보관한다. 원문 HTML은 파싱
 > 과정에서만 사용하고 영구 저장하지 않는다.
+
+- 언론사별 본문 선택자는 registry에서 관리한다.
+- 선택자 변경 시 `parser_version`을 올리고 이전 버전의 기사만 재처리한다.
 
 ---
 

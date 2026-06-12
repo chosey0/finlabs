@@ -19,12 +19,15 @@ class CanonicalArticle:
     rss_item_id: str
     content: str
     content_hash: str
+    parser_version: str
 
     def __post_init__(self) -> None:
         if not self.rss_item_id.strip():
             raise ValueError("rss_item_id must not be empty")
         if not self.content.strip():
             raise ValueError("content must not be empty")
+        if not self.parser_version.strip():
+            raise ValueError("parser_version must not be empty")
         if self.content_hash != make_content_hash(self.content):
             raise ValueError("content_hash must be the SHA-256 hash of content")
 

@@ -30,7 +30,7 @@ from .pipeline import (
     parse_feed_source,
     run_recorded_operation,
 )
-from .symbols import NEWS_SYMBOL_MARKETS, OnMarketDownloaded, update_symbol_masters
+from .symbols import NEWS_SYMBOL_MARKETS, update_symbol_masters
 
 
 app = typer.Typer(no_args_is_help=True, help=__doc__)
@@ -257,7 +257,7 @@ def collect_articles_command(
     db_path: DbPathOption = _default_db_path(),
     limit: Annotated[int, typer.Option(min=1)] = 100,
 ) -> None:
-    """아직 저장되지 않은 기사 본문을 수집한다."""
+    """본문이 없거나 parser 버전이 지난 기사를 수집한다."""
 
     result = _execute(
         db_path=db_path,

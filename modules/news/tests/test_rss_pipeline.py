@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 import duckdb
 import pytest
 
+from modules.news.articles.parsers import ARTICLE_PARSERS, SelectorArticleParser
 from modules.news.db.init import create_schema
 from modules.news.db.locking import single_writer_lock
 from modules.news.db.sql import (
@@ -171,7 +172,7 @@ def test_default_feed_sources_include_edaily():
 
     sources = {source.publisher: source.url for source in DEFAULT_FEED_SOURCES}
 
-    assert sources["edaily"] == "https://rss.edaily.co.kr/edaily_news.xml"
+    assert sources["edaily"] == "http://rss.edaily.co.kr/edaily_news.xml"
 
 
 def test_default_feed_sources_include_configured_categories():
@@ -281,7 +282,8 @@ def test_three_pipeline_stages_are_idempotent():
     first_articles = collect_articles(
         connection,
         fetch_html=lambda url: (
-            "<html><style>ignored</style><article>Pipeline body text</article>"
+            "<html><style>ignored</style><div id='article'><div><div><div>"
+            "<p>Pipeline body text</p></div></div></div></div>"
             "<script>ignored()</script></html>"
         ),
     )
@@ -301,9 +303,53 @@ def test_three_pipeline_stages_are_idempotent():
     assert connection.execute("SELECT content FROM articles").fetchone() == (
         "Pipeline body text",
     )
+    assert connection.execute("SELECT parser_version FROM articles").fetchone() == (
+        ARTICLE_PARSERS["investing.com"].version,
+    )
     assert connection.execute(
         "SELECT character_count, word_count FROM article_analyses"
     ).fetchone() == (18, 3)
+
+
+def test_collect_articles_reprocesses_when_parser_version_changes():
+    """파서 버전이 바뀌면 기존 본문을 다시 가져와 같은 행을 갱신한다."""
+
+    connection = duckdb.connect(":memory:")
+    create_schema(connection)
+    raw_entry = {
+        "author": "Investing.com",
+        "link": "https://kr.investing.com/news/reparse-version",
+        "published": "2026-06-10 21:00:00",
+        "published_parsed": _published_parsed(),
+        "title": "Reparse title",
+    }
+    collect_rss(
+        connection,
+        sources=(DEFAULT_FEED_SOURCES[0],),
+        feed_loader=lambda url: SimpleNamespace(entries=[raw_entry], bozo=False),
+    )
+    html = (
+        "<div id='article'><div><div><div><p>Versioned body</p>"
+        "</div></div></div></div>"
+    )
+    first = collect_articles(connection, fetch_html=lambda url: html)
+    current = ARTICLE_PARSERS["investing.com"]
+    upgraded = SelectorArticleParser(
+        publisher=current.publisher,
+        version="investing-article-body-v2",
+        selectors=current.selectors,
+    )
+    second = collect_articles(
+        connection,
+        fetch_html=lambda url: html,
+        article_parsers={**ARTICLE_PARSERS, "investing.com": upgraded},
+    )
+
+    assert first == OperationResult(processed=1, created=1, skipped=0)
+    assert second == OperationResult(processed=1, created=1, skipped=0)
+    assert connection.execute(
+        "SELECT count(*), parser_version FROM articles GROUP BY parser_version"
+    ).fetchone() == (1, "investing-article-body-v2")
 
 
 def test_collect_rss_merges_categories_for_duplicate_article_urls():
@@ -507,7 +553,67 @@ def test_create_schema_replaces_only_empty_legacy_articles_table():
     create_schema(connection)
 
     columns = {row[0] for row in connection.execute("DESCRIBE articles").fetchall()}
-    assert columns == {"rss_item_id", "content", "content_hash", "fetched_at"}
+    assert columns == {
+        "rss_item_id",
+        "content",
+        "content_hash",
+        "parser_version",
+        "fetched_at",
+    }
+
+
+def test_create_schema_marks_existing_articles_for_parser_reprocessing():
+    """기존 전체 페이지 본문은 legacy 버전으로 표시해 재처리 대상으로 만든다."""
+
+    connection = duckdb.connect(":memory:")
+    connection.execute(
+        """
+        CREATE TABLE rss_items (
+            id VARCHAR PRIMARY KEY,
+            publisher VARCHAR NOT NULL,
+            url VARCHAR NOT NULL UNIQUE,
+            title VARCHAR NOT NULL,
+            author VARCHAR,
+            summary VARCHAR,
+            domain_category VARCHAR,
+            feed_categories VARCHAR[] NOT NULL DEFAULT [],
+            source_categories VARCHAR[] NOT NULL DEFAULT [],
+            published_at TIMESTAMP NOT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT current_timestamp
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE articles (
+            rss_item_id VARCHAR PRIMARY KEY REFERENCES rss_items(id),
+            content TEXT NOT NULL,
+            content_hash VARCHAR NOT NULL,
+            fetched_at TIMESTAMP NOT NULL DEFAULT current_timestamp
+        )
+        """
+    )
+    connection.execute(
+        """
+        INSERT INTO rss_items (
+            id, publisher, url, title, published_at
+        ) VALUES ('legacy', 'sedaily', 'https://example.com/legacy',
+                  'Legacy article', TIMESTAMP '2026-06-10 12:00:00')
+        """
+    )
+    connection.execute(
+        """
+        INSERT INTO articles (rss_item_id, content, content_hash)
+        VALUES ('legacy', 'full page text', ?)
+        """,
+        [hashlib.sha256(b"full page text").hexdigest()],
+    )
+
+    create_schema(connection)
+
+    assert connection.execute(
+        "SELECT parser_version FROM articles WHERE rss_item_id = 'legacy'"
+    ).fetchone() == ("legacy-full-page-v1",)
 
 
 def test_create_schema_migrates_existing_utc_published_at_to_seoul_once():

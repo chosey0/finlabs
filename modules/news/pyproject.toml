@@ -26,6 +26,7 @@ dev-mode-dirs = ["../.."]
 [tool.hatch.build.targets.wheel]
 only-include = [
     "__init__.py",
+    "articles",
     "db",
     "main.py",
     "pipeline.py",

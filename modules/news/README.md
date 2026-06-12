@@ -35,7 +35,8 @@ Investing.com, 이데일리, 이투데이, 한국경제, 서울경제, 뉴스핌
 | **[카테고리]** | 출처별 분리 저장 | 매체 도메인, 피드 카테고리, XML 원문 카테고리를 구분해 보존 |
 | **[중복 방지]** | 결정적 기사 ID | 기사 URL의 SHA-256 해시와 데이터베이스 제약으로 중복 적재 방지 |
 | **[진행 표시]** | 수집 진행바·집계 | `collect-rss` 실행 중 소스별 진행바를 표시하고 완료 후 언론사·카테고리별 수집 결과를 표로 출력 |
-| **[본문 수집]** | HTML 텍스트 추출 | 스크립트·스타일·SVG를 제외하고 가시 텍스트를 정규화해 저장 |
+| **[본문 수집]** | 언론사별 본문 선택자 | 6개 매체의 지정 본문 요소만 정규화해 저장하고 원문 HTML은 폐기 |
+| **[본문 재처리]** | Parser 버전 추적 | 언론사 parser 버전이 바뀌면 기존 기사 본문을 자동으로 다시 수집 |
 | **[기초 분석]** | 본문 통계 | 분석기 버전과 본문 해시를 기준으로 문자 수·단어 수 계산 |
 | **[멱등 실행]** | 단계별 재실행 | 이미 저장되거나 현재 버전으로 분석된 항목은 다시 처리하지 않음 |
 | **[실행 이력]** | 성공·실패 기록 | 명령, 매개변수, 상태, 처리 건수, 제한된 오류 메시지를 저장 |
@@ -58,7 +59,7 @@ rss_items
     │
     ▼
 collect-articles
-    │  HTML → visible normalized text → content hash
+    │  publisher parser → cleaned text → content hash + parser version
     ▼
 articles
     │
@@ -157,7 +158,7 @@ uv run --group news python -m modules.news.main update-symbols
 # 전체 기본 RSS 수집
 uv run --group news python -m modules.news.main collect-rss
 
-# 아직 저장되지 않은 기사 본문 수집
+# 본문이 없거나 parser 버전이 지난 기사 수집
 uv run --group news python -m modules.news.main collect-articles --limit 100
 
 # 아직 현재 버전으로 분석되지 않은 기사 분석
@@ -200,7 +201,7 @@ uv run --group news python -m modules.news.main collect-rss \
 | 테이블 | 역할 | 중복 방지 기준 |
 |--------|------|----------------|
 | `rss_items` | 표준 RSS 메타데이터와 출처·피드 카테고리 | `id` 기본키, `url` 고유 제약 |
-| `articles` | 정규화된 기사 본문과 본문 해시 | `rss_item_id` 기본키 |
+| `articles` | 정제 기사 본문, 본문 해시와 parser 버전 | `rss_item_id` 기본키 |
 | `article_analyses` | 분석기 버전별 현재 분석 결과 | `rss_item_id` 기본키 |
 | `pipeline_runs` | 명령 실행 상태와 처리 결과 | 실행별 UUID |
 | `domestic_symbols` | KIS KOSPI·KOSDAQ 종목 마스터 현재 스냅샷 | `(market, symbol)` 고유 제약 |
@@ -208,6 +209,8 @@ uv run --group news python -m modules.news.main collect-rss \
 | `schema_migrations` | 스키마·데이터 마이그레이션 이력 | 마이그레이션 ID |
 
 발행 시각은 입력 형식을 검증한 뒤 `Asia/Seoul` 기준으로 정규화합니다. 기존 UTC-naive 데이터의 서울 시각 변환은 마이그레이션 이력으로 한 번만 수행됩니다.
+
+[통합 PLAN](../../PLAN.md) 단계 4에 따라 RSS 상태·중복 관리와 정제 본문 저장은 PostgreSQL `news` 스키마로 이전할 예정입니다. 기존 DuckDB는 마이그레이션 없이 읽기 전용 레거시 보관소로 유지되며, 신규 인프라는 빈 상태에서 시작해 이중 쓰기를 하지 않습니다.
 
 `rss_items`의 주요 카테고리 컬럼은 다음과 같습니다.
 
@@ -225,6 +228,8 @@ uv run --group news python -m modules.news.main collect-rss \
 modules/news/
 ├── main.py                    Typer CLI와 DB별 단일 writer 실행 경계
 ├── pipeline.py                RSS·본문·분석 단계와 실행 이력 조율
+├── articles/
+│   └── parsers.py             언론사별 본문 선택자와 parser 버전 registry
 ├── db/
 │   ├── init.py                DuckDB 스키마 생성과 안전한 마이그레이션
 │   ├── locking.py             DB 파일 단일 writer 잠금
@@ -241,6 +246,7 @@ modules/news/
 │   ├── finlabs-news-symbols.service  종목 마스터 갱신 서비스
 │   └── finlabs-news-symbols.timer    매일 09:00 KST 갱신 타이머
 ├── tests/
+│   ├── test_article_parsers.py  언론사별 본문 선택자 회귀 테스트
 │   ├── test_rss_pipeline.py   파서·CRUD·멱등성·마이그레이션 회귀 테스트
 │   └── test_symbols.py        종목 마스터 스냅샷 갱신 회귀 테스트
 ├── symbols.py                 KIS 다운로드와 뉴스 DB 동기화
@@ -299,7 +305,7 @@ uv run ruff check modules/news
 
 ## Current Scope
 
-현재 `collect-articles`는 언론사별 본문 선택자가 아니라 HTML 전체에서 스크립트·스타일·SVG를 제외한 가시 텍스트를 추출합니다. 따라서 메뉴, 관련 기사, 광고 문구가 포함될 수 있습니다.
+현재 `collect-articles`는 Investing.com, 이데일리, 뉴스핌, 이투데이, 한국경제, 서울경제의 언론사별 본문 선택자를 사용합니다. 선택자가 바뀌면 해당 parser의 버전을 올려 기존 기사를 재처리하며, 원문 HTML은 저장하지 않습니다.
 
 `analyze` 단계는 `basic-stats-v1` 분석기로 문자 수와 공백 기준 단어 수만 계산합니다. 종목 별칭 사전, 과거 뉴스 백필, 임베딩·Vector Store, LLM 이벤트 분류, 점수화, 백테스트, 대시보드는 아직 구현되어 있지 않으며 아래 로드맵의 대상입니다.
 

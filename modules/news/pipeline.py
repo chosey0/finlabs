@@ -2,22 +2,21 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, replace
-from html.parser import HTMLParser
 from typing import Any, Protocol
 
 import duckdb
 import feedparser
 import httpx
 
+from .articles.parsers import ARTICLE_PARSERS, BaseArticleParser
 from .db.sql import (
     finish_pipeline_run,
     insert_article,
     insert_rss_item,
     list_articles_without_current_analysis,
-    list_rss_items_without_articles,
+    list_rss_items_requiring_article_parse,
     start_pipeline_run,
     upsert_article_analysis,
 )
@@ -449,8 +448,9 @@ def collect_articles(
     *,
     limit: int = 100,
     fetch_html: Callable[[str], str] | None = None,
+    article_parsers: Mapping[str, BaseArticleParser] = ARTICLE_PARSERS,
 ) -> OperationResult:
-    """본문이 없는 RSS 항목의 HTML을 가져와 정규화된 텍스트로 저장한다."""
+    """본문이 없거나 parser 버전이 지난 RSS 항목을 정제해 저장한다."""
 
     if fetch_html is None:
         with httpx.Client(
@@ -468,16 +468,26 @@ def collect_articles(
                 connection,
                 limit=limit,
                 fetch_html=fetch_with_client,
+                article_parsers=article_parsers,
             )
 
-    pending = list_rss_items_without_articles(connection, limit=limit)
+    pending = list_rss_items_requiring_article_parse(
+        connection,
+        parser_versions={
+            publisher: parser.version
+            for publisher, parser in article_parsers.items()
+        },
+        limit=limit,
+    )
     created = 0
     for item in pending:
-        content = extract_article_text(fetch_html(item.url))
+        parser = article_parsers[item.publisher]
+        content = parser.parse(fetch_html(item.url))
         article = CanonicalArticle(
             rss_item_id=item.id,
             content=content,
             content_hash=make_content_hash(content),
+            parser_version=parser.version,
         )
         created += int(insert_article(connection, article))
     return OperationResult(
@@ -570,45 +580,6 @@ def parse_feed_source(value: str) -> FeedSource:
     if not url.startswith(("http://", "https://")):
         raise ValueError("feed URL must use HTTP or HTTPS")
     return FeedSource(publisher=publisher, url=url, parser=parser)
-
-
-class _ArticleTextExtractor(HTMLParser):
-    """HTML에서 스크립트와 스타일을 제외한 가시 텍스트를 추출한다."""
-
-    _ignored_tags = {"script", "style", "noscript", "svg"}
-
-    def __init__(self) -> None:
-        super().__init__(convert_charrefs=True)
-        self.parts: list[str] = []
-        self._ignored_depth = 0
-
-    def handle_starttag(
-        self,
-        tag: str,
-        attrs: list[tuple[str, str | None]],
-    ) -> None:
-        del attrs
-        if tag.lower() in self._ignored_tags:
-            self._ignored_depth += 1
-
-    def handle_endtag(self, tag: str) -> None:
-        if tag.lower() in self._ignored_tags and self._ignored_depth:
-            self._ignored_depth -= 1
-
-    def handle_data(self, data: str) -> None:
-        if not self._ignored_depth:
-            self.parts.append(data)
-
-
-def extract_article_text(html: str) -> str:
-    """HTML 문서를 공백이 정규화된 비어 있지 않은 본문 텍스트로 변환한다."""
-
-    extractor = _ArticleTextExtractor()
-    extractor.feed(html)
-    content = re.sub(r"\s+", " ", " ".join(extractor.parts)).strip()
-    if not content:
-        raise ValueError("article page contains no visible text")
-    return content
 
 
 def _safe_error_message(error: Exception) -> str:

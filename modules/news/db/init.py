@@ -107,8 +107,19 @@ def create_schema(connection: duckdb.DuckDBPyConnection) -> None:
             rss_item_id VARCHAR PRIMARY KEY REFERENCES rss_items(id),
             content TEXT NOT NULL,
             content_hash VARCHAR NOT NULL,
+            parser_version VARCHAR NOT NULL,
             fetched_at TIMESTAMP NOT NULL DEFAULT current_timestamp
         )
+        """
+    )
+    connection.execute(
+        "ALTER TABLE articles ADD COLUMN IF NOT EXISTS parser_version VARCHAR"
+    )
+    connection.execute(
+        """
+        UPDATE articles
+        SET parser_version = 'legacy-full-page-v1'
+        WHERE parser_version IS NULL OR trim(parser_version) = ''
         """
     )
     connection.execute(
