@@ -171,7 +171,7 @@ def test_default_feed_sources_include_edaily():
 
     sources = {source.publisher: source.url for source in DEFAULT_FEED_SOURCES}
 
-    assert sources["edaily"] == "http://rss.edaily.co.kr/edaily_news.xml"
+    assert sources["edaily"] == "https://rss.edaily.co.kr/edaily_news.xml"
 
 
 def test_default_feed_sources_include_configured_categories():
