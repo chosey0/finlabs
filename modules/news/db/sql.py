@@ -324,28 +324,35 @@ def replace_symbol_snapshots(
 ) -> int:
     """국내·해외 종목 스냅샷을 구분된 테이블에 원자적으로 교체한다."""
 
-    rows = tuple(symbols)
-    if not rows:
+    _DOMESTIC = frozenset({"KOSPI", "KOSDAQ"})
+    _OVERSEAS = frozenset({"NASDAQ", "NYSE", "AMEX"})
+    _SUPPORTED = _DOMESTIC | _OVERSEAS
+
+    # 중복 (market, symbol) 쌍은 나중 항목을 우선해 제거한다.
+    # KIS API가 간헐적으로 동일 코드를 두 번 반환하는 경우를 처리하기 위함.
+    deduped: dict[tuple[str, str], NewsSymbol] = {}
+    domestic: list[NewsSymbol] = []
+    overseas: list[NewsSymbol] = []
+    for symbol in symbols:
+        if not symbol.market:
+            raise ValueError("symbol market must not be empty")
+        if symbol.market not in _SUPPORTED:
+            raise ValueError(
+                f"unsupported symbol market: {symbol.market}. "
+                f"allowed: {', '.join(sorted(_SUPPORTED))}"
+            )
+        deduped[(symbol.market, symbol.symbol)] = symbol
+
+    if not deduped:
         raise ValueError("symbol master download returned no rows")
 
-    markets = tuple(dict.fromkeys(symbol.market for symbol in rows))
-    if any(not market for market in markets):
-        raise ValueError("symbol market must not be empty")
-    if len({(symbol.market, symbol.symbol) for symbol in rows}) != len(rows):
-        raise ValueError("symbol master contains duplicate market/symbol rows")
+    for symbol in deduped.values():
+        if symbol.market in _DOMESTIC:
+            domestic.append(symbol)
+        else:
+            overseas.append(symbol)
 
-    rows_by_table = {
-        "domestic_symbols": tuple(
-            symbol for symbol in rows if symbol.market in {"KOSPI", "KOSDAQ"}
-        ),
-        "overseas_symbols": tuple(
-            symbol for symbol in rows if symbol.market in {"NASDAQ", "NYSE", "AMEX"}
-        ),
-    }
-    supported_markets = {"KOSPI", "KOSDAQ", "NASDAQ", "NYSE", "AMEX"}
-    unsupported = sorted(set(markets) - supported_markets)
-    if unsupported:
-        raise ValueError(f"unsupported symbol markets: {', '.join(unsupported)}")
+    rows_by_table = {"domestic_symbols": domestic, "overseas_symbols": overseas}
 
     connection.execute("BEGIN TRANSACTION")
     try:
@@ -362,7 +369,7 @@ def replace_symbol_snapshots(
     except Exception:
         connection.execute("ROLLBACK")
         raise
-    return len(rows)
+    return len(deduped)
 
 
 def _item_values(item: CanonicalRssEntry) -> list[object]:

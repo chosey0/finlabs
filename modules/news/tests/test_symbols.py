@@ -164,3 +164,28 @@ def test_create_schema_migrates_legacy_symbols_into_split_tables():
     assert "symbols" not in {
         row[0] for row in connection.execute("SHOW TABLES").fetchall()
     }
+
+
+def test_duplicate_symbols_are_deduplicated_keeping_last():
+    """API가 동일 코드를 두 번 반환해도 나중 항목을 저장하고 오류를 내지 않는다."""
+
+    connection = duckdb.connect(":memory:")
+    create_schema(connection)
+
+    def duplicate_download(market: str, *, downloaded_at: str):
+        return [
+            _record(market, "005930", "삼성전자구버전").with_downloaded_at(downloaded_at),
+            _record(market, "005930", "삼성전자최신").with_downloaded_at(downloaded_at),
+        ]
+
+    downloaded, stored = update_symbol_masters(
+        connection,
+        markets=("KOSPI",),
+        downloader=duplicate_download,
+    )
+
+    rows = connection.execute(
+        "SELECT symbol, korean_name FROM domestic_symbols WHERE market = 'KOSPI'"
+    ).fetchall()
+    assert rows == [("005930", "삼성전자최신")]
+    assert stored == 1
