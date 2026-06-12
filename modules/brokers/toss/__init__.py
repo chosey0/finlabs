@@ -5,6 +5,7 @@ from modules.brokers.toss.auth import (
     MemoryTokenCache,
     TokenCache,
     issue_access_token_async,
+    mask_sensitive_message,
     parse_token_response,
 )
 from modules.brokers.toss.client import TossClient
@@ -42,6 +43,7 @@ __all__ = [
     "TossError",
     "TossRateLimitError",
     "issue_access_token_async",
+    "mask_sensitive_message",
     "parse_token_response",
 ]
 

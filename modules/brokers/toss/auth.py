@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol
@@ -11,6 +12,18 @@ from modules.brokers.toss.config import Credentials, DEFAULT_BASE_URL
 from modules.brokers.toss.exceptions import TossAuthError
 
 TOKEN_PATH = "/oauth2/token"
+
+SECRET_PATTERNS = (
+    re.compile(r"(client_secret[\"':=\s]+)([A-Za-z0-9._\-]{8,})", re.IGNORECASE),
+    re.compile(r"(access_token[\"':=\s]+)([A-Za-z0-9._\-]{8,})", re.IGNORECASE),
+)
+
+
+def mask_sensitive_message(message: str) -> str:
+    masked = message
+    for pattern in SECRET_PATTERNS:
+        masked = pattern.sub(r"\1********", masked)
+    return masked
 
 
 @dataclass(frozen=True)
@@ -102,7 +115,9 @@ async def issue_access_token_async(
             timeout=timeout_seconds,
         )
     except httpx.HTTPError as exc:
-        raise TossAuthError(f"Toss token request failed: {exc}") from exc
+        raise TossAuthError(
+            mask_sensitive_message(f"Toss token request failed: {exc}")
+        ) from exc
     finally:
         if owns_client:
             await client.aclose()
@@ -116,7 +131,9 @@ async def issue_access_token_async(
     if response.status_code >= 400:
         message = payload.get("error_description") or payload.get("error")
         raise TossAuthError(
-            f"Toss token request failed: {message or response.status_code}"
+            mask_sensitive_message(
+                f"Toss token request failed: {message or response.status_code}"
+            )
         )
     return parse_token_response(payload, issued_at=issued_at)
 

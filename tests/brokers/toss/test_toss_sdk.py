@@ -7,7 +7,13 @@ from decimal import Decimal
 import httpx
 import pytest
 
-from modules.brokers.toss import Credentials, TossApiError, TossClient
+from modules.brokers.toss import (
+    Credentials,
+    TossApiError,
+    TossAuthError,
+    TossClient,
+    mask_sensitive_message,
+)
 
 
 def test_prices_reuse_cached_token_and_parse_decimals() -> None:
@@ -219,3 +225,37 @@ def test_candle_count_validation(count: int) -> None:
     client = TossClient(credentials=Credentials("client-id", "client-secret"))
     with pytest.raises(ValueError, match="between 1 and 200"):
         asyncio.run(client.market.candles("AAPL", interval="1d", count=count))
+
+
+def test_auth_error_message_masks_secrets() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/oauth2/token"
+        return httpx.Response(
+            400,
+            json={
+                "error": "invalid_client",
+                "error_description": "bad client_secret: super-secret-value",
+            },
+        )
+
+    async def run() -> None:
+        http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        async with TossClient(
+            credentials=Credentials("client-id", "super-secret-value"),
+            http_client=http_client,
+        ) as client:
+            with pytest.raises(TossAuthError) as captured:
+                await client.market.prices("AAPL")
+        await http_client.aclose()
+        assert "super-secret-value" not in str(captured.value)
+        assert "client_secret: ********" in str(captured.value)
+
+    asyncio.run(run())
+
+
+def test_mask_sensitive_message_covers_token_and_secret() -> None:
+    message = "client_secret=abcd1234efgh access_token: tok.en-value_123 other=x"
+    masked = mask_sensitive_message(message)
+    assert "abcd1234efgh" not in masked
+    assert "tok.en-value_123" not in masked
+    assert "other=x" in masked
