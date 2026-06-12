@@ -355,6 +355,58 @@ def test_collect_rss_merges_categories_for_duplicate_article_urls():
     assert item.source_categories == ("거시경제", "증권")
 
 
+def test_collect_rss_reports_each_source_result_in_order():
+    """소스 하나의 수집이 끝날 때마다 소스별 결과가 순서대로 콜백에 전달된다."""
+
+    connection = duckdb.connect(":memory:")
+    create_schema(connection)
+    parser = PARSERS["etoday"]
+    sources = (
+        FeedSource(
+            "etoday",
+            "https://example.com/economy.xml",
+            parser,
+            feed_category="경제",
+        ),
+        FeedSource(
+            "etoday",
+            "https://example.com/market.xml",
+            parser,
+            feed_category="마켓",
+        ),
+    )
+
+    def load_feed(url):
+        return SimpleNamespace(
+            entries=[
+                {
+                    "author": "기자",
+                    "link": "https://www.etoday.co.kr/news/view/progress",
+                    "published": "Wed, 10 Jun 2026 21:00:00 +0900",
+                    "summary": "요약",
+                    "title": "Progress article",
+                }
+            ],
+            bozo=False,
+        )
+
+    reported: list[tuple[FeedSource, OperationResult]] = []
+    result = collect_rss(
+        connection,
+        sources=sources,
+        feed_loader=load_feed,
+        on_source_result=lambda source, source_result: reported.append(
+            (source, source_result)
+        ),
+    )
+
+    assert result == OperationResult(processed=2, created=1, skipped=1)
+    assert reported == [
+        (sources[0], OperationResult(processed=1, created=1, skipped=0)),
+        (sources[1], OperationResult(processed=1, created=0, skipped=1)),
+    ]
+
+
 def test_recorded_operation_persists_success_and_failure():
     """각 단계의 성공·실패 상태와 오류 메시지가 실행 이력에 남는다."""
 

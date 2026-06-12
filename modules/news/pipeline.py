@@ -382,8 +382,13 @@ def collect_rss(
     *,
     sources: Iterable[FeedSource] = DEFAULT_FEED_SOURCES,
     feed_loader: FeedLoader = load_feed,
+    on_source_result: Callable[[FeedSource, OperationResult], None] | None = None,
 ) -> OperationResult:
-    """RSS 피드를 파싱해 표준 항목을 중복 없이 저장한다."""
+    """RSS 피드를 파싱해 표준 항목을 중복 없이 저장한다.
+
+    ``on_source_result``를 주면 소스 하나의 수집이 끝날 때마다 해당 소스의
+    결과를 전달하므로 호출자가 진행 상황과 소스별 집계를 표시할 수 있다.
+    """
 
     processed = 0
     created = 0
@@ -395,15 +400,28 @@ def collect_rss(
         if getattr(feed, "bozo", False) and not entries:
             error = getattr(feed, "bozo_exception", "invalid feed")
             raise RuntimeError(f"failed to parse {source.publisher} RSS: {error}")
+        source_processed = 0
+        source_created = 0
         for raw_entry in entries:
-            processed += 1
+            source_processed += 1
             item = source.parser.parse(raw_entry)
             item = replace(
                 item,
                 domain_category=source.domain_category,
                 feed_categories=(source.feed_category,) if source.feed_category else (),
             )
-            created += int(insert_rss_item(connection, item))
+            source_created += int(insert_rss_item(connection, item))
+        processed += source_processed
+        created += source_created
+        if on_source_result is not None:
+            on_source_result(
+                source,
+                OperationResult(
+                    processed=source_processed,
+                    created=source_created,
+                    skipped=source_processed - source_created,
+                ),
+            )
     return OperationResult(
         processed=processed,
         created=created,

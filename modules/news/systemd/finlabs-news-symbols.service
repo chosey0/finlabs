@@ -1,0 +1,13 @@
+[Unit]
+Description=Refresh FinLabs news KIS domestic and overseas symbol masters
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=finlabs
+WorkingDirectory=/opt/finlabs
+Environment=NEWS_DB_PATH=/var/lib/finlabs-news/news.duckdb
+EnvironmentFile=-/etc/finlabs-news.env
+ExecStart=/usr/bin/env uv run --group news python -m modules.news.main update-symbols
+TimeoutStartSec=30min

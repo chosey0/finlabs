@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh domestic and overseas news symbol masters at 09:00 KST
+
+[Timer]
+OnCalendar=*-*-* 09:00:00 Asia/Seoul
+Persistent=true
+AccuracySec=1min
+Unit=finlabs-news-symbols.service
+
+[Install]
+WantedBy=timers.target

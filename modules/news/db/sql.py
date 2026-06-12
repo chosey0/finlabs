@@ -318,6 +318,65 @@ def finish_pipeline_run(
     )
 
 
+def replace_symbol_snapshots(
+    connection: duckdb.DuckDBPyConnection,
+    symbols: Sequence[NewsSymbol],
+) -> int:
+    """국내·해외 종목 스냅샷을 구분된 테이블에 원자적으로 교체한다."""
+
+    rows = tuple(symbols)
+    if not rows:
+        raise ValueError("symbol master download returned no rows")
+
+    markets = tuple(dict.fromkeys(symbol.market for symbol in rows))
+    if any(not market for market in markets):
+        raise ValueError("symbol market must not be empty")
+    if len({(symbol.market, symbol.symbol) for symbol in rows}) != len(rows):
+        raise ValueError("symbol master contains duplicate market/symbol rows")
+
+    rows_by_table = {
+        "domestic_symbols": tuple(
+            symbol for symbol in rows if symbol.market in {"KOSPI", "KOSDAQ"}
+        ),
+        "overseas_symbols": tuple(
+            symbol for symbol in rows if symbol.market in {"NASDAQ", "NYSE", "AMEX"}
+        ),
+    }
+    supported_markets = {"KOSPI", "KOSDAQ", "NASDAQ", "NYSE", "AMEX"}
+    unsupported = sorted(set(markets) - supported_markets)
+    if unsupported:
+        raise ValueError(f"unsupported symbol markets: {', '.join(unsupported)}")
+
+    connection.execute("BEGIN TRANSACTION")
+    try:
+        for table_name, table_rows in rows_by_table.items():
+            table_markets = tuple(dict.fromkeys(symbol.market for symbol in table_rows))
+            if not table_markets:
+                continue
+            connection.executemany(
+                f"DELETE FROM {table_name} WHERE market = ?",
+                [(market,) for market in table_markets],
+            )
+            connection.executemany(
+                f"""
+            INSERT INTO {table_name} (
+                market, symbol, standard_code, realtime_symbol, korean_name,
+                english_name, security_type, currency, exchange_id,
+                exchange_code, exchange_name, country_code, listed_date,
+                base_price, lot_size, raw_source, raw, downloaded_at
+            ) VALUES (
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::JSON, ?
+            )
+            """,
+                [_symbol_values(symbol) for symbol in table_rows],
+            )
+        connection.execute("COMMIT")
+    except Exception:
+        connection.execute("ROLLBACK")
+        raise
+    return len(rows)
+
+
 def _item_values(item: CanonicalRssEntry) -> list[object]:
     """표준 RSS 항목을 DuckDB 쿼리의 순서가 있는 매개변수로 변환한다."""
 
@@ -332,6 +391,29 @@ def _item_values(item: CanonicalRssEntry) -> list[object]:
         list(item.feed_categories),
         list(item.source_categories),
         item.published_at.astimezone(SEOUL_TIMEZONE).replace(tzinfo=None),
+    ]
+
+
+def _symbol_values(symbol: NewsSymbol) -> list[object]:
+    return [
+        symbol.market,
+        symbol.symbol,
+        symbol.standard_code,
+        symbol.realtime_symbol,
+        symbol.korean_name,
+        symbol.english_name,
+        symbol.security_type,
+        symbol.currency,
+        symbol.exchange_id,
+        symbol.exchange_code,
+        symbol.exchange_name,
+        symbol.country_code,
+        symbol.listed_date,
+        symbol.base_price,
+        symbol.lot_size,
+        symbol.raw_source,
+        json.dumps(symbol.raw, ensure_ascii=False, sort_keys=True),
+        symbol.downloaded_at,
     ]
 
 

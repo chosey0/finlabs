@@ -9,7 +9,14 @@ import duckdb
 
 
 DEFAULT_DB_PATH = Path(__file__).resolve().with_name("news.db")
-TABLE_NAMES = ("rss_items", "articles", "article_analyses", "pipeline_runs")
+TABLE_NAMES = (
+    "rss_items",
+    "articles",
+    "article_analyses",
+    "pipeline_runs",
+    "domestic_symbols",
+    "overseas_symbols",
+)
 RSS_ITEM_SCHEMA = {
     "id": "VARCHAR",
     "publisher": "VARCHAR",
@@ -132,6 +139,9 @@ def create_schema(connection: duckdb.DuckDBPyConnection) -> None:
         )
         """
     )
+    _create_symbol_table(connection, "domestic_symbols")
+    _create_symbol_table(connection, "overseas_symbols")
+    _migrate_split_symbol_tables(connection)
     connection.execute(
         """
         CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -144,6 +154,82 @@ def create_schema(connection: duckdb.DuckDBPyConnection) -> None:
         connection,
         rss_items_preexisting=rss_items_preexisting,
     )
+
+
+def _create_symbol_table(
+    connection: duckdb.DuckDBPyConnection,
+    table_name: str,
+) -> None:
+    connection.execute(
+        f"""
+        CREATE TABLE IF NOT EXISTS {table_name} (
+            market VARCHAR NOT NULL,
+            symbol VARCHAR NOT NULL,
+            standard_code VARCHAR,
+            realtime_symbol VARCHAR,
+            korean_name VARCHAR,
+            english_name VARCHAR,
+            security_type VARCHAR,
+            currency VARCHAR,
+            exchange_id VARCHAR,
+            exchange_code VARCHAR,
+            exchange_name VARCHAR,
+            country_code VARCHAR,
+            listed_date VARCHAR,
+            base_price BIGINT,
+            lot_size BIGINT,
+            raw_source VARCHAR NOT NULL DEFAULT '',
+            raw JSON NOT NULL DEFAULT '{{}}',
+            downloaded_at VARCHAR NOT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT current_timestamp,
+            updated_at TIMESTAMP NOT NULL DEFAULT current_timestamp,
+            UNIQUE (market, symbol)
+        )
+        """
+    )
+
+
+def _migrate_split_symbol_tables(connection: duckdb.DuckDBPyConnection) -> None:
+    """초기 단일 symbols 테이블이 있으면 국내·해외 테이블로 분리한다."""
+
+    tables = {row[0] for row in connection.execute("SHOW TABLES").fetchall()}
+    if "symbols" not in tables:
+        return
+    connection.execute(
+        """
+        INSERT INTO domestic_symbols (
+            market, symbol, standard_code, realtime_symbol, korean_name,
+            english_name, security_type, currency, exchange_id, exchange_code,
+            exchange_name, country_code, listed_date, base_price, lot_size,
+            raw_source, raw, downloaded_at
+        )
+        SELECT
+            market, symbol, standard_code, realtime_symbol, korean_name,
+            english_name, security_type, currency, exchange_id, exchange_code,
+            exchange_name, country_code, listed_date, base_price, lot_size,
+            raw_source, raw, downloaded_at
+        FROM symbols WHERE market IN ('KOSPI', 'KOSDAQ')
+        ON CONFLICT DO NOTHING
+        """
+    )
+    connection.execute(
+        """
+        INSERT INTO overseas_symbols (
+            market, symbol, standard_code, realtime_symbol, korean_name,
+            english_name, security_type, currency, exchange_id, exchange_code,
+            exchange_name, country_code, listed_date, base_price, lot_size,
+            raw_source, raw, downloaded_at
+        )
+        SELECT
+            market, symbol, standard_code, realtime_symbol, korean_name,
+            english_name, security_type, currency, exchange_id, exchange_code,
+            exchange_name, country_code, listed_date, base_price, lot_size,
+            raw_source, raw, downloaded_at
+        FROM symbols WHERE market IN ('NASDAQ', 'NYSE', 'AMEX')
+        ON CONFLICT DO NOTHING
+        """
+    )
+    connection.execute("DROP TABLE symbols")
 
 
 def _migrate_published_at_to_seoul(
