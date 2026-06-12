@@ -7,11 +7,11 @@
 [![Python](https://img.shields.io/badge/Python_3.12+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![HTTPX](https://img.shields.io/badge/HTTPX-0.27+-2F6F9F?style=for-the-badge)](https://www.python-httpx.org/)
 [![OAuth2](https://img.shields.io/badge/OAuth_2.0-Client_Credentials-EB5424?style=for-the-badge)](https://developers.tossinvest.com/docs)
-[![Tests](https://img.shields.io/badge/Tests-7_Passing-00C853?style=for-the-badge&logo=pytest&logoColor=white)](../../../tests/brokers/toss/test_toss_sdk.py)
+[![Tests](https://img.shields.io/badge/Tests-16_Passing-00C853?style=for-the-badge&logo=pytest&logoColor=white)](../../../tests/brokers/toss/)
 
-OAuth2 토큰 발급부터 현재가, 1분봉·일봉, 종목 기본정보 조회까지 **타입이 지정된 비동기 인터페이스**로 제공합니다.
+OAuth2 토큰 발급부터 현재가, 1분봉·일봉, 종목 기본정보, 국내·해외 장 운영 정보 조회까지 **타입이 지정된 비동기 인터페이스**로 제공합니다.
 
-[FinLabs](../../../README.md) · [토스증권 API 문서](https://developers.tossinvest.com/docs) · [회귀 테스트](../../../tests/brokers/toss/test_toss_sdk.py)
+[FinLabs](../../../README.md) · [모듈 계획서](./PLAN.md) · [통합 계획서](../../../PLAN.md) · [토스증권 API 문서](https://developers.tossinvest.com/docs) · [회귀 테스트](../../../tests/brokers/toss/)
 
 </div>
 
@@ -34,6 +34,7 @@ OAuth2 토큰 발급부터 현재가, 1분봉·일봉, 종목 기본정보 조�
 | **[현재가 조회]** | 국내·미국 주식 다건 조회 | 최대 200개 심볼을 한 요청으로 조회하고 `CurrentPrice`로 변환 |
 | **[캔들 조회]** | 1분봉·일봉 | `1m`, `1d` 간격과 `before` 기반 페이지네이션 지원 |
 | **[종목 정보]** | 종목 마스터 조회 | 시장, 통화, 상장 상태, 발행주식수와 국내 시장 상세정보 제공 |
+| **[장 운영 정보]** | 국내·해외 시장 캘린더 | 전·당일·다음 영업일의 세션 시각과 동시호가 시각 조회, 휴장일은 `None` 보존 |
 | **[오류 모델]** | API 오류 보존 | HTTP 상태, 오류 코드, 요청 ID, 해결 힌트와 재시도 시간을 예외에 보존 |
 | **[Rate Limit 대응]** | 429 자동 재시도 | `Retry-After` 헤더를 우선 사용하고 제한 횟수까지 백오프 재시도 |
 | **[입력 검증]** | 심볼·개수·간격 검증 | API 호출 전에 심볼 형식, 최대 개수, 캔들 범위를 검증 |
@@ -58,7 +59,7 @@ AsyncHttpTransport
 parsers
     │  JSON → Decimal · datetime · frozen dataclass
     ▼
-CurrentPrice / CandlePage / StockInfo
+CurrentPrice / CandlePage / StockInfo / KrMarketCalendar / UsMarketCalendar
 ```
 
 ---
@@ -89,8 +90,10 @@ CurrentPrice / CandlePage / StockInfo
 | `client.market.prices()` | `GET /api/v1/prices` | `tuple[CurrentPrice, ...]` | 구현 |
 | `client.market.candles()` | `GET /api/v1/candles` | `CandlePage` | 구현 |
 | `client.stocks.get()` | `GET /api/v1/stocks` | `tuple[StockInfo, ...]` | 구현 |
+| `client.market.kr_market_calendar()` | `GET /api/v1/market-calendar/KR` | `KrMarketCalendar` | 구현 |
+| `client.market.us_market_calendar()` | `GET /api/v1/market-calendar/US` | `UsMarketCalendar` | 구현 |
 
-호가, 최근 체결, 상·하한가, 종목 경고, 환율, 시장 캘린더는 토스증권 Open API에 존재하지만 아직 이 SDK의 공개 메서드로 구현되지 않았습니다.
+호가, 최근 체결, 상·하한가, 종목 경고, 환율은 토스증권 Open API에 존재하지만 아직 이 SDK의 공개 메서드로 구현되지 않았습니다.
 
 ---
 
@@ -173,6 +176,23 @@ async with TossClient.from_env() as client:
         )
 ```
 
+### 장 운영 정보 조회
+
+국내(KR)·해외(US) 시장 캘린더는 기준일과 전·다음 영업일의 세션 운영시간을 반환합니다. 휴장일의 운영시간은 `None`으로 보존되며 임의로 추정하지 않습니다.
+
+```python
+from datetime import date
+
+async with TossClient.from_env() as client:
+    kr = await client.market.kr_market_calendar(date=date(2026, 5, 5))
+    us = await client.market.us_market_calendar()
+
+    print(kr.today.date, kr.today.integrated)  # 휴장일이면 integrated가 None
+    print(us.previous_business_day.regular_market)
+```
+
+canonical 장 운영 모델(`MarketDay`)로의 변환은 [`modules.adapters.brokers.toss`](../../adapters/brokers/toss/calendar.py)의 `kr_calendar_to_market_days`·`us_calendar_to_market_days`가 담당합니다.
+
 ---
 
 ## Models
@@ -185,6 +205,9 @@ async with TossClient.from_env() as client:
 | `CandlePage` | 캔들 페이지 | `candles`, `next_before` |
 | `StockInfo` | 종목 기본정보 | `market`, `security_type`, `status`, `shares_outstanding` |
 | `KoreanMarketDetail` | 국내 시장 상세정보 | `nxt_supported`, 거래정지·정리매매 상태 |
+| `KrMarketCalendar` | 국내 장 운영 정보 | `today`, `previous_business_day`, `next_business_day`와 통합 세션 |
+| `UsMarketCalendar` | 해외 장 운영 정보 | 일자별 `day_market`·`pre_market`·`regular_market`·`after_market` |
+| `MarketSession` | 단일 세션 운영시간 | `start_time`, `end_time`, 동시호가 시작·종료 시각 |
 
 모든 API 응답 모델은 원본 응답 객체를 `raw` 필드에 보존합니다. 가격, 거래량, 발행주식수처럼 정밀도가 중요한 숫자는 부동소수점 대신 `Decimal`로 파싱합니다.
 
@@ -198,7 +221,7 @@ modules/brokers/toss/
 ├── client.py                TossClient 컨텍스트와 네임스페이스 구성
 ├── config.py                Credentials와 기본 API URL
 ├── auth.py                  OAuth2 발급, 토큰 모델과 메모리 캐시
-├── market.py                현재가와 캔들 고수준 API
+├── market.py                현재가, 캔들과 국내·해외 장 운영 정보 고수준 API
 ├── stocks.py                종목 기본정보 고수준 API
 ├── models.py                frozen dataclass 응답 모델
 ├── parsers.py               JSON 응답의 타입 변환과 검증
@@ -238,10 +261,10 @@ async with TossClient.from_env() as client:
 
 ## Testing
 
-테스트는 실제 토스증권 서버를 호출하지 않고 `httpx.MockTransport`로 토큰과 API 응답을 고정합니다.
+테스트는 실제 토스증권 서버를 호출하지 않고 `httpx.MockTransport`와 고정 fixture로 토큰과 API 응답을 검증합니다.
 
 ```bash
-uv run python -m pytest tests/brokers/toss/test_toss_sdk.py -q
+uv run python -m pytest tests/brokers/toss -q
 uv run ruff check modules/brokers/toss tests/brokers/toss
 uv run ruff format --check modules/brokers/toss tests/brokers/toss
 ```
@@ -252,6 +275,8 @@ uv run ruff format --check modules/brokers/toss tests/brokers/toss
 - 현재가 응답의 `Decimal`·시간 타입 변환
 - 캔들 요청 매개변수와 페이지네이션 응답 파싱
 - 국내 종목의 시장 상세정보 파싱
+- 국내·해외 장 운영 정보의 세션·휴장·동시호가 파싱
+- calendar adapter의 canonical `MarketDay` 변환과 누락 세션 미추정
 - 오류 코드와 요청 ID 보존
 - 비동기 컨텍스트 매니저 사용 강제
 - 캔들 조회 개수 범위 검증
@@ -260,9 +285,9 @@ uv run ruff format --check modules/brokers/toss tests/brokers/toss
 
 ## Current Scope
 
-현재 SDK는 인증과 읽기 전용 시장 데이터 중 현재가, 1분봉·일봉, 종목 기본정보만 지원합니다. WebSocket 실시간 API는 토스증권에서 제공하지 않으며, 계좌·보유자산·주문 API는 이 초기 SDK 범위에 포함하지 않았습니다.
+현재 SDK는 인증과 읽기 전용 시장 데이터 중 현재가, 1분봉·일봉, 종목 기본정보와 국내·해외 장 운영 정보를 지원합니다. WebSocket 실시간 API는 토스증권에서 제공하지 않으며, 계좌·보유자산·주문 API는 이 초기 SDK 범위에 포함하지 않았습니다.
 
-FinLabs 저장소 저장, canonical domain 모델 변환, CLI 명령과 수집 워크플로는 이 패키지의 책임이 아닙니다. 필요한 경우 각각 `modules.adapters`, `modules.orchestration`, 애플리케이션 계층에서 구현해야 합니다.
+장 운영 정보의 canonical 변환은 `modules/adapters/brokers/toss/calendar.py`에 구현되어 있습니다. 동기화 스케줄(매일 06:00 KST)과 PostgreSQL `market` 스키마 저장은 [통합 PLAN](../../../PLAN.md) 단계 3에 따라 orchestration·storage가 소유하며 아직 구현 전입니다. FinLabs 저장소 저장, CLI 명령과 수집 워크플로는 이 패키지의 책임이 아닙니다.
 
 ---
 

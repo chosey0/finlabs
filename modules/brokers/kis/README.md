@@ -11,7 +11,7 @@
 
 인증·엔드포인트 메타데이터·응답 정규화만 담당하는 transport 전용 SDK입니다.
 
-[FinLabs](../../../README.md) · [Toss SDK](../toss/README.md) · [KIS CLI](../../../kis_cli/README.md)
+[FinLabs](../../../README.md) · [모듈 계획서](./PLAN.md) · [통합 계획서](../../../PLAN.md) · [Toss SDK](../toss/README.md) · [KIS CLI](../../../kis_cli/README.md)
 
 </div>
 
@@ -22,6 +22,8 @@
 `modules.brokers.kis`는 한국투자증권(Korea Investment & Securities) Open API를 감싸는 순수 파이썬 SDK입니다. REST 조회는 **해외주식 전용**이고, WebSocket 실시간 시세는 **해외주식과 국내주식(KOSPI/KOSDAQ) 체결/호가**를 모두 지원합니다. 국내주식 REST 조회는 이 SDK 범위 밖이며, 별도 Kiwoom REST API SDK로 구현할 예정입니다.
 
 이 패키지는 REST/WebSocket 트랜스포트, 인증, 엔드포인트 메타데이터, 응답 정규화만 담당합니다. 영속화·CLI·설정 파일 처리는 상위 `modules` 계층과 `kis_cli/`가 맡습니다.
+
+WebSocket 실시간 수집의 상세 정책은 [모듈 PLAN](./PLAN.md)이 단일 원본입니다. 이 SDK가 수신한 체결·호가를 Redis Streams로 전달하고 TimescaleDB·Parquet에 영구화하는 파이프라인은 [통합 PLAN](../../../PLAN.md) 단계 2~3으로 계획되어 있으며 아직 구현 전입니다.
 
 ---
 

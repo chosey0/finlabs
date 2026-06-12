@@ -11,7 +11,7 @@
 
 한국투자증권 해외주식 데이터와 RSS 뉴스를 **수집·정규화·저장·조회·분석**하는 Python 프로젝트입니다.
 
-[KIS SDK](./modules/brokers/kis/README.md) · [Toss SDK](./modules/brokers/toss/README.md) · [KIS CLI](./kis_cli/README.md) · [News Pipeline](./modules/news/README.md) · [Research](./research/README.md)
+[통합 계획서](./PLAN.md) · [KIS SDK](./modules/brokers/kis/README.md) · [Toss SDK](./modules/brokers/toss/README.md) · [KIS CLI](./kis_cli/README.md) · [News Pipeline](./modules/news/README.md) · [Research](./research/README.md)
 
 </div>
 
@@ -25,6 +25,8 @@ FinLabs는 증권사 Open API를 독립적인 Python SDK로 구현하고, 그 �
 
 코드베이스는 broker-agnostic 계층형 코어인 `modules/`로 이전 중입니다. SDK는 증권사별 차이를 캡슐화하고, 상위 애플리케이션은 canonical 모델과 orchestration 계층을 통해 데이터를 다루는 구조를 목표로 합니다.
 
+전체 방향, 구현 순서와 모듈 간 계약은 [통합 계획서(PLAN.md)](./PLAN.md)가 관리합니다. 뉴스, KIS 실시간 수집, Toss 장 운영 정보, 저장소와 orchestration의 상세 정책은 각 모듈의 PLAN이 단일 원본입니다.
+
 ---
 
 ## Components
@@ -32,12 +34,13 @@ FinLabs는 증권사 Open API를 독립적인 Python SDK로 구현하고, 그 �
 | | 영역 | 상태 | 설명 |
 |---|------|:----:|------|
 | **[Broker SDK]** | [KIS SDK](./modules/brokers/kis/README.md) | 구현 중 | 한국투자증권 해외주식 REST·WebSocket 조회, 인증, 엔드포인트, 파서, 모델 |
-| **[Broker SDK]** | [Toss SDK](./modules/brokers/toss/README.md) | 초기 구현 | 토스증권 국내·미국주식 현재가 조회, 세션 인증, 응답 파싱과 typed 모델 |
+| **[Broker SDK]** | [Toss SDK](./modules/brokers/toss/README.md) | 구현됨 | 토스증권 현재가·캔들·종목정보와 국내·해외 장 운영 정보 조회, calendar adapter |
 | **[Market CLI]** | [KIS CLI](./kis_cli/README.md) | 구현 중 | 해외 심볼 다운로드, OHLCV·분봉 수집, DuckDB 저장, 조회와 내보내기 |
 | **[Core]** | `modules/` 계층형 코어 | 이전 중 | broker adapter, canonical domain, orchestration, warehouse read repository |
 | **[News]** | [News Pipeline](./modules/news/README.md) | 초기 구현 | RSS 정규화, 기사 본문 수집, 멱등 저장, 기초 통계 분석, systemd 실행 |
 | **[Dashboard]** | `dashboard/` | 구현 중 | `modules.orchestration`을 통해 저장된 시장 데이터를 읽는 Streamlit UI |
 | **[Research]** | [Market Representation](./research/README.md) | 초기 연구 | Candlestick VQ-VAE Tokenizer 중심의 시장 표현 학습 |
+| **[Platform]** | PostgreSQL·TimescaleDB·Redis·Parquet | 계획 확정 | [통합 PLAN](./PLAN.md) 단계 1~6의 신규 데이터 플랫폼, 구현 전 |
 | **[Next Broker]** | Kiwoom SDK·adapter | 예정 | 추가 국내주식 데이터 조회용 Kiwoom REST API 통합 |
 
 ---
@@ -69,7 +72,8 @@ FinLabs는 증권사 Open API를 독립적인 Python SDK로 구현하고, 그 �
 ### Storage & Data
 
 ![DuckDB](https://img.shields.io/badge/DuckDB-1.1+-FFF000?style=flat-square&logo=duckdb&logoColor=black)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Optional-4169E1?style=flat-square&logo=postgresql&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL_TimescaleDB-Planned-4169E1?style=flat-square&logo=postgresql&logoColor=white)
+![Redis](https://img.shields.io/badge/Redis_Streams-Planned-DC382D?style=flat-square&logo=redis&logoColor=white)
 ![feedparser](https://img.shields.io/badge/feedparser-6.0.12+-4B8BBE?style=flat-square)
 
 ### Analysis & Quality
@@ -111,6 +115,40 @@ modules.domain                        pure shared contracts
 
 `modules/news`는 이 broker 계층과 별도로 실행되는 독립 뉴스 파이프라인입니다. 자체 표준 뉴스 모델과 전용 DuckDB를 사용하며, 현재 시장 데이터용 `modules.domain` 또는 `modules.storage`에는 의존하지 않습니다.
 
+### 목표 데이터 플랫폼
+
+[통합 계획서](./PLAN.md)가 확정한 전체 데이터 흐름입니다. Redis는 전달 계층이고 PostgreSQL과 검증된 Parquet가 영구 원본입니다.
+
+```text
+KIS WebSocket
+  -> Redis Streams
+     -> TimescaleDB writer
+     -> 1-minute candle aggregator
+     -> Parquet archive writer
+     -> Redis Pub/Sub live broadcast
+
+RSS / Article Fetcher
+  -> PostgreSQL news schema
+
+Toss Market Calendar
+  -> Toss SDK -> Toss Adapter -> PostgreSQL market schema
+
+Monitoring Core
+  -> Rich CLI
+  -> Discord
+  -> Future FastAPI/WebSocket and PyQt
+```
+
+영역별 상세 정책의 단일 원본은 다음 모듈 PLAN입니다.
+
+| 영역 | 단일 원본 |
+|---|---|
+| 뉴스 수집·파싱·분석 | [modules/news/PLAN.md](./modules/news/PLAN.md) |
+| KIS WebSocket 실시간 수집 | [modules/brokers/kis/PLAN.md](./modules/brokers/kis/PLAN.md) |
+| Toss 장 운영 정보 | [modules/brokers/toss/PLAN.md](./modules/brokers/toss/PLAN.md) |
+| PostgreSQL·TimescaleDB·Parquet·백업 | [modules/storage/PLAN.md](./modules/storage/PLAN.md) |
+| Redis Streams·워커·구독·관측성 | [modules/orchestration/PLAN.md](./modules/orchestration/PLAN.md) |
+
 ---
 
 ## Repository
@@ -121,6 +159,7 @@ finlabs/
 │   ├── brokers/kis/            한국투자증권 해외주식 SDK
 │   ├── brokers/toss/           토스증권 국내·미국주식 시세 SDK
 │   ├── adapters/brokers/kis/   KIS SDK → canonical 모델 adapter
+│   ├── adapters/brokers/toss/  Toss 장 운영 정보 → canonical calendar adapter
 │   ├── orchestration/          use case와 warehouse query
 │   ├── domain/                 canonical 데이터 계약
 │   ├── storage/                warehouse read repository
@@ -130,6 +169,7 @@ finlabs/
 ├── research/                   시장 표현 학습 연구
 ├── tests/                      공통 단위·통합·아키텍처 테스트
 ├── exports/                    CSV 샘플 출력물
+├── PLAN.md                     통합 계획서 — 전체 방향과 구현 순서
 ├── pyproject.toml              프로젝트 의존성
 └── README.md                   프로젝트 개요
 ```
@@ -199,11 +239,22 @@ uv run --group news python -m modules.news.main analyze --limit 100
 
 ## Storage
 
-| 저장소 | 용도 | 기본 원칙 |
-|--------|------|-----------|
-| DuckDB | 시장 데이터와 뉴스 파이프라인 데이터 | 로컬 우선, 고유 제약 기반 멱등 적재 |
-| SQLite | KIS CLI 운영 로그 | API 호출과 ingest 실행 이력 |
-| PostgreSQL·Supabase | 선택적 시장 데이터 미러 | 기본 저장소가 아닌 외부 연동 옵션 |
+| 저장소 | 용도 | 상태 |
+|--------|------|------|
+| DuckDB | 시장 데이터와 뉴스 파이프라인 데이터 | 운영 중, 읽기 전용 레거시 전환 예정 |
+| SQLite | KIS CLI 운영 로그 | 운영 중, 읽기 전용 레거시 전환 예정 |
+| PostgreSQL (TimescaleDB) | `control`·`market`·`news` 스키마, 틱·호가·1분봉·기사 영구 원본 | 계획 확정, 구현 전 |
+| Redis (Streams·Pub/Sub) | 실시간 이벤트 전달 계층 | 계획 확정, 구현 전 |
+| Parquet | 검증된 틱·호가 장기 아카이브 | 계획 확정, 구현 전 |
+
+### 전환 정책
+
+[통합 계획서](./PLAN.md) 기준으로 신규 쓰기 경로는 PostgreSQL/TimescaleDB, Redis Streams와 검증된 Parquet를 사용합니다.
+
+- 기존 `warehouse.duckdb`, `news.db`, SQLite는 이동·마이그레이션 없이 읽기 전용 레거시 보관소로 유지합니다.
+- 신규 인프라는 빈 상태로 시작하며 이중 쓰기를 하지 않습니다.
+- MongoDB는 도입하지 않습니다.
+- 원문 HTML은 영구 보관하지 않고 정제 기사 본문만 저장합니다.
 
 로컬 DB, 로그, 토큰, 계좌번호, API 키와 개인 설정 파일은 Git에 포함하지 않습니다.
 
@@ -230,13 +281,18 @@ uv run --group news python -m modules.news.main --help
 
 ## Roadmap
 
-1. KIS 해외주식 SDK 안정화
-2. KIS CLI 수집·저장 use case의 `modules.orchestration` 이전
-3. storage write, config, job queue의 계층형 코어 이전
-4. Kiwoom REST API 기반 국내주식 SDK와 adapter 추가
-5. 뉴스 본문 추출 정확도와 운영 안정성 개선
-6. Candlestick VQ-VAE Tokenizer 연구 구현
-7. 분석 패키지와 대시보드 경계 정리
+구현 순서와 단계별 완료 기준은 [통합 계획서](./PLAN.md)가 관리합니다. 요약:
+
+| 단계 | 범위 | 상태 |
+|:---:|------|:----:|
+| 1 | 기반 인프라 — TimescaleDB·Redis Docker Compose, 공통 환경설정, Alembic 3-스키마 | 구현 전 |
+| 2 | 이벤트 전송과 구독 제어 — Redis Streams·DLQ·멱등성, KIS WebSocket 수집기, 동적 구독 CLI | 구현 전 |
+| 3 | 시장 데이터 영구화 — 틱·호가·canonical 1분봉, Parquet 아카이브, Toss 장 운영 정보 저장 | 구현 전 |
+| 4 | 뉴스 저장 개편 — RSS 상태·중복 관리 PostgreSQL 이전, parser registry 재처리 | 구현 전 |
+| 5 | 관측성과 알림 — 공통 상태 DTO, Rich 실시간 모니터, Discord | 구현 전 |
+| 6 | 백업과 복구 — 암호화 백업, 체크섬 검증, 격리 복구 훈련 | 구현 전 |
+
+단계에 선행하는 기반은 구현되어 있습니다: KIS 해외주식 REST·실시간 SDK, Toss 시세·장 운영 정보 SDK와 calendar adapter, 뉴스 RSS 파이프라인(현 DuckDB), 국내·해외 종목 마스터 갱신 CLI. Kiwoom SDK와 Candlestick VQ-VAE 연구는 별도 트랙으로 진행합니다.
 
 ---
 
