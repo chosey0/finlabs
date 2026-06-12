@@ -112,20 +112,20 @@ article_analyses
 ```bash
 git clone https://github.com/chosey0/finlabs.git
 cd finlabs
-uv sync
+uv sync --group news
 ```
 
 ### 파이프라인 실행
 
 ```bash
 # 전체 기본 RSS 수집
-uv run python -m modules.news.main collect-rss
+uv run --group news python -m modules.news.main collect-rss
 
 # 아직 저장되지 않은 기사 본문 수집
-uv run python -m modules.news.main collect-articles --limit 100
+uv run --group news python -m modules.news.main collect-articles --limit 100
 
 # 아직 현재 버전으로 분석되지 않은 기사 분석
-uv run python -m modules.news.main analyze --limit 100
+uv run --group news python -m modules.news.main analyze --limit 100
 ```
 
 명령은 필요한 스키마를 자동으로 생성합니다. 기본 데이터베이스는 `modules/news/db/news.db`이며 Git에서 제외됩니다.
@@ -136,10 +136,10 @@ uv run python -m modules.news.main analyze --limit 100
 
 ```bash
 export NEWS_DB_PATH="$HOME/.local/share/finlabs/news.duckdb"
-uv run python -m modules.news.main collect-rss
+uv run --group news python -m modules.news.main collect-rss
 
 # 또는 명령별 경로 지정
-uv run python -m modules.news.main analyze \
+uv run --group news python -m modules.news.main analyze \
   --db-path /var/lib/finlabs-news/news.duckdb \
   --limit 200
 ```
@@ -149,7 +149,7 @@ uv run python -m modules.news.main analyze \
 `publisher` 값은 `investing.com`, `etoday`, `newspim` 중 하나여야 합니다.
 
 ```bash
-uv run python -m modules.news.main collect-rss \
+uv run --group news python -m modules.news.main collect-rss \
   --feed investing.com=https://kr.investing.com/rss/news.rss \
   --feed etoday=https://rss.etoday.co.kr/eto/etoday_news_all.xml
 ```
@@ -216,7 +216,7 @@ DuckDB 쓰기는 파일 잠금으로 직렬화됩니다. 여러 서버나 컨테
 테스트는 실제 RSS 서버를 호출하지 않고 고정된 feedparser 형식 데이터와 인메모리 DuckDB를 사용합니다.
 
 ```bash
-uv run python -m pytest modules/news/tests/test_rss_pipeline.py -q
+uv run --group news python -m pytest modules/news/tests/test_rss_pipeline.py -q
 uv run ruff check modules/news
 ```
 

@@ -165,20 +165,20 @@ Transition은 같은 symbol 내부에서 timestamp 오름차순으로만 계산�
 git clone https://github.com/chosey0/finlabs.git
 cd finlabs
 uv sync
-uv sync --extra tokenizers
+uv sync --group research
 ```
 
 ### Jupyter Kernel
 
 ```bash
-uv run --extra tokenizers --with ipykernel python -m ipykernel install \
+uv run --group research --with ipykernel python -m ipykernel install \
   --user --name finlabs-tokenizers --display-name "FinLabs Tokenizers"
 ```
 
 ### Phase 1 Repeated Splits
 
 ```bash
-uv run --extra tokenizers python \
+uv run --group research python \
   research/notebooks/01_shape_quantization/scripts/run_repeated_splits.py \
   --split-family random \
   --n-runs 20 \
@@ -190,9 +190,9 @@ Runner는 기존 run directory를 덮어쓰지 않으며 완료 후 summary CSV�
 ### Fractal Segment Plots
 
 ```bash
-uv run python -m research.fractal INTC NVDA TSLA
-uv run python -m research.fractal RKLB --interval 1d --type html
-uv run python -m research.fractal TSLA --no-followthrough
+uv run --group research python -m research.fractal INTC NVDA TSLA
+uv run --group research python -m research.fractal RKLB --interval 1d --type html
+uv run --group research python -m research.fractal TSLA --no-followthrough
 ```
 
 기본 출력은 `research/fractal/event_plots/`에 생성되며 Git에서 제외됩니다.
@@ -256,12 +256,12 @@ Focused tests는 synthetic candle과 `tmp_path` 기반 DuckDB를 사용합니다
 
 ```bash
 # Tokenizer: 17 tests
-uv run python -m pytest tests/research/tokenizers -q
+uv run --group research python -m pytest tests/research/tokenizers -q
 
 # Fractal: 38 tests
-uv run python -m pytest tests/research/fractal -q
+uv run --group research python -m pytest tests/research/fractal -q
 
-uv run ruff check research tests/research
+uv run --group research ruff check research tests/research
 ```
 
 PyTorch가 없는 환경에서는 optional model·training test가 skip될 수 있습니다.

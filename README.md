@@ -152,6 +152,18 @@ cd finlabs
 uv sync
 ```
 
+기본 동기화에는 KIS CLI 런타임과 개발 도구만 포함됩니다. 기능별 의존성은 필요할 때 그룹으로 추가합니다.
+
+| 용도 | 동기화 명령 |
+|------|-------------|
+| FastAPI job server | `uv sync --group server` |
+| Streamlit dashboard | `uv sync --group dashboard` |
+| Research / modeling | `uv sync --group research` |
+| RSS news pipeline | `uv sync --group news` |
+| Scrapy crawler | `uv sync --group crawler` |
+| Toss SDK | `uv sync --group toss` |
+| PostgreSQL mirror | `uv sync --group postgres` |
+
 ### KIS CLI
 
 로컬 개발에서는 console script 대신 Python 모듈로 실행합니다.
@@ -176,9 +188,9 @@ uv run python -m kis_cli query ohlcv --symbol AAPL --limit 10
 뉴스 파이프라인은 API 키 없이 기본 RSS 소스를 수집할 수 있습니다.
 
 ```bash
-uv run python -m modules.news.main collect-rss
-uv run python -m modules.news.main collect-articles --limit 100
-uv run python -m modules.news.main analyze --limit 100
+uv run --group news python -m modules.news.main collect-rss
+uv run --group news python -m modules.news.main collect-articles --limit 100
+uv run --group news python -m modules.news.main analyze --limit 100
 ```
 
 지원 언론사, DuckDB 스키마와 systemd 운영 방법은 [News Pipeline README](./modules/news/README.md)를 참고하세요.
@@ -205,11 +217,11 @@ uv run python -m pytest
 uv run ruff check .
 
 # 뉴스 파이프라인 회귀 테스트
-uv run python -m pytest modules/news/tests/test_rss_pipeline.py -q
+uv run --group news python -m pytest modules/news/tests/test_rss_pipeline.py -q
 
 # 주요 CLI 확인
 uv run python -m kis_cli --help
-uv run python -m modules.news.main --help
+uv run --group news python -m modules.news.main --help
 ```
 
 새 core 코드는 `modules/`의 계층 규칙을 따라야 하며, broker SDK가 adapter·orchestration·storage를 역으로 import하지 않도록 아키텍처 테스트가 강제합니다. 실제 KIS API는 단위 테스트에서 호출하지 않습니다.

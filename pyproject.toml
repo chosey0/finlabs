@@ -6,53 +6,45 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "duckdb>=1.1.0",
-    "fastapi>=0.115.0",
-    "feedparser>=6.0.12",
+    "finlabs-core",
+    "finlabs-kis",
     "httpx>=0.27.0",
-    "kaleido>=0.2.1",
-    "matplotlib>=3.10.9",
     "platformdirs>=4.0.0",
-    "plotly>=5.24.0",
-    "psycopg>=3.3.4",
-    "pytest>=9.0.3",
     "rich>=13.0.0",
     "rich-inquirer>=0.1.8",
-    "ruff>=0.15.12",
-    "scrapy>=2.16.0",
-    "streamlit>=1.58.0",
     "typer>=0.12.0",
-    "uvicorn>=0.30.0",
-    "websockets>=13.0",
 ]
 
-[project.scripts]
-news-surge = "news_surge_ranker.src.main:main"
-
-[project.optional-dependencies]
-postgres = [
-    "psycopg[binary]>=3.2.0",
-]
-tokenizers = [
+[dependency-groups]
+dev = ["pytest>=9.0.3", "ruff>=0.15.12"]
+server = ["fastapi>=0.115.0", "uvicorn>=0.30.0"]
+dashboard = ["plotly>=5.24.0", "streamlit>=1.58.0"]
+research = [
+    "kaleido>=0.2.1",
+    "matplotlib>=3.10.9",
     "numpy>=1.26.0",
     "scikit-learn>=1.5.0",
     "torch>=2.2.0",
 ]
-all = [
-    "psycopg[binary]>=3.2.0",
-    "numpy>=1.26.0",
-    "torch>=2.2.0",
-    "scikit-learn>=1.5.0",
-]
-
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
-[tool.hatch.build.targets.wheel]
-# The installable surface of the root project is the layered core only.
-# kis_cli / dashboard / research / news_surge_ranker are run from the repo
-# root (or become their own workspace members), not packaged here.
-packages = ["modules"]
+crawler = ["scrapy>=2.16.0"]
+news = ["finlabs-news"]
+toss = ["finlabs-toss"]
+postgres = ["psycopg[binary]>=3.2.0"]
 
 [tool.uv]
-package = true
+package = false
+default-groups = ["dev"]
+
+[tool.uv.sources]
+finlabs-core = { workspace = true }
+finlabs-kis = { workspace = true }
+finlabs-news = { workspace = true }
+finlabs-toss = { workspace = true }
+
+[tool.uv.workspace]
+members = [
+    "modules",
+    "modules/brokers/kis",
+    "modules/brokers/toss",
+    "modules/news",
+]

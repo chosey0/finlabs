@@ -1,0 +1,19 @@
+[project]
+name = "finlabs-core"
+version = "0.1.0"
+description = "Broker-agnostic domain, adapters, orchestration, and storage for FinLabs"
+requires-python = ">=3.12"
+dependencies = ["duckdb>=1.1.0", "finlabs-kis"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build]
+dev-mode-dirs = [".."]
+
+[tool.hatch.build.targets.wheel]
+only-include = ["__init__.py", "adapters", "domain", "orchestration", "storage"]
+
+[tool.hatch.build.targets.wheel.sources]
+"" = "modules"
