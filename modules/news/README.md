@@ -11,7 +11,7 @@
 
 Investing.com, 이데일리, 이투데이, 한국경제, 서울경제, 뉴스핌 RSS를 하나의 표준 모델로 정규화하고 **멱등하게 수집·저장·분석**합니다.
 
-[FinLabs](../../README.md) · [프로젝트 계획서](./PLAN.md) · [회귀 테스트](./tests/test_rss_pipeline.py)
+[FinLabs](../../README.md) · [뉴스 모듈 계획서](./PLAN.md) · [통합 계획서](../../PLAN.md) · [회귀 테스트](./tests/test_rss_pipeline.py)
 
 </div>
 
@@ -21,7 +21,7 @@ Investing.com, 이데일리, 이투데이, 한국경제, 서울경제, 뉴스핌
 
 `modules/news`는 **FinLabs News Intelligence**의 뉴스 수집 모듈입니다. 프로젝트의 최종 목표는 국내 주식 시장(코스피·코스닥)의 뉴스를 실시간 수집·분석해 익일 또는 3거래일 이내 +10% 이상 상승 가능성이 있는 종목을 조기에 탐지하는 것입니다.
 
-핵심 아이디어는 단순 감성 분석이 아니라 **과거 급등 직전 뉴스 패턴과의 유사도(Contrastive Vector Similarity)**입니다. "좋은 뉴스인가?"가 아니라 "과거 급등 직전 뉴스와 얼마나 비슷한가? 급등하지 않은 유사 뉴스와는 얼마나 다른가?"를 판단하고, 여기에 거래대금·변동성·테마 확산·시장 국면 등 **Market Context features**를 결합해 학습 모델(LightGBM)로 점수화합니다. 전체 설계와 로드맵은 [PLAN.md](./PLAN.md)에 정리되어 있습니다.
+핵심 아이디어는 단순 감성 분석이 아니라 **과거 급등 직전 뉴스 패턴과의 유사도(Contrastive Vector Similarity)**입니다. "좋은 뉴스인가?"가 아니라 "과거 급등 직전 뉴스와 얼마나 비슷한가? 급등하지 않은 유사 뉴스와는 얼마나 다른가?"를 판단하고, 여기에 거래대금·변동성·테마 확산·시장 국면 등 **Market Context features**를 결합해 학습 모델(LightGBM)로 점수화합니다. 뉴스 설계는 [뉴스 모듈 PLAN](./PLAN.md), 전체 데이터 플랫폼과 구현 순서는 [통합 PLAN](../../PLAN.md)에 정리되어 있습니다.
 
 현재 구현된 범위는 그 기반이 되는 데이터 수집 파이프라인입니다. 언론사마다 다른 RSS 필드를 표준 스키마로 변환하고, 기사 URL 기반의 결정적 ID와 DuckDB 제약 조건으로 중복 저장을 방지합니다. 파이프라인은 RSS 메타데이터 수집, 기사 본문 수집, 기초 분석의 세 단계로 분리됩니다. 각 단계는 다시 실행해도 이미 처리한 항목을 건너뛰며, 성공·실패 상태와 처리 건수를 `pipeline_runs`에 기록합니다.
 
@@ -244,7 +244,7 @@ modules/news/
 │   ├── test_rss_pipeline.py   파서·CRUD·멱등성·마이그레이션 회귀 테스트
 │   └── test_symbols.py        종목 마스터 스냅샷 갱신 회귀 테스트
 ├── symbols.py                 KIS 다운로드와 뉴스 DB 동기화
-└── PLAN.md                    News Intelligence 프로젝트 계획서 (개정판 v2.3)
+└── PLAN.md                    뉴스 모듈 계획서 (v3.0)
 ```
 
 ---

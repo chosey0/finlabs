@@ -1,4 +1,9 @@
-# FinLabs News Intelligence — 프로젝트 계획서 (개정판 v2.3)
+# FinLabs News Intelligence — 뉴스 모듈 계획서 (v3.0)
+
+> 이 문서는 `modules/news`가 소유하는 RSS 수집, 기사 파싱, 뉴스 분석,
+> 사례 라이브러리와 점수화 계획만 다룬다. 전체 로드맵과 데이터 플랫폼은
+> [루트 PLAN](../../PLAN.md)을 기준으로 하며 저장·전송 정책은 해당 모듈
+> PLAN을 단일 원본으로 사용한다.
 
 ## 1. 프로젝트 개요
 
@@ -22,44 +27,28 @@
 
 ---
 
-## 3. 시스템 아키텍처
+## 3. 뉴스 모듈 아키텍처
 
 ```
-RSS Sources ─────────────┐
-과거 뉴스 백필 소스 ──────┤  (네이버 뉴스 API, 빅카인즈 등)
-                         ↓
-                  News Collector
-                         ↓
-                  Article Fetcher
-                         ↓
-                  Article Cleaner
-                  (콘텐츠 기반 중복 제거 포함)
-                         ↓
-        ┌────────────────┴────────────────┐
-        ↓                                 ↓
-┌──────────────────┐            ┌──────────────────────┐
-│ DuckDB           │            │ Vector Store          │
-│ 원본/정제 기사    │            │ 기사 임베딩 + 메타데이터│
-│ 종목 마스터       │            │ (point-in-time 필터)  │
-│ market_features  │            └──────────────────────┘
-└──────────────────┘                      ↓
-        ↓                       Surge / Negative Library
-  Entity Extractor                        ↓
-        ↓                                 │
-        ├─────────────┬───────────────────┘
-        ↓             ↓
-시세 데이터 ──→ Market Feature Builder
-(pykrx 등)    (거래대금·변동성·테마·시장 국면)
-                      ↓
-            Scoring Engine
-            (뉴스 팩터 + Market Context
-             → LightGBM 학습 기반 결합)
-                      ↓
-            Backtest Engine
-            (point-in-time 강제, 체결 가능성 모델)
-                      ↓
-        Streamlit Dashboard + RAG 설명
+RSS Sources / Historical Backfill
+                ↓
+         News Collector
+                ↓
+      Article Fetcher / Parser
+                ↓
+    PostgreSQL news schema
+                ↓
+ Entity / Event / Dedup Pipeline
+                ↓
+ Surge / Negative Case Library
+                ↓
+ News Features + Market Context
+                ↓
+ Scoring / Backtest / Explanation
 ```
+
+PostgreSQL, Redis, Parquet, 실시간 시장 데이터와 장 운영 정보의 상세 설계는
+[루트 PLAN](../../PLAN.md)의 모듈별 링크를 따른다.
 
 ---
 
@@ -108,7 +97,8 @@ id, rss_item_id, canonical_url, title, publisher,
 author, cleaned_text, published_at, fetched_at
 ```
 
-> **저작권 정책 (v2)**: `raw_html` 장기 보관은 저작권 이슈가 있으므로 `cleaned_text` 위주로 보관하고, 원문 HTML은 보존 기간(예: 30일) 후 삭제하는 정책을 둔다.
+> **저작권 정책 (v3)**: 정제 본문만 영구 보관한다. 원문 HTML은 파싱
+> 과정에서만 사용하고 영구 저장하지 않는다.
 
 ---
 
@@ -162,7 +152,7 @@ dup_cluster_id     ← 콘텐츠 중복 클러스터 ID
 
 | 단계 | 선택 | 이유 |
 |---|---|---|
-| 초기 | **DuckDB VSS 확장 (HNSW)** | 이미 DuckDB 사용 중 → 스택 단일화. 메타데이터 필터를 SQL로 처리 |
+| 초기 후보 | **재선정 필요** | v2의 DuckDB VSS 결정은 데이터 플랫폼 v3 전환으로 보류. PostgreSQL 연계성과 point-in-time 필터를 기준으로 재평가 |
 | 대안 | ChromaDB | 설치 쉬움, 로컬 실행 |
 | 중기 | Qdrant | 고속 검색, 풍부한 필터링, 운영 안정성 |
 
@@ -508,7 +498,7 @@ market_return_5d, market_volatility, adr, limit_up_count
 
 ### 초기 (2~4주)
 
-- RSS 수집, 본문 수집, DuckDB 저장
+- RSS 수집, 본문 수집, PostgreSQL `news` 스키마 저장
 - **종목 마스터 + 별칭 사전 구축**
 - **과거 뉴스 백필 파이프라인 (네이버 API / 빅카인즈)**
 - **시세 데이터로 과거 급등 이벤트 추출**
@@ -517,7 +507,7 @@ market_return_5d, market_volatility, adr, limit_up_count
 ### 중기 (1~2개월)
 
 - 임베딩 모델 비교 실험 → 선정
-- Vector Store 구축 (DuckDB VSS, point-in-time 필터 레이어)
+- Vector Store 선정 및 구축 (point-in-time 필터 레이어 필수)
 - **급등 사례 라이브러리 + LLM 이벤트 분류 (taxonomy 기반)**
 - **비급등(negative) 라이브러리 구축**
 - **Market Context features 생성 파이프라인** — 시세 수집이 초기부터 있으므로 추가 비용이 작다. 종목 레벨 feature부터 구현, 섹터/시장 레벨은 순차 확장 (v2.2)
@@ -555,4 +545,14 @@ market_return_5d, market_volatility, adr, limit_up_count
 | 전재 기사로 인한 확산도 부풀림 | 콘텐츠 기반 중복 제거 후 클러스터 단위 카운트 |
 | 작전성 보도자료 | Source Trust 팩터 |
 | RAG 환각 | 근거 기사 인용 강제 |
-| 저작권 | raw_html 보존 기간 정책, cleaned_text 위주 보관 |
+| 저작권 | 원문 HTML 비영구화, cleaned_text만 영구 보관 |
+
+---
+
+## 14. 외부 계획 문서
+
+- [전체 프로젝트 로드맵](../../PLAN.md)
+- [KIS 실시간 수집 계획](../brokers/kis/PLAN.md)
+- [Toss 장 운영 정보 계획](../brokers/toss/PLAN.md)
+- [저장·백업 계획](../storage/PLAN.md)
+- [이벤트 전송·워커·관측성 계획](../orchestration/PLAN.md)
