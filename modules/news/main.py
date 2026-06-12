@@ -222,6 +222,10 @@ def collect_rss_command(
     except (RuntimeError, ValueError) as error:
         raise typer.BadParameter(str(error)) from error
     _print_rss_source_summary(source_results)
+    if result.errors:
+        console = Console(stderr=True)
+        for msg in result.errors:
+            console.print(f"[yellow]경고: 피드 파싱 실패 — {msg}[/yellow]")
     _print_result("collect-rss", result)
 
 

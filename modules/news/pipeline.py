@@ -54,6 +54,7 @@ class OperationResult:
     processed: int
     created: int
     skipped: int
+    errors: tuple[str, ...] = ()
 
 
 HANKYUNG_CATEGORY_FEEDS = {
@@ -392,14 +393,16 @@ def collect_rss(
 
     processed = 0
     created = 0
+    errors: list[str] = []
     for source in sources:
         feed = feed_loader(source.url)
-        entries = getattr(feed, "entries", None)
-        if entries is None:
-            raise RuntimeError(f"RSS loader returned no entries for {source.publisher}")
+        entries = getattr(feed, "entries", None) or []
         if getattr(feed, "bozo", False) and not entries:
             error = getattr(feed, "bozo_exception", "invalid feed")
-            raise RuntimeError(f"failed to parse {source.publisher} RSS: {error}")
+            errors.append(f"{source.publisher}: {error}")
+            if on_source_result is not None:
+                on_source_result(source, OperationResult(processed=0, created=0, skipped=0))
+            continue
         source_processed = 0
         source_created = 0
         for raw_entry in entries:
@@ -426,6 +429,7 @@ def collect_rss(
         processed=processed,
         created=created,
         skipped=processed - created,
+        errors=tuple(errors),
     )
 
 
