@@ -695,7 +695,7 @@ dependencies = [
 requires-dist = [
     { name = "duckdb", specifier = ">=1.1.0" },
     { name = "feedparser", specifier = ">=6.0.12" },
-    { name = "finlabs-kis" },
+    { name = "finlabs-kis", editable = "modules/brokers/kis" },
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "rich", specifier = ">=13.0.0" },
     { name = "typer", specifier = ">=0.12.0" },
