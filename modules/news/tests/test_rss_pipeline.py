@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import threading
 import time
 from datetime import datetime
 from types import SimpleNamespace
@@ -329,6 +330,105 @@ def test_three_pipeline_stages_are_idempotent():
     ).fetchone() == (18, 3)
 
 
+def test_analyze_reports_pending_and_item_progress():
+    connection = duckdb.connect(":memory:")
+    create_schema(connection)
+    entries = [
+        _edaily_entry(
+            f"https://www.edaily.co.kr/news/analyze-progress-{index}",
+            f"Analyze title {index}",
+        )
+        for index in range(2)
+    ]
+    collect_rss(
+        connection,
+        sources=(_EDAILY_SOURCE,),
+        feed_loader=lambda url: SimpleNamespace(entries=entries, bozo=False),
+    )
+    collect_articles(
+        connection,
+        fetch_html=lambda url: _edaily_html("Analyze body"),
+    )
+    pending_batches = []
+    item_results = []
+
+    result = analyze_articles(
+        connection,
+        on_pending=pending_batches.append,
+        on_item_result=lambda article, title, item_result: item_results.append(
+            (article.rss_item_id, title, item_result.created)
+        ),
+    )
+
+    assert result == OperationResult(processed=2, created=2, skipped=0)
+    assert len(pending_batches) == 1
+    assert len(pending_batches[0]) == 2
+    assert {title for _, title, _ in item_results} == {
+        "Analyze title 0",
+        "Analyze title 1",
+    }
+
+
+def test_analyze_all_processes_every_pending_article():
+    connection = duckdb.connect(":memory:")
+    create_schema(connection)
+    entries = [
+        _edaily_entry(
+            f"https://www.edaily.co.kr/news/analyze-all-{index}",
+            f"Analyze all {index}",
+        )
+        for index in range(105)
+    ]
+    collect_rss(
+        connection,
+        sources=(_EDAILY_SOURCE,),
+        feed_loader=lambda url: SimpleNamespace(entries=entries, bozo=False),
+    )
+    collect_articles(
+        connection,
+        limit=None,
+        fetch_html=lambda url: _edaily_html("Analyze all body"),
+    )
+
+    result = analyze_articles(connection, limit=None)
+
+    assert result == OperationResult(processed=105, created=105, skipped=0)
+    assert connection.execute("SELECT count(*) FROM article_analyses").fetchone() == (
+        105,
+    )
+
+
+@pytest.mark.parametrize(
+    ("extra_args", "expected_limit"),
+    [([], 100), (["--limit", "7"], 7), (["--all"], None)],
+)
+def test_analyze_cli_passes_limit_to_progress_flow(
+    monkeypatch,
+    tmp_path,
+    extra_args,
+    expected_limit,
+):
+    from typer.testing import CliRunner
+
+    from modules.news import main as news_main
+
+    calls = []
+    monkeypatch.setattr(
+        news_main,
+        "_analyze_with_progress",
+        lambda db_path, limit: calls.append((db_path, limit)),
+    )
+    db_path = tmp_path / "news.db"
+
+    result = CliRunner().invoke(
+        news_main.app,
+        ["analyze", "--db-path", str(db_path), *extra_args],
+    )
+
+    assert result.exit_code == 0
+    assert calls == [(db_path, expected_limit)]
+
+
 def test_collect_articles_reprocesses_when_parser_version_changes():
     """파서 버전이 바뀌면 기존 본문을 다시 가져와 같은 행을 갱신한다."""
 
@@ -440,17 +540,118 @@ def test_collect_articles_reports_pending_and_per_item_results():
     assert ("Progress ok title", 1, 0) in item_results
 
 
-def test_collect_articles_cli_is_disabled_for_publisher_terms():
-    """본문 직접 수집 명령은 언론사 이용약관에 따라 실행이 차단된다."""
+def test_collect_articles_fetches_different_publishers_in_parallel():
+    """서로 다른 언론사의 본문 요청은 동시에 진행하고 DB 저장은 완료한다."""
+
+    connection = duckdb.connect(":memory:")
+    create_schema(connection)
+    items = (
+        CanonicalRssEntry(
+            id=hashlib.sha256(b"https://example.com/edaily-parallel").hexdigest(),
+            publisher="edaily",
+            url="https://example.com/edaily-parallel",
+            title="Edaily parallel",
+            author=None,
+            summary=None,
+            published_at=datetime(2026, 6, 10, 21, 0, tzinfo=SEOUL),
+        ),
+        CanonicalRssEntry(
+            id=hashlib.sha256(b"https://example.com/newspim-parallel").hexdigest(),
+            publisher="newspim",
+            url="https://example.com/newspim-parallel",
+            title="Newspim parallel",
+            author=None,
+            summary=None,
+            published_at=datetime(2026, 6, 10, 21, 1, tzinfo=SEOUL),
+        ),
+    )
+    for item in items:
+        create_rss_item(connection, item)
+
+    barrier = threading.Barrier(2, timeout=2)
+
+    def fetch_html(url):
+        barrier.wait()
+        if "edaily" in url:
+            return _edaily_html("Edaily body")
+        return "<div id='news-contents'><p>Newspim body</p></div>"
+
+    result = collect_articles(
+        connection,
+        fetch_html=fetch_html,
+        article_parsers={
+            "edaily": ARTICLE_PARSERS["edaily"],
+            "newspim": ARTICLE_PARSERS["newspim"],
+        },
+    )
+
+    assert result == OperationResult(processed=2, created=2, skipped=0)
+    assert connection.execute("SELECT count(*) FROM articles").fetchone() == (2,)
+
+
+@pytest.mark.parametrize(
+    ("extra_args", "expected_limit"),
+    [([], 100), (["--limit", "7"], 7), (["--all"], None)],
+)
+def test_collect_articles_cli_runs_preserved_collection_flow(
+    monkeypatch,
+    tmp_path,
+    extra_args,
+    expected_limit,
+):
+    """본문 수집 명령은 보존된 진행 표시 수집 흐름을 실행한다."""
 
     from typer.testing import CliRunner
 
-    from modules.news.main import COLLECT_ARTICLES_DISABLED_NOTICE, app
+    from modules.news import main as news_main
 
-    result = CliRunner().invoke(app, ["collect-articles"])
+    calls = []
 
-    assert result.exit_code == 1
-    assert COLLECT_ARTICLES_DISABLED_NOTICE in result.output.replace("\n", "")
+    def collect_with_progress(db_path, limit):
+        calls.append((db_path, limit))
+
+    monkeypatch.setattr(
+        news_main,
+        "_collect_articles_with_progress",
+        collect_with_progress,
+    )
+    db_path = tmp_path / "news.db"
+
+    result = CliRunner().invoke(
+        news_main.app,
+        ["collect-articles", "--db-path", str(db_path), *extra_args],
+    )
+
+    assert result.exit_code == 0
+    assert calls == [(db_path, expected_limit)]
+
+
+def test_collect_articles_all_processes_every_pending_item():
+    """limit=None이면 기본 100개 제한 없이 모든 미수집 항목을 처리한다."""
+
+    connection = duckdb.connect(":memory:")
+    create_schema(connection)
+    entries = [
+        _edaily_entry(
+            f"https://www.edaily.co.kr/news/all-{index}",
+            f"All title {index}",
+        )
+        for index in range(105)
+    ]
+    collect_rss(
+        connection,
+        sources=(_EDAILY_SOURCE,),
+        feed_loader=lambda url: SimpleNamespace(entries=entries, bozo=False),
+    )
+
+    result = collect_articles(
+        connection,
+        limit=None,
+        fetch_html=lambda url: _edaily_html("All body text"),
+    )
+
+    assert result == OperationResult(processed=105, created=105, skipped=0)
+    assert connection.execute("SELECT count(*) FROM articles").fetchone() == (105,)
 
 
 def test_collect_articles_excludes_metadata_only_investing_source():
@@ -616,6 +817,39 @@ def test_collect_rss_reports_each_source_result_in_order():
         (sources[0], OperationResult(processed=1, created=1, skipped=0)),
         (sources[1], OperationResult(processed=1, created=0, skipped=1)),
     ]
+
+
+def test_collect_rss_fetches_different_publishers_in_parallel():
+    """서로 다른 언론사의 RSS 요청은 동시에 진행하고 결과는 정상 저장한다."""
+
+    connection = duckdb.connect(":memory:")
+    create_schema(connection)
+    sources = (
+        FeedSource("edaily", "https://example.com/edaily.xml", PARSERS["edaily"]),
+        FeedSource("etoday", "https://example.com/etoday.xml", PARSERS["etoday"]),
+    )
+    barrier = threading.Barrier(2, timeout=2)
+
+    def load_feed(url):
+        barrier.wait()
+        publisher = "edaily" if "edaily" in url else "etoday"
+        return SimpleNamespace(
+            entries=[
+                {
+                    "author": publisher,
+                    "link": f"https://example.com/{publisher}-article",
+                    "published": "Wed, 10 Jun 2026 21:00:00 +0900",
+                    "summary": "요약",
+                    "title": f"{publisher} article",
+                }
+            ],
+            bozo=False,
+        )
+
+    result = collect_rss(connection, sources=sources, feed_loader=load_feed)
+
+    assert result == OperationResult(processed=2, created=2, skipped=0)
+    assert connection.execute("SELECT count(*) FROM rss_items").fetchone() == (2,)
 
 
 def test_recorded_operation_persists_success_and_failure():

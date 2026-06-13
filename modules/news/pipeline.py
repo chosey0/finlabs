@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, replace
 from typing import Any, Protocol
 
@@ -33,6 +34,7 @@ from .schema.entity import ArticleEntity
 ANALYZER_VERSION = "basic-stats-v1"
 ENTITY_EXTRACTOR_VERSION = "symbol-master-v1"
 DEFAULT_USER_AGENT = "FinLabsNewsCollector/0.1"
+MAX_PUBLISHER_WORKERS = 8
 
 
 class FeedLoader(Protocol):
@@ -61,6 +63,24 @@ class OperationResult:
     created: int
     skipped: int
     errors: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class _RssFetchResult:
+    index: int
+    source: FeedSource
+    processed: int
+    items: tuple[CanonicalRssEntry, ...]
+    invalid_count: int = 0
+    feed_error: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _ArticleFetchResult:
+    index: int
+    item: CanonicalRssEntry
+    article: CanonicalArticle | None = None
+    error_message: str | None = None
 
 
 HANKYUNG_CATEGORY_FEEDS = {
@@ -384,6 +404,65 @@ def load_feed(url: str) -> Any:
     return feedparser.parse(response.content)
 
 
+def _group_sources_by_publisher(
+    sources: tuple[FeedSource, ...],
+) -> tuple[tuple[tuple[int, FeedSource], ...], ...]:
+    groups: dict[str, list[tuple[int, FeedSource]]] = {}
+    for index, source in enumerate(sources):
+        groups.setdefault(source.publisher, []).append((index, source))
+    return tuple(tuple(group) for group in groups.values())
+
+
+def _fetch_rss_publisher(
+    sources: tuple[tuple[int, FeedSource], ...],
+    feed_loader: FeedLoader,
+) -> tuple[_RssFetchResult, ...]:
+    results: list[_RssFetchResult] = []
+    for index, source in sources:
+        feed = feed_loader(source.url)
+        entries = getattr(feed, "entries", None) or []
+        if getattr(feed, "bozo", False) and not entries:
+            error = getattr(feed, "bozo_exception", "invalid feed")
+            results.append(
+                _RssFetchResult(
+                    index=index,
+                    source=source,
+                    processed=0,
+                    items=(),
+                    feed_error=f"{source.publisher}: {error}",
+                )
+            )
+            continue
+
+        items: list[CanonicalRssEntry] = []
+        invalid_count = 0
+        for raw_entry in entries:
+            try:
+                item = source.parser.parse(raw_entry)
+            except (TypeError, ValueError):
+                invalid_count += 1
+                continue
+            items.append(
+                replace(
+                    item,
+                    domain_category=source.domain_category,
+                    feed_categories=(
+                        (source.feed_category,) if source.feed_category else ()
+                    ),
+                )
+            )
+        results.append(
+            _RssFetchResult(
+                index=index,
+                source=source,
+                processed=len(entries),
+                items=tuple(items),
+                invalid_count=invalid_count,
+            )
+        )
+    return tuple(results)
+
+
 def collect_rss(
     connection: duckdb.DuckDBPyConnection,
     *,
@@ -397,63 +476,119 @@ def collect_rss(
     결과를 전달하므로 호출자가 진행 상황과 소스별 집계를 표시할 수 있다.
     """
 
+    source_tuple = tuple(sources)
+    publisher_groups = _group_sources_by_publisher(source_tuple)
+    if not publisher_groups:
+        return OperationResult(processed=0, created=0, skipped=0)
+
     processed = 0
     created = 0
-    errors: list[str] = []
-    for source in sources:
-        feed = feed_loader(source.url)
-        entries = getattr(feed, "entries", None) or []
-        if getattr(feed, "bozo", False) and not entries:
-            error = getattr(feed, "bozo_exception", "invalid feed")
-            errors.append(f"{source.publisher}: {error}")
-            if on_source_result is not None:
-                on_source_result(
-                    source, OperationResult(processed=0, created=0, skipped=0)
+    indexed_errors: list[tuple[int, str]] = []
+    worker_count = min(MAX_PUBLISHER_WORKERS, len(publisher_groups))
+    with ThreadPoolExecutor(
+        max_workers=worker_count,
+        thread_name_prefix="finlabs-rss",
+    ) as executor:
+        futures = [
+            executor.submit(_fetch_rss_publisher, group, feed_loader)
+            for group in publisher_groups
+        ]
+        for future in as_completed(futures):
+            for fetched in future.result():
+                source_created = sum(
+                    int(insert_rss_item(connection, item)) for item in fetched.items
                 )
-            continue
-        source_processed = 0
-        source_created = 0
-        source_invalid = 0
-        for raw_entry in entries:
-            source_processed += 1
-            try:
-                item = source.parser.parse(raw_entry)
-            except (TypeError, ValueError):
-                source_invalid += 1
-                continue
-            item = replace(
-                item,
-                domain_category=source.domain_category,
-                feed_categories=(source.feed_category,) if source.feed_category else (),
-            )
-            source_created += int(insert_rss_item(connection, item))
-        if source_invalid:
-            errors.append(
-                f"{source.publisher}: {source_invalid}개 항목이 필수 필드 누락으로 제외됨"
-            )
-        processed += source_processed
-        created += source_created
-        if on_source_result is not None:
-            on_source_result(
-                source,
-                OperationResult(
-                    processed=source_processed,
-                    created=source_created,
-                    skipped=source_processed - source_created,
-                ),
-            )
+                if fetched.feed_error is not None:
+                    indexed_errors.append((fetched.index, fetched.feed_error))
+                if fetched.invalid_count:
+                    indexed_errors.append(
+                        (
+                            fetched.index,
+                            f"{fetched.source.publisher}: {fetched.invalid_count}개 "
+                            "항목이 필수 필드 누락으로 제외됨",
+                        )
+                    )
+                processed += fetched.processed
+                created += source_created
+                if on_source_result is not None:
+                    on_source_result(
+                        fetched.source,
+                        OperationResult(
+                            processed=fetched.processed,
+                            created=source_created,
+                            skipped=fetched.processed - source_created,
+                        ),
+                    )
     return OperationResult(
         processed=processed,
         created=created,
         skipped=processed - created,
-        errors=tuple(errors),
+        errors=tuple(message for _, message in sorted(indexed_errors)),
     )
+
+
+def _group_articles_by_publisher(
+    items: tuple[CanonicalRssEntry, ...],
+) -> tuple[tuple[tuple[int, CanonicalRssEntry], ...], ...]:
+    groups: dict[str, list[tuple[int, CanonicalRssEntry]]] = {}
+    for index, item in enumerate(items):
+        groups.setdefault(item.publisher, []).append((index, item))
+    return tuple(tuple(group) for group in groups.values())
+
+
+def _fetch_article_publisher(
+    items: tuple[tuple[int, CanonicalRssEntry], ...],
+    *,
+    fetch_html: Callable[[str], str] | None,
+    article_parsers: Mapping[str, BaseArticleParser],
+) -> tuple[_ArticleFetchResult, ...]:
+    if fetch_html is None:
+        with httpx.Client(
+            follow_redirects=True,
+            timeout=30.0,
+            headers={"User-Agent": DEFAULT_USER_AGENT},
+        ) as client:
+            return _fetch_article_publisher(
+                items,
+                fetch_html=lambda url: client.get(url).raise_for_status().text,
+                article_parsers=article_parsers,
+            )
+
+    results: list[_ArticleFetchResult] = []
+    for index, item in items:
+        parser = article_parsers[item.publisher]
+        try:
+            content = parser.parse(fetch_html(item.url))
+        except (httpx.HTTPError, ValueError) as error:
+            results.append(
+                _ArticleFetchResult(
+                    index=index,
+                    item=item,
+                    error_message=(
+                        f"{item.publisher}: {item.url} — {_safe_error_message(error)}"
+                    ),
+                )
+            )
+            continue
+        results.append(
+            _ArticleFetchResult(
+                index=index,
+                item=item,
+                article=CanonicalArticle(
+                    rss_item_id=item.id,
+                    content=content,
+                    content_hash=make_content_hash(content),
+                    parser_version=parser.version,
+                ),
+            )
+        )
+    return tuple(results)
 
 
 def collect_articles(
     connection: duckdb.DuckDBPyConnection,
     *,
-    limit: int = 100,
+    limit: int | None = 100,
     fetch_html: Callable[[str], str] | None = None,
     article_parsers: Mapping[str, BaseArticleParser] = ARTICLE_PARSERS,
     on_pending: Callable[[tuple[CanonicalRssEntry, ...]], None] | None = None,
@@ -461,36 +596,10 @@ def collect_articles(
 ) -> OperationResult:
     """본문이 없거나 parser 버전이 지난 RSS 항목을 정제해 저장한다.
 
-    언론사 웹페이지 직접 수집은 이용약관(자동화 수집 금지)에 위배되어
-    CLI에서 비활성화되었다. 이 코드는 네이버 뉴스 검색 API 등 허용된
-    소스로 본문을 확보하는 경로가 구현될 때 저장·재처리 로직을
-    재사용하기 위해 유지한다 (PLAN 4.4절).
-
     ``on_pending``은 수집 대상이 확정된 직후 한 번 호출되고,
     ``on_item_result``는 기사 하나가 끝날 때마다 해당 기사의 결과를
     전달하므로 호출자가 진행 상황과 기사 제목을 표시할 수 있다.
     """
-
-    if fetch_html is None:
-        with httpx.Client(
-            follow_redirects=True,
-            timeout=30.0,
-            headers={"User-Agent": DEFAULT_USER_AGENT},
-        ) as client:
-
-            def fetch_with_client(url: str) -> str:
-                response = client.get(url)
-                response.raise_for_status()
-                return response.text
-
-            return collect_articles(
-                connection,
-                limit=limit,
-                fetch_html=fetch_with_client,
-                article_parsers=article_parsers,
-                on_pending=on_pending,
-                on_item_result=on_item_result,
-            )
 
     pending = list_rss_items_requiring_article_parse(
         connection,
@@ -501,56 +610,73 @@ def collect_articles(
     )
     if on_pending is not None:
         on_pending(pending)
+    publisher_groups = _group_articles_by_publisher(pending)
+    if not publisher_groups:
+        return OperationResult(processed=0, created=0, skipped=0)
+
     created = 0
-    errors: list[str] = []
-    for item in pending:
-        parser = article_parsers[item.publisher]
-        # 기사 한 건의 수집 실패(차단, 삭제, 선택자 불일치)가 배치 전체를
-        # 중단시키지 않도록 격리한다. 실패한 기사는 pending으로 남아
-        # 다음 실행에서 다시 시도된다.
-        try:
-            content = parser.parse(fetch_html(item.url))
-        except (httpx.HTTPError, ValueError) as error:
-            message = f"{item.publisher}: {item.url} — {_safe_error_message(error)}"
-            errors.append(message)
-            if on_item_result is not None:
-                on_item_result(
-                    item,
-                    OperationResult(
-                        processed=1, created=0, skipped=1, errors=(message,)
-                    ),
-                )
-            continue
-        article = CanonicalArticle(
-            rss_item_id=item.id,
-            content=content,
-            content_hash=make_content_hash(content),
-            parser_version=parser.version,
-        )
-        item_created = int(insert_article(connection, article))
-        created += item_created
-        if on_item_result is not None:
-            on_item_result(
-                item,
-                OperationResult(
-                    processed=1,
-                    created=item_created,
-                    skipped=1 - item_created,
-                ),
+    indexed_errors: list[tuple[int, str]] = []
+    worker_count = min(MAX_PUBLISHER_WORKERS, len(publisher_groups))
+    with ThreadPoolExecutor(
+        max_workers=worker_count,
+        thread_name_prefix="finlabs-articles",
+    ) as executor:
+        futures = [
+            executor.submit(
+                _fetch_article_publisher,
+                group,
+                fetch_html=fetch_html,
+                article_parsers=article_parsers,
             )
+            for group in publisher_groups
+        ]
+        for future in as_completed(futures):
+            for fetched in future.result():
+                if fetched.error_message is not None:
+                    indexed_errors.append((fetched.index, fetched.error_message))
+                    if on_item_result is not None:
+                        on_item_result(
+                            fetched.item,
+                            OperationResult(
+                                processed=1,
+                                created=0,
+                                skipped=1,
+                                errors=(fetched.error_message,),
+                            ),
+                        )
+                    continue
+                if fetched.article is None:
+                    raise RuntimeError("article fetch result is missing article data")
+                item_created = int(insert_article(connection, fetched.article))
+                created += item_created
+                if on_item_result is not None:
+                    on_item_result(
+                        fetched.item,
+                        OperationResult(
+                            processed=1,
+                            created=item_created,
+                            skipped=1 - item_created,
+                        ),
+                    )
     return OperationResult(
         processed=len(pending),
         created=created,
         skipped=len(pending) - created,
-        errors=tuple(errors),
+        errors=tuple(message for _, message in sorted(indexed_errors)),
     )
 
 
 def analyze_articles(
     connection: duckdb.DuckDBPyConnection,
     *,
-    limit: int = 100,
+    limit: int | None = 100,
     analyzer_version: str = ANALYZER_VERSION,
+    on_pending: Callable[
+        [tuple[tuple[CanonicalArticle, str], ...]], None
+    ]
+    | None = None,
+    on_item_result: Callable[[CanonicalArticle, str, OperationResult], None]
+    | None = None,
 ) -> OperationResult:
     """미분석 기사에 결정적 문자 수와 단어 수 통계를 저장한다."""
 
@@ -559,7 +685,9 @@ def analyze_articles(
         analyzer_version=analyzer_version,
         limit=limit,
     )
-    for article in pending:
+    if on_pending is not None:
+        on_pending(pending)
+    for article, title in pending:
         upsert_article_analysis(
             connection,
             ArticleAnalysis(
@@ -570,6 +698,12 @@ def analyze_articles(
                 word_count=len(article.content.split()),
             ),
         )
+        if on_item_result is not None:
+            on_item_result(
+                article,
+                title,
+                OperationResult(processed=1, created=1, skipped=0),
+            )
     return OperationResult(
         processed=len(pending),
         created=len(pending),
@@ -580,9 +714,15 @@ def analyze_articles(
 def extract_entities(
     connection: duckdb.DuckDBPyConnection,
     *,
-    limit: int = 100,
+    limit: int | None = 100,
     extractor_version: str = ENTITY_EXTRACTOR_VERSION,
     aliases: Mapping[str, tuple[str, ...]] | None = None,
+    on_pending: Callable[
+        [tuple[tuple[CanonicalArticle, str], ...]], None
+    ]
+    | None = None,
+    on_item_result: Callable[[CanonicalArticle, str, OperationResult], None]
+    | None = None,
 ) -> OperationResult:
     """종목 마스터 어휘집으로 기사별 종목 entity를 추출해 저장한다.
 
@@ -603,6 +743,8 @@ def extract_entities(
         extractor_version=extractor_version,
         limit=limit,
     )
+    if on_pending is not None:
+        on_pending(pending)
     created = 0
     for article, title in pending:
         matches = match_stock_entities(f"{title}\n{article.content}", lexicon)
@@ -623,7 +765,18 @@ def extract_entities(
             extractor_version=extractor_version,
             entities=entities,
         )
-        created += int(bool(entities))
+        item_created = int(bool(entities))
+        created += item_created
+        if on_item_result is not None:
+            on_item_result(
+                article,
+                title,
+                OperationResult(
+                    processed=1,
+                    created=item_created,
+                    skipped=1 - item_created,
+                ),
+            )
     return OperationResult(
         processed=len(pending),
         created=created,

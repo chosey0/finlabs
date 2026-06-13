@@ -16,7 +16,7 @@ from rich.progress import (
     TextColumn,
     TimeElapsedColumn,
 )
-from rich.table import Table
+from rich.table import Column, Table
 
 from .db.init import DEFAULT_DB_PATH, connect_database, create_schema
 from .db.locking import single_writer_lock
@@ -80,8 +80,8 @@ def _source_label(source: FeedSource) -> str:
 
 def _progress_description(sources: Sequence[FeedSource], next_index: int) -> str:
     if next_index < len(sources):
-        return f"수집 중 · {_source_label(sources[next_index])}"
-    return "수집 완료"
+        return _source_label(sources[next_index])
+    return ""
 
 
 def _print_rss_source_summary(
@@ -211,14 +211,19 @@ def collect_rss_command(
         )
         source_results: list[tuple[FeedSource, OperationResult]] = []
         with Progress(
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
+            TextColumn(
+                "[progress.description]{task.fields[status]}",
+                table_column=Column(width=9, no_wrap=True),
+            ),
+            BarColumn(bar_width=40),
             MofNCompleteColumn(),
             TimeElapsedColumn(),
+            TextColumn("[progress.description]{task.description}"),
         ) as progress:
             task = progress.add_task(
                 _progress_description(sources, 0),
                 total=len(sources),
+                status="수집 중",
             )
 
             def record_source_result(
@@ -226,10 +231,12 @@ def collect_rss_command(
                 result: OperationResult,
             ) -> None:
                 source_results.append((source, result))
+                finished = len(source_results)
                 progress.update(
                     task,
                     advance=1,
-                    description=_progress_description(sources, len(source_results)),
+                    description=_progress_description(sources, finished),
+                    status="수집 중" if finished < len(sources) else "수집 완료",
                 )
 
             result = _execute(
@@ -265,41 +272,38 @@ def _article_progress_description(
     next_index: int,
 ) -> str:
     if next_index < len(pending):
-        return f"수집 중 · {_article_label(pending[next_index])}"
-    return "수집 완료"
-
-
-COLLECT_ARTICLES_DISABLED_NOTICE = (
-    "collect-articles는 언론사 이용약관(자동화 수단을 통한 콘텐츠 수집·복제 금지)에 "
-    "위배되어 비활성화되었습니다. 본문 확보는 네이버 뉴스 검색 API 연동으로 대체할 "
-    "예정입니다. 자세한 정책은 modules/news/PLAN.md 4.4절을 참고하세요."
-)
+        return _article_label(pending[next_index])
+    return ""
 
 
 @app.command("collect-articles")
 def collect_articles_command(
     db_path: DbPathOption = _default_db_path(),
     limit: Annotated[int, typer.Option(min=1)] = 100,
+    all_items: Annotated[
+        bool,
+        typer.Option("--all", help="미수집·재처리 대상 전체를 수집합니다."),
+    ] = False,
 ) -> None:
-    """(비활성화) 언론사 이용약관에 따라 본문 직접 수집을 중단했다."""
+    """RSS 기사 링크에서 본문을 수집해 저장한다."""
 
-    typer.echo(COLLECT_ARTICLES_DISABLED_NOTICE)
-    raise typer.Exit(code=1)
+    _collect_articles_with_progress(db_path, None if all_items else limit)
 
 
-def _collect_articles_with_progress(db_path: Path, limit: int) -> None:
-    """언론사 페이지 본문 수집 CLI 구현 (약관 사유로 명령에서 분리해 보관).
-
-    네이버 뉴스 API 기반 수집이 구현되면 진행 표시 부분을 재사용한다.
-    """
+def _collect_articles_with_progress(db_path: Path, limit: int | None) -> None:
+    """언론사 페이지 본문 수집 진행 상황과 결과를 출력한다."""
 
     with Progress(
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
+        TextColumn(
+            "[progress.description]{task.fields[status]}",
+            table_column=Column(width=9, no_wrap=True),
+        ),
+        BarColumn(bar_width=40),
         MofNCompleteColumn(),
         TimeElapsedColumn(),
+        TextColumn("[progress.description]{task.description}"),
     ) as progress:
-        task = progress.add_task("수집 대상 조회 중…", total=None)
+        task = progress.add_task("", total=None, status="조회 중")
         pending_items: list[object] = []
         finished = 0
 
@@ -309,6 +313,7 @@ def _collect_articles_with_progress(db_path: Path, limit: int) -> None:
                 task,
                 total=len(pending_items),
                 description=_article_progress_description(pending_items, 0),
+                status="수집 중" if pending_items else "수집 완료",
             )
 
         def on_item_result(item: object, item_result: OperationResult) -> None:
@@ -318,12 +323,15 @@ def _collect_articles_with_progress(db_path: Path, limit: int) -> None:
                 task,
                 advance=1,
                 description=_article_progress_description(pending_items, finished),
+                status=(
+                    "수집 중" if finished < len(pending_items) else "수집 완료"
+                ),
             )
 
         result = _execute(
             db_path=db_path,
             command="collect-articles",
-            parameters={"limit": limit},
+            parameters={"limit": limit, "all": limit is None},
             operation_factory=lambda connection: collect_articles(
                 connection,
                 limit=limit,
@@ -342,18 +350,68 @@ def _collect_articles_with_progress(db_path: Path, limit: int) -> None:
 def analyze_command(
     db_path: DbPathOption = _default_db_path(),
     limit: Annotated[int, typer.Option(min=1)] = 100,
+    all_items: Annotated[
+        bool,
+        typer.Option("--all", help="미분석·재처리 대상 전체를 처리합니다."),
+    ] = False,
 ) -> None:
     """아직 분석되지 않은 기사에 결정적 기본 통계를 계산한다."""
 
-    result = _execute(
-        db_path=db_path,
-        command="analyze",
-        parameters={"limit": limit},
-        operation_factory=lambda connection: analyze_articles(
-            connection,
-            limit=limit,
+    _analyze_with_progress(db_path, None if all_items else limit)
+
+
+def _analyze_with_progress(db_path: Path, limit: int | None) -> None:
+    """기사 기본 통계 분석 진행 상황과 결과를 출력한다."""
+
+    with Progress(
+        TextColumn(
+            "[progress.description]{task.fields[status]}",
+            table_column=Column(width=9, no_wrap=True),
         ),
-    )
+        BarColumn(bar_width=40),
+        MofNCompleteColumn(),
+        TimeElapsedColumn(),
+        TextColumn("[progress.description]{task.description}"),
+    ) as progress:
+        task = progress.add_task("", total=None, status="조회 중")
+        pending_count = 0
+        finished = 0
+
+        def on_pending(items: tuple[tuple[object, str], ...]) -> None:
+            nonlocal pending_count
+            pending_count = len(items)
+            progress.update(
+                task,
+                total=pending_count,
+                status="분석 중" if pending_count else "분석 완료",
+            )
+
+        def on_item_result(
+            article: object,
+            title: str,
+            item_result: OperationResult,
+        ) -> None:
+            nonlocal finished
+            finished += 1
+            display_title = title if len(title) <= 60 else f"{title[:59]}…"
+            progress.update(
+                task,
+                advance=1,
+                description="" if finished >= pending_count else display_title,
+                status="분석 중" if finished < pending_count else "분석 완료",
+            )
+
+        result = _execute(
+            db_path=db_path,
+            command="analyze",
+            parameters={"limit": limit, "all": limit is None},
+            operation_factory=lambda connection: analyze_articles(
+                connection,
+                limit=limit,
+                on_pending=on_pending,
+                on_item_result=on_item_result,
+            ),
+        )
     _print_result("analyze", result)
 
 
@@ -361,19 +419,71 @@ def analyze_command(
 def extract_entities_command(
     db_path: DbPathOption = _default_db_path(),
     limit: Annotated[int, typer.Option(min=1)] = 100,
+    all_items: Annotated[
+        bool,
+        typer.Option("--all", help="미추출·재처리 대상 전체를 처리합니다."),
+    ] = False,
 ) -> None:
     """종목 마스터 어휘집으로 기사별 종목 entity를 추출한다."""
 
+    _extract_entities_with_progress(db_path, None if all_items else limit)
+
+
+def _extract_entities_with_progress(db_path: Path, limit: int | None) -> None:
+    """기사별 종목 entity 추출 진행 상황과 결과를 출력한다."""
+
     try:
-        result = _execute(
-            db_path=db_path,
-            command="extract-entities",
-            parameters={"limit": limit},
-            operation_factory=lambda connection: extract_entities(
-                connection,
-                limit=limit,
+        with Progress(
+            TextColumn(
+                "[progress.description]{task.fields[status]}",
+                table_column=Column(width=9, no_wrap=True),
             ),
-        )
+            BarColumn(bar_width=40),
+            MofNCompleteColumn(),
+            TimeElapsedColumn(),
+            TextColumn("[progress.description]{task.description}"),
+        ) as progress:
+            task = progress.add_task("", total=None, status="조회 중")
+            pending_count = 0
+            finished = 0
+
+            def on_pending(
+                items: tuple[tuple[object, str], ...],
+            ) -> None:
+                nonlocal pending_count
+                pending_count = len(items)
+                progress.update(
+                    task,
+                    total=pending_count,
+                    status="추출 중" if pending_count else "추출 완료",
+                )
+
+            def on_item_result(
+                article: object,
+                title: str,
+                item_result: OperationResult,
+            ) -> None:
+                nonlocal finished
+                finished += 1
+                display_title = title if len(title) <= 60 else f"{title[:59]}…"
+                progress.update(
+                    task,
+                    advance=1,
+                    description="" if finished >= pending_count else display_title,
+                    status="추출 중" if finished < pending_count else "추출 완료",
+                )
+
+            result = _execute(
+                db_path=db_path,
+                command="extract-entities",
+                parameters={"limit": limit, "all": limit is None},
+                operation_factory=lambda connection: extract_entities(
+                    connection,
+                    limit=limit,
+                    on_pending=on_pending,
+                    on_item_result=on_item_result,
+                ),
+            )
     except ValueError as error:
         raise typer.BadParameter(str(error)) from error
     _print_result("extract-entities", result)

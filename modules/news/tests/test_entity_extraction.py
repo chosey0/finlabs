@@ -244,6 +244,88 @@ def test_extract_entities_requires_symbol_master():
         extract_entities(connection)
 
 
+def test_extract_entities_reports_pending_and_item_progress():
+    connection = _connection()
+    _store_symbol_master(connection)
+    _store_article(
+        connection,
+        url="https://example.com/entity-progress-1",
+        title="삼성전자 진행 상황",
+        content="삼성전자 공급 확대",
+    )
+    _store_article(
+        connection,
+        url="https://example.com/entity-progress-2",
+        title="시장 진행 상황",
+        content="특이사항 없음",
+    )
+    pending_batches = []
+    item_results = []
+
+    result = extract_entities(
+        connection,
+        on_pending=pending_batches.append,
+        on_item_result=lambda article, title, item_result: item_results.append(
+            (article.rss_item_id, title, item_result.created)
+        ),
+    )
+
+    assert result == OperationResult(processed=2, created=1, skipped=1)
+    assert len(pending_batches) == 1
+    assert len(pending_batches[0]) == 2
+    assert {title for _, title, _ in item_results} == {
+        "삼성전자 진행 상황",
+        "시장 진행 상황",
+    }
+
+
+def test_extract_entities_all_processes_every_pending_article():
+    connection = _connection()
+    _store_symbol_master(connection)
+    for index in range(105):
+        _store_article(
+            connection,
+            url=f"https://example.com/entity-all-{index}",
+            title=f"삼성전자 기사 {index}",
+            content="삼성전자 공급 확대",
+        )
+
+    result = extract_entities(connection, limit=None)
+
+    assert result == OperationResult(processed=105, created=105, skipped=0)
+
+
+@pytest.mark.parametrize(
+    ("extra_args", "expected_limit"),
+    [([], 100), (["--limit", "7"], 7), (["--all"], None)],
+)
+def test_extract_entities_cli_passes_limit_to_progress_flow(
+    monkeypatch,
+    tmp_path,
+    extra_args,
+    expected_limit,
+):
+    from typer.testing import CliRunner
+
+    from modules.news import main as news_main
+
+    calls = []
+    monkeypatch.setattr(
+        news_main,
+        "_extract_entities_with_progress",
+        lambda db_path, limit: calls.append((db_path, limit)),
+    )
+    db_path = tmp_path / "news.db"
+
+    result = CliRunner().invoke(
+        news_main.app,
+        ["extract-entities", "--db-path", str(db_path), *extra_args],
+    )
+
+    assert result.exit_code == 0
+    assert calls == [(db_path, expected_limit)]
+
+
 def test_event_taxonomy_is_closed_and_versioned():
     assert len(EVENT_TAXONOMY) == 16
     assert set(NOISE_EVENT_TYPES) <= set(EVENT_TAXONOMY)

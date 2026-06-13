@@ -190,11 +190,11 @@ def list_rss_items_requiring_article_parse(
     connection: duckdb.DuckDBPyConnection,
     *,
     parser_versions: dict[str, str],
-    limit: int = 100,
+    limit: int | None = 100,
 ) -> tuple[CanonicalRssEntry, ...]:
     """본문이 없거나 현재 언론사 parser 버전과 다른 RSS 항목을 조회한다."""
 
-    if limit <= 0:
+    if limit is not None and limit <= 0:
         raise ValueError("limit must be greater than zero")
     if not parser_versions:
         return ()
@@ -205,7 +205,10 @@ def list_rss_items_requiring_article_parse(
             raise ValueError("parser publisher and version must not be empty")
         conditions.append("(r.publisher = ? AND a.parser_version IS DISTINCT FROM ?)")
         parameters.extend((publisher, version))
-    parameters.append(limit)
+    limit_clause = ""
+    if limit is not None:
+        limit_clause = "LIMIT ?"
+        parameters.append(limit)
     rows = connection.execute(
         f"""
         SELECT r.id, r.publisher, r.url, r.title, r.author, r.summary,
@@ -215,7 +218,7 @@ def list_rss_items_requiring_article_parse(
         LEFT JOIN articles AS a ON a.rss_item_id = r.id
         WHERE {" OR ".join(conditions)}
         ORDER BY r.published_at, r.id
-        LIMIT ?
+        {limit_clause}
         """,
         parameters,
     ).fetchall()
@@ -264,32 +267,41 @@ def list_articles_without_current_analysis(
     connection: duckdb.DuckDBPyConnection,
     *,
     analyzer_version: str,
-    limit: int = 100,
-) -> tuple[CanonicalArticle, ...]:
+    limit: int | None = 100,
+) -> tuple[tuple[CanonicalArticle, str], ...]:
     """현재 본문 해시와 분석기 버전에 맞는 분석이 없는 기사를 조회한다."""
 
-    if limit <= 0:
+    if limit is not None and limit <= 0:
         raise ValueError("limit must be greater than zero")
+    limit_clause = ""
+    parameters: list[object] = [analyzer_version]
+    if limit is not None:
+        limit_clause = "LIMIT ?"
+        parameters.append(limit)
     rows = connection.execute(
-        """
-        SELECT a.rss_item_id, a.content, a.content_hash, a.parser_version
+        f"""
+        SELECT a.rss_item_id, a.content, a.content_hash, a.parser_version, r.title
         FROM articles AS a
+        JOIN rss_items AS r ON r.id = a.rss_item_id
         LEFT JOIN article_analyses AS x
           ON x.rss_item_id = a.rss_item_id
          AND x.content_hash = a.content_hash
          AND x.analyzer_version = ?
         WHERE x.rss_item_id IS NULL
         ORDER BY a.fetched_at, a.rss_item_id
-        LIMIT ?
+        {limit_clause}
         """,
-        [analyzer_version, limit],
+        parameters,
     ).fetchall()
     return tuple(
-        CanonicalArticle(
-            rss_item_id=str(row[0]),
-            content=str(row[1]),
-            content_hash=str(row[2]),
-            parser_version=str(row[3]),
+        (
+            CanonicalArticle(
+                rss_item_id=str(row[0]),
+                content=str(row[1]),
+                content_hash=str(row[2]),
+                parser_version=str(row[3]),
+            ),
+            str(row[4]),
         )
         for row in rows
     )
@@ -344,16 +356,21 @@ def list_articles_requiring_entity_extraction(
     connection: duckdb.DuckDBPyConnection,
     *,
     extractor_version: str,
-    limit: int = 100,
+    limit: int | None = 100,
 ) -> tuple[tuple[CanonicalArticle, str], ...]:
     """현재 추출기 버전·본문 해시의 추출 이력이 없는 기사와 제목을 조회한다."""
 
-    if limit <= 0:
+    if limit is not None and limit <= 0:
         raise ValueError("limit must be greater than zero")
     if not extractor_version.strip():
         raise ValueError("extractor_version must not be empty")
+    limit_clause = ""
+    parameters: list[object] = [extractor_version]
+    if limit is not None:
+        limit_clause = "LIMIT ?"
+        parameters.append(limit)
     rows = connection.execute(
-        """
+        f"""
         SELECT a.rss_item_id, a.content, a.content_hash, a.parser_version, r.title
         FROM articles AS a
         JOIN rss_items AS r ON r.id = a.rss_item_id
@@ -363,9 +380,9 @@ def list_articles_requiring_entity_extraction(
          AND x.extractor_version = ?
         WHERE x.rss_item_id IS NULL
         ORDER BY a.fetched_at, a.rss_item_id
-        LIMIT ?
+        {limit_clause}
         """,
-        [extractor_version, limit],
+        parameters,
     ).fetchall()
     return tuple(
         (
