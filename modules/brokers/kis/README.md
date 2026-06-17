@@ -2,7 +2,7 @@
 
 # KIS SDK
 
-**한국투자증권 Open API용 순수 파이썬 SDK — 해외주식 REST 조회와 해외·국내 실시간 WebSocket 수신**
+**한국투자증권 Open API용 순수 파이썬 SDK — 국내·해외 REST 조회와 실시간 WebSocket 수신**
 
 [![Python](https://img.shields.io/badge/Python_3.12+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![HTTPX](https://img.shields.io/badge/HTTPX-0.27+-2F6F9F?style=for-the-badge)](https://www.python-httpx.org/)
@@ -19,7 +19,7 @@
 
 ## Overview
 
-`modules.brokers.kis`는 한국투자증권(Korea Investment & Securities) Open API를 감싸는 순수 파이썬 SDK입니다. REST 조회는 **해외주식 전용**이고, WebSocket 실시간 시세는 **해외주식과 국내주식(KOSPI/KOSDAQ) 체결/호가**를 모두 지원합니다. 국내주식 REST 조회는 이 SDK 범위 밖이며, 별도 Kiwoom REST API SDK로 구현할 예정입니다.
+`modules.brokers.kis`는 한국투자증권(Korea Investment & Securities) Open API를 감싸는 순수 파이썬 SDK입니다. REST는 해외주식 시세와 국내주식 일별 분봉을 지원하고, WebSocket 실시간 시세는 해외주식과 국내주식(KOSPI/KOSDAQ) 체결/호가를 지원합니다.
 
 이 패키지는 REST/WebSocket 트랜스포트, 인증, 엔드포인트 메타데이터, 응답 정규화만 담당합니다. 영속화·CLI·설정 파일 처리는 상위 `modules` 계층과 `kis_cli/`가 맡습니다.
 
@@ -32,6 +32,7 @@ WebSocket 실시간 수집의 상세 정책은 [모듈 PLAN](./PLAN.md)이 단�
 | | 기능 | 설명 |
 |---|------|------|
 | **[인증]** | OAuth 토큰·approval key | 접근 토큰과 WebSocket approval key 발급, 동시성 안전 캐시, 만료 30초 전 선제 갱신 |
+| **[시세]** | 국내주식 REST | 일별 1분봉, 최대 120건 단위 역방향 페이지네이션 |
 | **[시세]** | 해외주식 REST | 현재가, 기간별 OHLCV, 분봉, 거래량 급증 분석 |
 | **[실시간]** | 해외 체결/호가 | `HDFSCNT0`/`HDFSASP0` — 기본 지연시세(`D`), 유료 신청 계좌는 `feed="realtime"`(`R`) |
 | **[실시간]** | 국내 체결/호가 | `H0STCNT0`/`H0STASP0` — KOSPI/KOSDAQ 항상 실시간, 모의투자 지원 |
@@ -41,7 +42,6 @@ WebSocket 실시간 수집의 상세 정책은 [모듈 PLAN](./PLAN.md)이 단�
 
 지원하지 않는 범위:
 
-- 국내주식 REST 조회
 - 주문/계좌/매매 API
 - 저장소, CLI 설정, 대시보드, 분석 UI
 
@@ -57,6 +57,7 @@ kis/
 ├── endpoints/       EndpointSpec 레지스트리 — domestic/, overseas/
 ├── parsers/         REST·실시간 페이로드 → 모델 변환
 ├── models/          frozen dataclass 응답 모델 (raw 페이로드 보존)
+├── domestic/        국내주식 고수준 REST API (chart)
 ├── overseas/        고수준 REST API (price / chart / analysis)
 ├── realtime/        WebSocket 실시간 세션 (RealtimeSession)
 ├── symbols.py       해외 심볼 마스터 다운로드/파싱
@@ -106,6 +107,14 @@ async def main():
             interval_minutes=1,
         )
         print(len(minutes))
+
+        domestic_minutes = await client.domestic.chart.minute(
+            "005930",
+            date="2024-11-08",
+            start_time="09:00:00",
+            end_time="15:30:00",
+        )
+        print(len(domestic_minutes), domestic_minutes[-1].cumulative_amount)
 
         surge = await client.overseas.analysis.volume_surge("NAS", count=20)
         print(surge[0].symbol)
@@ -210,11 +219,12 @@ client.overseas.price.current()
 client.overseas.chart.daily()
 client.overseas.chart.minute()
 client.overseas.analysis.volume_surge()
+client.domestic.chart.minute()
 client.realtime.session().subscribe_trades()    # 해외(NAS 등) + 국내(KRX/KOSPI/KOSDAQ)
 client.realtime.session().subscribe_orderbook() # 해외 + 국내
 ```
 
-국내주식 REST 조회용 `client.domestic.*` 네임스페이스는 제공하지 않습니다. 국내는 실시간 WebSocket(체결/호가)만 지원합니다.
+`DomesticMinuteBar.cumulative_amount`는 해당 1분의 거래대금이 아니라 장 시작부터 그 분봉 시각까지의 당일 누적 거래대금입니다.
 
 ---
 

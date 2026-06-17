@@ -14,6 +14,7 @@ from modules.brokers.kis.endpoints.registry import EndpointSpec
 from modules.brokers.kis.types import Environment
 
 if TYPE_CHECKING:
+    from modules.brokers.kis.domestic import _DomesticNamespace
     from modules.brokers.kis.overseas import _OverseasNamespace
     from modules.brokers.kis.realtime import _RealtimeNamespace
 
@@ -39,6 +40,7 @@ class KisClient:
     http_client: httpx.AsyncClient | None = None
     timeout_seconds: float = 30.0
 
+    domestic: "_DomesticNamespace" = field(init=False, repr=False)
     overseas: "_OverseasNamespace" = field(init=False, repr=False)
     realtime: "_RealtimeNamespace" = field(init=False, repr=False)
 
@@ -48,6 +50,7 @@ class KisClient:
     _token_provider: TokenProvider = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
+        from modules.brokers.kis.domestic import _DomesticNamespace
         from modules.brokers.kis.overseas import _OverseasNamespace
         from modules.brokers.kis.realtime import _RealtimeNamespace
 
@@ -57,6 +60,7 @@ class KisClient:
             token_cache=self.token_cache,
             http_client_factory=self._require_http_client,
         )
+        self.domestic = _DomesticNamespace(self)
         self.overseas = _OverseasNamespace(self)
         self.realtime = _RealtimeNamespace(self)
 

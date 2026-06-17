@@ -29,6 +29,27 @@ class OhlcvBar:
 
 
 @dataclass(frozen=True)
+class DomesticMinuteBar:
+    """One minute bar for a domestic stock trading session.
+
+    ``cumulative_amount`` is the session-to-date transaction amount reported
+    by KIS at this bar's timestamp, not the transaction amount of this minute.
+    """
+
+    market: str
+    symbol: str
+    business_date: str
+    time: str
+    open: Decimal
+    high: Decimal
+    low: Decimal
+    close: Decimal
+    volume: int
+    cumulative_amount: Decimal
+    raw: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class OverseasMinuteBar:
     """One minute bar for overseas stocks.
 

@@ -2,7 +2,7 @@
 
 Public surface:
 
-- `KisClient`          : facade with `overseas`, `realtime` namespaces
+- `KisClient`          : facade with `domestic`, `overseas`, `realtime` namespaces
 - `Credentials`        : app key/secret container with `from_env()` helper
 - `EndpointSpec`       : metadata for a single REST endpoint
 - exception hierarchy  : `KisError` and its subclasses
@@ -27,10 +27,12 @@ from modules.brokers.kis.auth import (
 )
 from modules.brokers.kis.client import KisClient
 from modules.brokers.kis.config import Credentials, rest_base_url, websocket_url
+from modules.brokers.kis.endpoints import domestic as endpoints_domestic  # noqa: F401
 from modules.brokers.kis.endpoints import overseas as endpoints_overseas  # noqa: F401
 from modules.brokers.kis.endpoints.registry import EndpointSpec, lookup, names, register
 from modules.brokers.kis.models import (
     CurrentPrice,
+    DomesticMinuteBar,
     OhlcvBar,
     OrderBookLevel,
     OrderBookSnapshot,
@@ -40,6 +42,7 @@ from modules.brokers.kis.models import (
     SymbolRecord,
 )
 from modules.brokers.kis.parsers import (
+    parse_domestic_minute_bar,
     parse_orderbook_payload,
     parse_minute_datetime,
     parse_overseas_current_price,
@@ -72,6 +75,7 @@ __all__ = [
     "ALL_SYMBOL_MARKETS",
     "Credentials",
     "CurrentPrice",
+    "DomesticMinuteBar",
     "DOMESTIC_MARKET_FILES",
     "EndpointSpec",
     "IssuedToken",
@@ -105,6 +109,7 @@ __all__ = [
     "names",
     "normalize_market",
     "parse_orderbook_payload",
+    "parse_domestic_minute_bar",
     "parse_minute_datetime",
     "parse_overseas_current_price",
     "parse_overseas_minute_bar",

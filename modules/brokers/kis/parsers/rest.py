@@ -4,7 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-from modules.brokers.kis.models.ohlcv import OhlcvBar, OverseasMinuteBar
+from modules.brokers.kis.models.ohlcv import DomesticMinuteBar, OhlcvBar, OverseasMinuteBar
 from modules.brokers.kis.models.quote import CurrentPrice
 from modules.brokers.kis.models.reference import OverseasVolumeSurgeItem
 
@@ -80,6 +80,27 @@ def parse_overseas_ohlcv_bar(
         change=optional_decimal(row, "diff", "ovrs_nmix_prdy_vrss"),
         change_rate=optional_decimal(row, "rate", "prdy_ctrt"),
         amount=optional_decimal(row, "tamt"),
+        raw=row,
+    )
+
+
+def parse_domestic_minute_bar(
+    *,
+    market: str,
+    symbol: str,
+    row: dict[str, Any],
+) -> DomesticMinuteBar:
+    return DomesticMinuteBar(
+        market=market,
+        symbol=symbol,
+        business_date=date_value(row, "stck_bsop_date"),
+        time=time_value(row, "stck_cntg_hour"),
+        open=required_decimal(row, "stck_oprc"),
+        high=required_decimal(row, "stck_hgpr"),
+        low=required_decimal(row, "stck_lwpr"),
+        close=required_decimal(row, "stck_prpr"),
+        volume=required_int(row, "cntg_vol"),
+        cumulative_amount=required_decimal(row, "acml_tr_pbmn"),
         raw=row,
     )
 

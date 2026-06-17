@@ -93,6 +93,16 @@ def test_modules_storage_does_not_depend_on_higher_layers() -> None:
         )
 
 
+def test_news_does_not_own_market_surge_extraction() -> None:
+    assert not (REPO_ROOT / "modules/news/surge_events.py").exists()
+    assert not (REPO_ROOT / "modules/news/schema/surge.py").exists()
+    for path in _python_files("modules/news/db"):
+        source = path.read_text(encoding="utf-8")
+        assert "CREATE TABLE IF NOT EXISTS surge_events" not in source, (
+            f"{path} must not persist market surge events in the news database"
+        )
+
+
 def test_legacy_kis_package_is_removed() -> None:
     assert not (REPO_ROOT / "kis").exists(), (
         "top-level kis package was removed; import modules.brokers.kis directly"
