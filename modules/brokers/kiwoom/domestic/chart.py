@@ -37,7 +37,7 @@ class DomesticChartAPI:
         tick_scope: int = 1,
         adjusted: bool = True,
         market: str = "KRX",
-        max_pages: int = 1,
+        max_pages: int | None = None,
     ) -> list[ChartBar]:
         """Fetch tick chart rows from ``ka10079``."""
         if tick_scope not in _TICK_SCOPES:
@@ -64,7 +64,7 @@ class DomesticChartAPI:
         base_date: str | Date | None = None,
         adjusted: bool = True,
         market: str = "KRX",
-        max_pages: int = 1,
+        max_pages: int | None = None,
     ) -> list[ChartBar]:
         """Fetch minute chart rows from ``ka10080``."""
         if interval_minutes not in _MINUTE_SCOPES:
@@ -95,7 +95,7 @@ class DomesticChartAPI:
         base_date: str | Date,
         adjusted: bool = True,
         market: str = "KRX",
-        max_pages: int = 1,
+        max_pages: int | None = None,
     ) -> list[ChartBar]:
         """Fetch daily chart rows from ``ka10081``."""
         return await self._period_chart(
@@ -116,7 +116,7 @@ class DomesticChartAPI:
         base_date: str | Date,
         adjusted: bool = True,
         market: str = "KRX",
-        max_pages: int = 1,
+        max_pages: int | None = None,
     ) -> list[ChartBar]:
         """Fetch weekly chart rows from ``ka10082``."""
         return await self._period_chart(
@@ -137,7 +137,7 @@ class DomesticChartAPI:
         base_date: str | Date,
         adjusted: bool = True,
         market: str = "KRX",
-        max_pages: int = 1,
+        max_pages: int | None = None,
     ) -> list[ChartBar]:
         """Fetch monthly chart rows from ``ka10083``."""
         return await self._period_chart(
@@ -158,7 +158,7 @@ class DomesticChartAPI:
         base_date: str | Date,
         adjusted: bool = True,
         market: str = "KRX",
-        max_pages: int = 1,
+        max_pages: int | None = None,
     ) -> list[ChartBar]:
         """Fetch yearly chart rows from ``ka10094``."""
         return await self._period_chart(
@@ -182,7 +182,7 @@ class DomesticChartAPI:
         adjusted: bool,
         market: str,
         interval: str,
-        max_pages: int,
+        max_pages: int | None,
     ) -> list[ChartBar]:
         return await self._fetch_chart(
             spec=spec,
@@ -207,24 +207,26 @@ class DomesticChartAPI:
         market: str,
         interval: str,
         body: dict[str, Any],
-        max_pages: int,
+        max_pages: int | None,
     ) -> list[ChartBar]:
         normalized_symbol = _normalize_symbol(symbol)
-        if max_pages < 1:
+        if max_pages is not None and max_pages < 1:
             raise ValueError("max_pages must be at least 1")
 
         bars: dict[str, ChartBar] = {}
         cont_yn = "N"
         next_key = ""
         seen_next_keys: set[tuple[str, str]] = set()
+        page_count = 0
 
-        for _ in range(max_pages):
+        while max_pages is None or page_count < max_pages:
             response = await self._parent.request_raw(
                 spec,
                 json_body=body,
                 cont_yn=cont_yn,
                 next_key=next_key,
             )
+            page_count += 1
             for row in chart_rows(response.payload, chart_type):
                 bar = parse_chart_bar(
                     market=market,

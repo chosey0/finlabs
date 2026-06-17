@@ -140,7 +140,8 @@ await client.domestic.chart.yearly("005930", base_date="2026-06-17")
 - `tick_scope`: `1`, `3`, `5`, `10`, `30`
 - `interval_minutes`: `1`, `3`, `5`, `10`, `15`, `30`, `45`, `60`
 - `adjusted=True`: `upd_stkpc_tp=1`
-- `max_pages`: 응답 헤더 `cont-yn=Y`, `next-key` 기반 연속조회 페이지 수
+- `max_pages=None`: 기본값. 응답 헤더 `cont-yn=Y`, `next-key`가 끝날 때까지 전체 페이지 조회
+- `max_pages=5`: 필요한 경우 연속조회 페이지 수를 명시적으로 제한
 
 반환 모델은 `ChartBar`입니다.
 
