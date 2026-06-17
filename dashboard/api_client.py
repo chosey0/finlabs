@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import httpx
 
-from kis_cli.server.config import base_url
+from dashboard.config import base_url
 
 
 class JobServerClient:

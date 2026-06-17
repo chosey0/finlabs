@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 
 from modules.brokers.kis.endpoints.registry import lookup
 from modules.brokers.kis.models.reference import OverseasVolumeSurgeItem
+from modules.brokers.kis.overseas.exchange import normalize_overseas_exchange
 from modules.brokers.kis.parsers.rest import output_rows, parse_overseas_volume_surge_item
 
 if TYPE_CHECKING:
@@ -28,9 +29,7 @@ class OverseasAnalysisAPI:
     ) -> list[OverseasVolumeSurgeItem]:
         if count < 1:
             raise ValueError("count must be at least 1")
-        normalized_exchange = exchange.strip().upper()
-        if not normalized_exchange:
-            raise ValueError("exchange must not be empty")
+        normalized_exchange = normalize_overseas_exchange(exchange)
         payload = await self._parent.request(
             _VOLUME_SURGE_SPEC,
             params={

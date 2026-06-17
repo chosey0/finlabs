@@ -4,7 +4,7 @@
 # modules/brokers/kis
 
 ## Purpose
-`modules.brokers.kis` is a pure Python SDK package wrapping overseas-stock data APIs (REST + realtime WebSocket) and domestic-stock (KRX/KOSPI/KOSDAQ) realtime WebSocket APIs from the Korea Investment & Securities Open API. It is responsible only for transport (REST via `httpx` / WebSocket via `websockets`) and payload normalization (frozen dataclass models + parsers). It contains no filesystem, DB, or CLI code. Persistence and user workflows are handled by `modules.orchestration`, `modules.storage`, and thin transport packages such as `kis_cli/`.
+`modules.brokers.kis` is a pure Python SDK package wrapping overseas-stock data APIs (REST + realtime WebSocket) and domestic-stock (KRX/KOSPI/KOSDAQ) realtime WebSocket APIs from the Korea Investment & Securities Open API. It is responsible only for transport (REST via `httpx` / WebSocket via `websockets`) and payload normalization (frozen dataclass models + parsers). It contains no filesystem, DB, or CLI code. Persistence and user workflows are handled by `modules.orchestration`, `modules.storage`, and thin transport packages such as `finlabs_cli/`.
 
 ## Key Files
 
@@ -32,7 +32,7 @@
 ## For AI Agents
 
 ### Working In This Directory
-- This package is a **pure SDK**. Never add filesystem access, KST timestamping, DuckDB/SQLite logic here — those responsibilities belong in `modules.orchestration`, `modules.storage`, or transport packages such as `kis_cli/`.
+- This package is a **pure SDK**. Never add filesystem access, KST timestamping, DuckDB/SQLite logic here — those responsibilities belong in `modules.orchestration`, `modules.storage`, or transport packages such as `finlabs_cli/`.
 - `KisClient` must always be used inside an `async with` context. Calling `request()` outside a context raises `RuntimeError`.
 - Adding a new endpoint follows this order: (1) register `EndpointSpec` in `endpoints/` → (2) add parser in `parsers/rest.py` → (3) add model in `models/` → (4) expose high-level method in `overseas/`.
 - All models are `@dataclass(frozen=True)` and include a `raw: dict[str, Any]` field to preserve the original payload.
@@ -52,7 +52,7 @@
 ## Dependencies
 
 ### Internal
-- Internal imports only — no dependency on `kis_cli` or other `modules.*` siblings. Downstream layers import this SDK, never the reverse.
+- Internal imports only — no dependency on application packages or other `modules.*` siblings. Downstream layers import this SDK, never the reverse.
 
 ### External
 - `httpx>=0.27.0` — async REST transport

@@ -1,9 +1,8 @@
 # FinLabs CLI
 
-`finlabs_cli` is a new Typer/Rich application for operating the broker SDKs
-directly. It is separate from the legacy `kis_cli` application and starts with
-account management, token handling, chart requests, and an interactive realtime
-session.
+`finlabs_cli` is a Typer/Rich application for operating the broker SDKs
+directly. It starts with account management, token handling, chart requests, and
+an interactive realtime session.
 
 Run it locally with:
 
@@ -113,7 +112,7 @@ implements the SDK cache protocol.
 Domestic chart data uses Kiwoom SDK:
 
 ```bash
-uv run python -m finlabs_cli chart domestic --alias kiwoom-main --symbol 005930 --interval daily --base-date 2026-06-17
+uv run python -m finlabs_cli chart domestic --alias kiwoom-main --symbol 005930 --interval daily --start-date 2026-01-01 --base-date 2026-06-17
 ```
 
 Supported domestic intervals:
@@ -127,10 +126,16 @@ Supported domestic intervals:
 | `monthly` | `ka10083` |
 | `yearly` | `ka10094` |
 
+Domestic chart pagination stops once the response reaches `--start-date`, then
+returns data from `--start-date` through `--base-date`. Start-date formats are:
+tick/minute `YYYY-MM-DD HHMMSS`, daily/weekly `YYYY-MM-DD`, monthly `YYYY-MM`,
+and yearly `YYYY`. Minute charts accept numeric `--tic-scope` values, matching
+Kiwoom's `tic_scope` request field.
+
 Overseas chart data uses KIS SDK:
 
 ```bash
-uv run python -m finlabs_cli chart overseas --alias kis-main --symbol AAPL --exchange NAS --interval daily --start 2026-01-01 --end 2026-06-17
+uv run python -m finlabs_cli chart overseas --alias kis-main --symbol AAPL --exchange NAS --interval daily --start 2026-01-01 --end 2026-06-17 --max-pages 100
 ```
 
 Supported overseas intervals:
@@ -143,22 +148,31 @@ Supported overseas intervals:
 | `monthly` | `HHDFS76240000` |
 
 The command prints the most recent rows in a Rich table. It does not persist
-results yet.
+results yet. Overseas daily, weekly, and monthly charts use the KIS continuation
+logic with `--max-pages` defaulting to `100`.
 
 ### Realtime
 
-The MVP realtime flow is foreground and interactive:
+The MVP realtime flow is a foreground Textual TUI:
 
 ```bash
-uv run python -m finlabs_cli realtime run --alias kiwoom-main
+uv run python -m finlabs_cli realtime run
 ```
 
-Inside the session, choose:
+Inside the session, use the fixed controls:
 
+- Account selection
 - Subscribe
 - Unsubscribe
-- Show subscriptions
 - Disconnect
+
+The screen is split into a session summary bar, a subscriptions table, an
+activity log, and action tabs for subscribe/unsubscribe/session controls. The
+subscriptions table updates received `exchange_ts` and received counts while the
+input controls stay stable. `--alias` can still be used to preselect the initial
+account, but account choice happens inside the TUI. Changing the selected account
+does not close existing sessions; subscriptions from multiple accounts remain
+visible together with an `Account` column.
 
 Kiwoom subscriptions:
 
@@ -168,7 +182,7 @@ Kiwoom subscriptions:
 KIS subscriptions:
 
 - overseas trades/orderbook through KIS realtime SDK
-- overseas feed uses `feed="realtime"` in this CLI for non-domestic venues
+- overseas feed is selected during subscribe: `delayed` (`D`) or `realtime` (`R`)
 
 `realtime monitor` is intentionally not a real monitor yet. A separate monitor
 command needs a long-running daemon or IPC layer so another process can inspect

@@ -7,6 +7,7 @@ from modules.brokers.kis.endpoints.registry import lookup
 from modules.brokers.kis.exceptions import KisRealtimeError
 from modules.brokers.kis.models.orderbook import OrderBookSnapshot
 from modules.brokers.kis.models.tick import RealtimeTick
+from modules.brokers.kis.overseas.exchange import normalize_overseas_exchange
 from modules.brokers.kis.types import Environment
 
 Feed = Literal["delayed", "realtime"]
@@ -83,6 +84,7 @@ def subscription_for(
         tr_id = lookup(f"domestic.realtime.{channel}").tr_id_for(environment)
         tr_key = normalized_symbol
     else:
+        normalized_venue = normalize_overseas_exchange(normalized_venue)
         selected_feed: Feed = feed or "delayed"
         if selected_feed not in _FEED_PREFIXES:
             raise ValueError("feed must be one of: delayed, realtime")

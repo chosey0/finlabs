@@ -26,7 +26,7 @@ class IssuedToken:
     """Result of a successful KIS REST token issuance.
 
     Pure SDK record: no profile_id / file path / environment metadata. Higher
-    layers (e.g. kis_cli) wrap this in their own cache record.
+    layers wrap this in their own cache record.
     """
 
     access_token: str

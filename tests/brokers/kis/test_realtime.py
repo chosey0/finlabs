@@ -235,12 +235,14 @@ def test_realtime_overseas_feed_selects_tr_key_prefix(monkeypatch) -> None:
             async with client.realtime.session() as ws:
                 await ws.subscribe_trades("AAPL", market="NAS", feed="realtime")
                 await ws.subscribe_trades("TSLA", market="NAS")
+                await ws.subscribe_trades("SOXL", market="AMEX")
 
     asyncio.run(run())
 
     sent = [json.loads(message) for message in websocket.sent]
     assert sent[0]["body"]["input"] == {"tr_id": "HDFSCNT0", "tr_key": "RNASAAPL"}
     assert sent[1]["body"]["input"] == {"tr_id": "HDFSCNT0", "tr_key": "DNASTSLA"}
+    assert sent[2]["body"]["input"] == {"tr_id": "HDFSCNT0", "tr_key": "DAMSSOXL"}
 
 
 def test_realtime_subscribe_unsubscribe_state_machine(monkeypatch) -> None:
@@ -276,6 +278,59 @@ def test_realtime_subscribe_unsubscribe_state_machine(monkeypatch) -> None:
     assert sent[0]["header"]["tr_type"] == "1"
     assert sent[0]["body"]["input"] == {"tr_id": "HDFSCNT0", "tr_key": "DNASAAPL"}
     assert sent[1]["header"]["tr_type"] == "2"
+
+
+def test_realtime_subscribe_error_does_not_register_subscription(monkeypatch) -> None:
+    websocket = QueueWebSocket()
+
+    async def fake_connect(url):
+        websocket.url = url
+        return websocket
+
+    async def fake_approval(self):
+        return "approval-key"
+
+    monkeypatch.setattr(
+        "modules.brokers.kis.realtime.connection.websockets.connect", fake_connect
+    )
+    monkeypatch.setattr(
+        "modules.brokers.kis.client.KisClient.ensure_approval_key", fake_approval
+    )
+
+    async def run() -> int:
+        async with KisClient(
+            credentials=Credentials("app-key", "app-secret")
+        ) as client:
+            async with client.realtime.session() as ws:
+                stream_task = asyncio.create_task(_drain_stream(ws))
+                await asyncio.sleep(0)
+                subscribe_task = asyncio.create_task(
+                    ws.subscribe_trades("SPCX", market="NAS", feed="realtime")
+                )
+                await asyncio.sleep(0)
+                websocket.push(
+                    json.dumps(
+                        {
+                            "header": {
+                                "tr_id": "HDFSCNT0",
+                                "tr_key": "RNASSPCX",
+                                "encrypt": "N",
+                            },
+                            "body": {
+                                "rt_cd": "1",
+                                "msg1": "SUBSCRIBE ERROR : mci send failed",
+                            },
+                        }
+                    )
+                )
+                with pytest.raises(KisRealtimeError, match="SUBSCRIBE ERROR"):
+                    await subscribe_task
+                stream_task.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await stream_task
+                return len(ws.subscriptions)
+
+    assert asyncio.run(run()) == 0
 
 
 def test_realtime_quick_start_with_mock_websocket(monkeypatch) -> None:
@@ -579,6 +634,31 @@ class FakeWebSocket:
 
     async def close(self) -> None:
         self.closed = True
+
+
+class QueueWebSocket:
+    def __init__(self) -> None:
+        self.frames: asyncio.Queue[str] = asyncio.Queue()
+        self.sent: list[str] = []
+        self.url = ""
+        self.closed = False
+
+    def push(self, frame: str) -> None:
+        self.frames.put_nowait(frame)
+
+    async def send(self, message: str) -> None:
+        self.sent.append(message)
+
+    async def recv(self) -> str:
+        return await self.frames.get()
+
+    async def close(self) -> None:
+        self.closed = True
+
+
+async def _drain_stream(ws) -> None:
+    async for _event in ws.stream():
+        pass
 
 
 def _overseas_trade_values() -> list[str]:

@@ -25,7 +25,7 @@ High-level client for overseas exchange (NAS/NYS/AMS/HKS/TSE/SHS/SZS/HNX/HSX) RE
 - When adding a new overseas endpoint, verify in the KIS documentation that a mock TR ID genuinely does not exist before keeping `tr_id_mock=None`.
 
 ### Testing Requirements
-- `tests/applications/kis_cli/test_chart.py` (minute/daily pagination), `tests/brokers/kis/test_stage5_facades.py` (analysis.volume_surge), `tests/applications/kis_cli/test_price.py` (current price) — all use mock transports.
+- `tests/brokers/kis/test_stage5_facades.py` and related KIS SDK tests use mock transports for price, chart, and analysis coverage.
 - Regression-check that exchange code normalization (`exchange.strip().upper()`) works as expected.
 
 ### Common Patterns

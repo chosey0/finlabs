@@ -8,7 +8,7 @@ Public surface:
 - exception hierarchy  : `KisError` and its subclasses
 
 This package is transport + parsing only. Persistence, CLI, and config
-files live in the `kis_cli` application package.
+files live in upper application layers.
 """
 
 from __future__ import annotations

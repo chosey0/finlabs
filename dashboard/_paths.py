@@ -1,7 +1,7 @@
 """Path bootstrap shared by the Streamlit entry and pages.
 
 ``streamlit run dashboard/app.py`` puts ``dashboard/`` on ``sys.path`` but not
-necessarily the repo root, so importing ``kis_cli`` / ``research`` can fail. Each
+necessarily the repo root, so importing ``modules`` / ``research`` can fail. Each
 page imports this first to guarantee the repo root is importable, mirroring how
 ``research.fractal.plot_command`` already relies on repo-root imports.
 """
@@ -22,6 +22,6 @@ def ensure_repo_root_on_path() -> None:
 
 def warehouse_path() -> Path:
     ensure_repo_root_on_path()
-    from kis_cli.storage.warehouse import default_warehouse_file
+    from modules.storage.warehouse import default_warehouse_file
 
     return default_warehouse_file()

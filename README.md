@@ -11,7 +11,7 @@
 
 한국투자증권 해외주식 데이터와 RSS 뉴스를 **수집·정규화·저장·조회·분석**하는 Python 프로젝트입니다.
 
-[통합 계획서](./PLAN.md) · [KIS SDK](./modules/brokers/kis/README.md) · [Toss SDK](./modules/brokers/toss/README.md) · [KIS CLI](./kis_cli/README.md) · [News Pipeline](./modules/news/README.md) · [Research](./research/README.md)
+[통합 계획서](./PLAN.md) · [FinLabs CLI](./finlabs_cli/README.md) · [KIS SDK](./modules/brokers/kis/README.md) · [Toss SDK](./modules/brokers/toss/README.md) · [News Pipeline](./modules/news/README.md) · [Research](./research/README.md)
 
 </div>
 
@@ -21,7 +21,7 @@
 
 FinLabs는 증권사 Open API를 독립적인 Python SDK로 구현하고, 그 위에 시장 데이터 수집 CLI, 저장소, 대시보드, 뉴스 파이프라인과 연구 도구를 확장하는 오픈소스 개발자 도구 프로젝트입니다.
 
-현재 중심은 한국투자증권(KIS) Open API의 해외주식 데이터 조회 SDK와 CLI입니다. 동시에 Investing.com·이투데이·뉴스핌 RSS를 표준 모델로 정규화하는 뉴스 파이프라인과 Candlestick VQ-VAE Tokenizer 연구를 별도 트랙으로 개발하고 있습니다.
+현재 중심은 증권사별 SDK와 이를 조작하는 `finlabs_cli`입니다. 동시에 Investing.com·이투데이·뉴스핌 RSS를 표준 모델로 정규화하는 뉴스 파이프라인과 Candlestick VQ-VAE Tokenizer 연구를 별도 트랙으로 개발하고 있습니다.
 
 코드베이스는 broker-agnostic 계층형 코어인 `modules/`로 이전 중입니다. SDK는 증권사별 차이를 캡슐화하고, 상위 애플리케이션은 canonical 모델과 orchestration 계층을 통해 데이터를 다루는 구조를 목표로 합니다.
 
@@ -35,7 +35,7 @@ FinLabs는 증권사 Open API를 독립적인 Python SDK로 구현하고, 그 �
 |---|------|:----:|------|
 | **[Broker SDK]** | [KIS SDK](./modules/brokers/kis/README.md) | 구현 중 | 한국투자증권 해외주식 REST·WebSocket 조회, 인증, 엔드포인트, 파서, 모델 |
 | **[Broker SDK]** | [Toss SDK](./modules/brokers/toss/README.md) | 구현됨 | 토스증권 현재가·캔들·종목정보와 국내·해외 장 운영 정보 조회, calendar adapter |
-| **[Market CLI]** | [KIS CLI](./kis_cli/README.md) | 구현 중 | 해외 심볼 다운로드, OHLCV·분봉 수집, DuckDB 저장, 조회와 내보내기 |
+| **[Market CLI]** | [FinLabs CLI](./finlabs_cli/README.md) | 구현 중 | 계좌 등록, 토큰 관리, KIS/Kiwoom 차트 조회, 실시간 세션 |
 | **[Core]** | `modules/` 계층형 코어 | 이전 중 | broker adapter, canonical domain, orchestration, warehouse read repository |
 | **[News]** | [News Pipeline](./modules/news/README.md) | 초기 구현 | RSS 정규화, 멱등 저장, 기초 통계 분석, systemd 실행. 본문 직접 수집은 언론사 약관 사유로 비활성화 (네이버 뉴스 API 전환 예정) |
 | **[Dashboard]** | `dashboard/` | 구현 중 | `modules.orchestration`을 통해 저장된 시장 데이터를 읽는 Streamlit UI |
@@ -90,7 +90,7 @@ FinLabs는 증권사 Open API를 독립적인 Python SDK로 구현하고, 그 �
 FinLabs의 시장 데이터 코어는 의존성이 위에서 아래로만 흐르는 계층형 구조로 이전 중입니다.
 
 ```text
-kis_cli / dashboard / research        thin transports
+finlabs_cli / dashboard / research    thin transports
         │
         ▼
 modules.orchestration                 use cases and warehouse queries
@@ -164,7 +164,7 @@ finlabs/
 │   ├── domain/                 canonical 데이터 계약
 │   ├── storage/                warehouse read repository
 │   └── news/                   RSS·본문·분석 뉴스 파이프라인
-├── kis_cli/                    KIS 시장 데이터 수집 CLI
+├── finlabs_cli/                broker SDK 조작용 Typer/Rich CLI
 ├── dashboard/                  Streamlit 시장 데이터 대시보드
 ├── research/                   시장 표현 학습 연구
 ├── tests/                      공통 단위·통합·아키텍처 테스트
@@ -192,7 +192,7 @@ cd finlabs
 uv sync
 ```
 
-기본 동기화에는 KIS CLI 런타임과 개발 도구만 포함됩니다. 기능별 의존성은 필요할 때 그룹으로 추가합니다.
+기본 동기화에는 CLI 런타임과 개발 도구만 포함됩니다. 기능별 의존성은 필요할 때 그룹으로 추가합니다.
 
 | 용도 | 동기화 명령 |
 |------|-------------|
@@ -204,24 +204,19 @@ uv sync
 | Toss SDK | `uv sync --group toss` |
 | PostgreSQL mirror | `uv sync --group postgres` |
 
-### KIS CLI
+### FinLabs CLI
 
 로컬 개발에서는 console script 대신 Python 모듈로 실행합니다.
 
 ```bash
-uv run python -m kis_cli --help
-uv run python -m kis_cli config init
-uv run python -m kis_cli db init
-uv run python -m kis_cli symbols download --market NASDAQ
-uv run python -m kis_cli chart daily \
-  --symbol AAPL \
-  --start 2025-01-01 \
-  --end 2025-12-31 \
-  --save
-uv run python -m kis_cli query ohlcv --symbol AAPL --limit 10
+uv run python -m finlabs_cli --help
+uv run python -m finlabs_cli accounts list
+uv run python -m finlabs_cli accounts register
+uv run python -m finlabs_cli auth status
+uv run python -m finlabs_cli chart domestic --alias kiwoom-main --symbol 005930 --interval daily
 ```
 
-자세한 설정, 인증과 명령 목록은 [KIS CLI README](./kis_cli/README.md)를 참고하세요.
+자세한 설정, 인증과 명령 목록은 [FinLabs CLI README](./finlabs_cli/README.md)를 참고하세요.
 
 ### News Pipeline
 
@@ -243,7 +238,7 @@ uv run --group news python -m modules.news.main analyze --limit 100
 | 저장소 | 용도 | 상태 |
 |--------|------|------|
 | DuckDB | 시장 데이터와 뉴스 파이프라인 데이터 | 운영 중, 읽기 전용 레거시 전환 예정 |
-| SQLite | KIS CLI 운영 로그 | 운영 중, 읽기 전용 레거시 전환 예정 |
+| SQLite | 운영 로그 | 읽기 전용 레거시 전환 예정 |
 | PostgreSQL (TimescaleDB) | `control`·`market`·`news` 스키마, 틱·호가·1분봉·기사 영구 원본 | 계획 확정, 구현 전 |
 | Redis (Streams·Pub/Sub) | 실시간 이벤트 전달 계층 | 계획 확정, 구현 전 |
 | Parquet | 검증된 틱·호가 장기 아카이브 | 계획 확정, 구현 전 |
@@ -272,7 +267,7 @@ uv run ruff check .
 uv run --group news python -m pytest modules/news/tests/test_rss_pipeline.py -q
 
 # 주요 CLI 확인
-uv run python -m kis_cli --help
+uv run python -m finlabs_cli --help
 uv run --group news python -m modules.news.main --help
 ```
 

@@ -5,9 +5,9 @@
 
 > **Status: TARGET ARCHITECTURE (partially built).** This document describes the
 > intended layout for FinLabs' core domain code. It is the contract new code must
-> follow and the destination of an in-progress migration away from
-> `kis_cli/services`, `kis_cli/core`, and the warehouse-read logic that used to
-> live in `research/tokenizers/data.py`.
+> follow and the destination of an in-progress migration away from legacy CLI
+> storage/service code and the warehouse-read logic that used to live in
+> `research/tokenizers/data.py`.
 >
 > **Already built:** `modules/brokers/kis/` (full KIS SDK moved out of the former
 > top-level `kis/`), `modules/domain/` (`CandleBar`, `CandleSplit`, adapter
@@ -18,19 +18,18 @@
 > call moved into the adapter).
 >
 > **Not built yet:** `orchestration/{collection,jobs,registry,types}.py`,
-> `adapters/brokers/kis/{symbols,price}.py`, `storage/{warehouse,app_db}.py`, and
-> all of `modules/config/`. Those concerns still live in `kis_cli/`. Where the tree
-> below does not yet exist, treat this file as the spec to build against — do not
-> invent a different shape.
+> `adapters/brokers/kis/{symbols,price}.py`, warehouse writers, app DB logging, and
+> all of `modules/config/`. Where the tree below does not yet exist, treat this
+> file as the spec to build against — do not invent a different shape.
 
 ## Purpose
 `modules/` holds the broker-agnostic core of FinLabs as a clean, layered
 dependency graph. It exists to fix three structural problems in the current
 codebase:
 
-1. **Split read knowledge** — warehouse SQL is duplicated across
-   `kis_cli/storage/repositories.py` and `research/tokenizers/data.py`.
-2. **Inverted dependencies** — `research/*` imports `kis_cli.storage`.
+1. **Split read knowledge** — warehouse SQL used to be duplicated across app
+   storage code and `research/tokenizers/data.py`.
+2. **Inverted dependencies** — `research/*` must not import application packages.
 3. **Broker lock-in** — KIS-specific concerns (market codes, intervals, auth)
    are entangled with collection, storage, and logging inside one service file.
 
@@ -73,18 +72,19 @@ modules/
 
   storage/                     # Persistence
     repositories.py            # ✓ the single source of warehouse-read SQL
-    warehouse.py               # (planned) DuckDB warehouse writer (today in kis_cli/storage)
-    app_db.py                  # (planned) SQLite app.db: api_logs, ingest_runs (today in kis_cli/storage)
+    warehouse.py               # ✓ warehouse path helper; writer still planned
+    app_db.py                  # (planned) SQLite app.db: api_logs, ingest_runs
 
   config/                      # (planned) Profiles, secrets resolution, OS paths
-    profiles.py                #   today all under kis_cli/config/
+    profiles.py                # (planned)
     resolver.py
     paths.py
 ```
 
 > Note: `modules/storage/repositories.py` currently holds warehouse **read** SQL
-> only (`load_candles`, `list_available_series`). Warehouse **writes** still live in
-> `kis_cli/storage/`; moving them here is part of the storage-write migration below.
+> only (`load_candles`, `list_available_series`). Warehouse **writes** are not
+> currently implemented in `modules/storage`; adding them is part of the
+> storage-write migration below.
 
 ## Layer Roles
 
@@ -164,7 +164,7 @@ KST timestamps and path conventions belong here and must not leak into SDKs.
 Allowed direction (top calls down only):
 
 ```
-kis_cli / FastAPI / dashboard
+finlabs_cli / FastAPI / dashboard
         ↓
 modules.orchestration
         ↓
@@ -186,7 +186,7 @@ Forbidden edges (enforce with `tests/architecture/test_boundaries.py`):
 | `modules.adapters` → import `storage` | adapters translate, never persist |
 | `modules.adapters` → import `orchestration` | wrong direction |
 | `modules.storage`  → import `brokers` / `adapters` | storage knows only `domain` |
-| `research`         → import `kis_cli` / broker internals | use `orchestration.query` |
+| `research`         → import application packages / broker internals | use `orchestration.query` |
 
 Storage writes happen **only** in `orchestration`, never in adapters and never
 in SDKs.
@@ -196,20 +196,20 @@ in SDKs.
 | Current location | Splits into | Status |
 |------------------|-------------|--------|
 | `kis/` (top-level SDK) | `modules/brokers/kis/` | ✅ done |
-| `kis_cli/services/chart.py` (validation + SDK call + pagination + DB row mapping + DuckDB save + SQLite log) | adapter call + mapping → `adapters/brokers/kis/market_data.py` + `mapper.py`; orchestration (select/save/log/result) → `orchestration/collection.py` | 🟡 partial — `market_data.py`/`mapper.py` exist and `chart.py` calls them; save/log + `collection.py` still in `kis_cli` |
-| `kis_cli/services/price.py`, `symbols.py` | KIS-specific half → `adapters/brokers/kis/`; save/log half → `orchestration/` | ⬜ not started |
-| `kis_cli/services/query.py` | `orchestration/query.py` (broker-agnostic) | ✅ done — reads go through `modules.orchestration.query` |
-| `kis_cli/server/jobs.py`, `worker.py` | `orchestration/jobs.py` | ⬜ not started (job queue still in `kis_cli/server`) |
+| legacy app chart service | adapter call + mapping → `adapters/brokers/kis/market_data.py` + `mapper.py`; orchestration (select/save/log/result) → `orchestration/collection.py` | 🟡 partial — adapter mapping exists; save/log + `collection.py` still needed |
+| legacy app price/symbol services | KIS-specific half → `adapters/brokers/kis/`; save/log half → `orchestration/` | ⬜ not started |
+| legacy app query service | `orchestration/query.py` (broker-agnostic) | ✅ done — reads go through `modules.orchestration.query` |
+| legacy app job server | `orchestration/jobs.py` | ⬜ not started |
 | `research/tokenizers/data.py` warehouse SQL (`_load_daily_rows`, `_load_minute_rows`) | `modules/storage/repositories.py` (single source); `load_candles` becomes a thin adapter over it | ✅ done — `research.tokenizers.data.load_candles` now wraps `modules.orchestration.query.load_candles` |
-| `kis_cli/storage/{warehouse,repositories,app_db}.py` | `modules/storage/*` (drop `schema.py` shim, slim `__init__`) | 🟡 partial — read repository moved; writer (`warehouse.py`, `app_db.py`) still in `kis_cli/storage` |
-| `kis_cli/config/{profiles,resolver,paths}.py` | `modules/config/*` | ⬜ not started (config migration pending) |
-| `kis_cli/core/client.py`, `core/endpoints.py` | **delete** (dead post-SDK shims) | ⬜ not started |
-| `kis_cli/core/token_cache.py` | fold into KIS auth under `brokers/kis` or `config` | ⬜ not started |
+| legacy app storage | `modules/storage/*` | 🟡 partial — read repository and warehouse path helper moved; writer/app DB still planned |
+| legacy app config | `modules/config/*` | ⬜ not started |
+| legacy SDK shims | **delete** | ✅ done |
+| legacy token cache | fold into broker auth or `modules/config` | ⬜ not started |
 
 Remaining migration fronts: **collection orchestration**, **storage write
-migration**, **config migration**, and **job queue migration**. After they land,
-`kis_cli/`, `dashboard/`, and the FastAPI server become **thin transports** that
-only call `modules.orchestration`.
+migration**, **config migration**, and **job queue migration**. `finlabs_cli/`,
+`dashboard/`, and any future FastAPI server should stay thin transports that
+only call SDKs directly where appropriate or route through `modules.orchestration`.
 
 ## For AI Agents
 
@@ -227,7 +227,7 @@ only call `modules.orchestration`.
 - The `asyncio.run` / single-writer constraints from `orchestration/jobs.py` still hold: collection runs on the worker thread, never inside a request coroutine.
 
 ### Common Patterns
-- **Dependency injection over imports**: orchestration receives an adapter from `registry`, and `jobs.py` receives a `runner` + `error_sanitizer` callable (preserve the existing injection design from `kis_cli/server/jobs.py`).
+- **Dependency injection over imports**: orchestration receives an adapter from `registry`, and `jobs.py` receives a `runner` + `error_sanitizer` callable.
 - Ingest flow stays: `start_ingest_run` → body → `record_api_log` → `finish_ingest_run(status=...)`.
 - Capabilities, not exceptions, gate unsupported requests (e.g. KIS supports overseas only) — check `adapter.capabilities` before dispatch.
 

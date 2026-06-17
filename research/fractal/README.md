@@ -73,10 +73,10 @@ fig.show()
 
 FinLabs warehouse 데이터에는 `plot_fractal_events_from_warehouse`를 사용합니다. DuckDB 읽기는 `modules.orchestration.query.load_candles`에 위임하므로 이 모듈은 warehouse SQL을 중복 정의하지 않습니다. 일봉은 `ohlcv_bars`에서, 분봉은 `overseas_minute_bars`에서 읽어 옵니다.
 
-warehouse 파일 경로 해석은 아직 transitional 계층인 `kis_cli.storage.warehouse.default_warehouse_file()`을 사용합니다(추후 `modules` 쪽으로 이전 예정). 읽기 SQL 자체는 이미 `modules` 계층을 통합니다.
+warehouse 파일 경로 해석은 `modules.storage.warehouse.default_warehouse_file()`을 사용합니다. 읽기 SQL 자체는 이미 `modules` 계층을 통합니다.
 
 ```python
-from kis_cli.storage.warehouse import default_warehouse_file
+from modules.storage.warehouse import default_warehouse_file
 from research.fractal import plot_fractal_events_from_warehouse
 
 fig = plot_fractal_events_from_warehouse(

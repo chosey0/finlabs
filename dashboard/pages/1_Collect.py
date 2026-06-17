@@ -10,7 +10,7 @@ ensure_repo_root_on_path()
 import streamlit as st
 
 from dashboard.api_client import JobServerClient
-from kis_cli.server.config import base_url
+from dashboard.config import base_url
 
 st.title("Collect")
 st.caption(f"Job server: {base_url()}")
@@ -21,7 +21,7 @@ if server_up:
     st.success("Job server is reachable.")
 else:
     st.error(
-        "Job server is not reachable. Start it with `python -m kis_cli.server`. "
+        "Job server is not reachable. Start the configured collection service. "
         "You can still browse the Chart and Fractal pages without it."
     )
 

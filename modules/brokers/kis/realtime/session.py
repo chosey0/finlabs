@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 from typing import TYPE_CHECKING
 
+from modules.brokers.kis.exceptions import KisRealtimeError
 from modules.brokers.kis.realtime.connection import RealtimeConnection
 from modules.brokers.kis.realtime.frame import RealtimeFrameProcessor, is_pingpong_frame
 from modules.brokers.kis.realtime.subscription import (
@@ -24,6 +27,10 @@ class RealtimeSession:
         self._connection: RealtimeConnection | None = None
         self._registry = SubscriptionRegistry()
         self._frame_processor = RealtimeFrameProcessor(self._registry)
+        self._pending_control: dict[
+            tuple[str, str], asyncio.Future[None]
+        ] = {}
+        self._active_streams = 0
 
     @property
     def subscriptions(self) -> frozenset[RealtimeSubscription]:
@@ -104,24 +111,31 @@ class RealtimeSession:
         self._registry.discard(target)
 
     async def stream(self):
-        while True:
-            if self._connection is None or not self._connection.is_connected:
-                await self._connect()
-                await self._resubscribe()
-            try:
-                frame = await self._connection.recv()
-            except Exception:
-                logger.warning("realtime websocket disconnected; reconnecting")
-                await self._disconnect()
-                continue
-            if not isinstance(frame, str):
-                logger.warning("ignored non-text realtime websocket frame")
-                continue
-            if is_pingpong_frame(frame):
-                await self._connection.send_text(frame)
-                continue
-            for event in self._frame_processor.process(frame):
-                yield event
+        self._active_streams += 1
+        try:
+            while True:
+                if self._connection is None or not self._connection.is_connected:
+                    await self._connect()
+                    await self._resubscribe()
+                try:
+                    frame = await self._connection.recv()
+                except Exception:
+                    logger.warning("realtime websocket disconnected; reconnecting")
+                    await self._disconnect()
+                    continue
+                if not isinstance(frame, str):
+                    logger.warning("ignored non-text realtime websocket frame")
+                    continue
+                if is_pingpong_frame(frame):
+                    await self._connection.send_text(frame)
+                    continue
+                if frame.lstrip().startswith("{"):
+                    self._handle_control_frame(frame)
+                    continue
+                for event in self._frame_processor.process(frame):
+                    yield event
+        finally:
+            self._active_streams -= 1
 
     async def _connect(self) -> None:
         approval_key = await self._client.ensure_approval_key()
@@ -161,11 +175,88 @@ class RealtimeSession:
         subscription: RealtimeSubscription,
         *,
         tr_type: str,
+        wait_control: bool = True,
     ) -> None:
         if self._connection is None:
             raise RuntimeError("RealtimeSession must be used as an async context manager")
-        await self._connection.send_subscription(subscription, tr_type=tr_type)
+        pending = self._create_pending_control(subscription)
+        try:
+            await self._connection.send_subscription(subscription, tr_type=tr_type)
+            if wait_control and self._active_streams:
+                await self._wait_pending_control(subscription, pending)
+            else:
+                self._discard_pending_control(subscription, pending)
+        except Exception:
+            self._discard_pending_control(subscription, pending)
+            raise
 
     async def _resubscribe(self) -> None:
         for subscription in self._registry.all():
-            await self._send_subscription(subscription, tr_type="1")
+            await self._send_subscription(
+                subscription,
+                tr_type="1",
+                wait_control=False,
+            )
+
+    def _create_pending_control(
+        self, subscription: RealtimeSubscription
+    ) -> asyncio.Future[None]:
+        loop = asyncio.get_running_loop()
+        pending: asyncio.Future[None] = loop.create_future()
+        self._pending_control[(subscription.tr_id, subscription.tr_key)] = pending
+        return pending
+
+    async def _wait_pending_control(
+        self,
+        subscription: RealtimeSubscription,
+        pending: asyncio.Future[None],
+    ) -> None:
+        try:
+            await asyncio.wait_for(pending, timeout=5.0)
+        except TimeoutError as exc:
+            raise KisRealtimeError(
+                "timed out waiting for realtime subscription response"
+            ) from exc
+        finally:
+            self._discard_pending_control(subscription, pending)
+
+    def _discard_pending_control(
+        self,
+        subscription: RealtimeSubscription,
+        pending: asyncio.Future[None],
+    ) -> None:
+        key = (subscription.tr_id, subscription.tr_key)
+        if self._pending_control.get(key) is pending:
+            self._pending_control.pop(key, None)
+
+    def _handle_control_frame(self, frame: str) -> None:
+        try:
+            payload = json.loads(frame)
+        except json.JSONDecodeError:
+            logger.warning("ignored malformed realtime JSON frame")
+            return
+        header = payload.get("header")
+        body = payload.get("body")
+        if not isinstance(header, dict) or not isinstance(body, dict):
+            logger.warning("ignored malformed realtime control frame")
+            return
+        tr_id = str(header.get("tr_id") or "")
+        tr_key = str(header.get("tr_key") or "")
+        msg = str(body.get("msg1") or "")
+        rt_cd = str(body.get("rt_cd") or "")
+        pending = self._pending_control.get((tr_id, tr_key))
+        if _is_control_success(msg=msg, rt_cd=rt_cd):
+            if pending is not None and not pending.done():
+                pending.set_result(None)
+            return
+        if msg:
+            logger.warning("realtime websocket control message: %s", msg)
+        error = KisRealtimeError(msg or "realtime websocket control message failed")
+        if pending is not None and not pending.done():
+            pending.set_exception(error)
+
+
+def _is_control_success(*, msg: str, rt_cd: str) -> bool:
+    if rt_cd and rt_cd != "0":
+        return False
+    return not msg or "SUCCESS" in msg

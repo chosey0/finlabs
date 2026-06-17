@@ -10,7 +10,7 @@ from typing import Any, Literal, cast
 from rich.console import Console
 from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, TimeElapsedColumn
 
-from kis_cli.storage.warehouse import default_warehouse_file
+from modules.storage.warehouse import default_warehouse_file
 
 from .labels import FractalEvent, FractalLabelConfig
 from .plot import (

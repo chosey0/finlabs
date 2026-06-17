@@ -33,7 +33,7 @@ from typing import Iterable, Literal, Sequence
 def find_repo_root(start: Path | None = None) -> Path:
     current = (start or Path.cwd()).resolve()
     for candidate in (current, *current.parents):
-        if (candidate / "kis_cli").is_dir() and (candidate / "research").is_dir():
+        if (candidate / "modules").is_dir() and (candidate / "research").is_dir():
             return candidate
     raise RuntimeError("FinLabs repository root를 찾지 못했습니다.")
 
@@ -58,7 +58,7 @@ except ImportError as exc:  # pragma: no cover - environment dependent
         "먼저 `uv sync --extra tokenizers`를 실행하세요."
     ) from exc
 
-from kis_cli.storage.warehouse import default_warehouse_file  # noqa: E402
+from modules.storage.warehouse import default_warehouse_file  # noqa: E402
 from research.tokenizers.data import CandleBar, filter_by_min_volume, load_candles  # noqa: E402
 from research.tokenizers.model import VQVAE, VQVAEConfig  # noqa: E402
 from research.tokenizers.train import TrainConfig, train  # noqa: E402

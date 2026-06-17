@@ -1,8 +1,7 @@
 # FinLabs CLI Plan
 
-This plan tracks the new `finlabs_cli` application. It assumes `kis_cli` is not
-the target surface and treats broker SDKs as already-existing lower-level
-libraries.
+This plan tracks the `finlabs_cli` application. It treats broker SDKs as
+already-existing lower-level libraries.
 
 ## Goal
 

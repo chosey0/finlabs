@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Literal
 
 from modules.brokers.kis.endpoints.registry import lookup
 from modules.brokers.kis.models.quote import CurrentPrice
+from modules.brokers.kis.overseas.exchange import normalize_overseas_exchange
 from modules.brokers.kis.parsers.rest import output_dict, parse_overseas_current_price
 
 if TYPE_CHECKING:
@@ -44,7 +45,7 @@ class OverseasPriceAPI:
         normalized_symbol = symbol.strip().upper()
         if not normalized_symbol:
             raise ValueError("symbol must not be empty")
-        normalized_exchange = exchange.strip().upper()
+        normalized_exchange = normalize_overseas_exchange(exchange)
         payload = await self._parent.request(
             _SPEC,
             params={

@@ -6,7 +6,7 @@
 
 Core goals:
 
-- Provide the current KIS CLI through `python -m kis_cli` during local development.
+- Provide the current FinLabs CLI through `python -m finlabs_cli` during local development.
 - Authenticate with KIS REST APIs as the first broker integration.
 - Download and normalize KIS symbol masters.
 - Retrieve daily/weekly/monthly/yearly and minute OHLCV data.
@@ -25,8 +25,8 @@ modules/   Layered broker-agnostic core (target architecture):
              orchestration/          use cases + warehouse-agnostic reads
              domain/                 canonical data contracts (no I/O)
              storage/                warehouse read repositories
-kis_cli/   FinLabs KIS CLI app; still hosts legacy/transitional collection,
-             write-storage, config, and job-queue layers (migration in progress)
+finlabs_cli/ FinLabs Typer/Rich CLI for broker SDK account, auth, chart, and
+             realtime workflows
 dashboard/ Streamlit dashboard; thin transport reading via modules.orchestration
 research/  Experimental market representation and tokenizer research
 tests/     Focused unit tests
@@ -44,7 +44,6 @@ For detailed guidelines, see the AGENTS.md in each directory:
 |-----------|-----------|
 | `modules/` | [modules/AGENTS.md](modules/AGENTS.md) |
 | `modules/brokers/kis/` | [modules/brokers/kis/AGENTS.md](modules/brokers/kis/AGENTS.md) |
-| `kis_cli/` | [kis_cli/AGENTS.md](kis_cli/AGENTS.md) |
 | `research/` | [research/AGENTS.md](research/AGENTS.md) |
 | `tests/` | [tests/AGENTS.md](tests/AGENTS.md) |
 | `exports/` | [exports/AGENTS.md](exports/AGENTS.md) |
@@ -65,15 +64,13 @@ New core code follows the layered stack in [modules/AGENTS.md](modules/AGENTS.md
 
 Dependencies point downward only and broker-specific knowledge (market codes, intervals, auth quirks) lives only in the adapter. Forbidden cross-layer edges are enforced by `tests/architecture/test_boundaries.py`.
 
-### Transitional layers (`kis_cli/`)
+### CLI application (`finlabs_cli/`)
 
-`kis_cli/services`, `kis_cli/core`, and `kis_cli/storage` are **legacy/transitional**: collection orchestration, warehouse writes, config, and the job queue still live here while the migration into `modules/` is in progress. Do not treat them as the target home for new logic.
+`finlabs_cli/` is the interactive Typer/Rich application. It should stay a thin
+transport over broker SDKs and future `modules.orchestration` use cases.
 
-- Keep CLI files thin; delegate to `services/` today, and prefer moving new use cases into `modules/orchestration` rather than growing `services/`.
-- Database schema, writes, and duplicate prevention currently live in `kis_cli/storage/`; warehouse **reads** have already moved to `modules/storage` + `modules/orchestration/query`.
-- Keep path resolution in `kis_cli/config/paths.py`, not `utils/` (config migration to `modules/config` is planned, not done).
 - Use Typer for CLI commands; do not add raw `argparse` commands.
-- A second broker (Kiwoom) is planned, so keep broker-specific code behind the adapter boundary rather than hard-coding KIS assumptions in shared layers.
+- Keep broker-specific code behind the SDK/adapter boundary rather than hard-coding broker assumptions in shared layers.
 - Never store credentials, tokens, logs, database files, raw market dumps, or private configs in package source.
 
 ## CLI Contract
@@ -81,37 +78,30 @@ Dependencies point downward only and broker-specific knowledge (market codes, in
 Local CLI invocation is:
 
 ```bash
-python -m kis_cli
+python -m finlabs_cli
 ```
 
 Implemented sub-apps:
 
 ```text
-config  auth  db  symbols  chart  query  logs
+accounts  auth  chart  realtime
 ```
 
 Implemented commands include:
 
 ```bash
-python -m kis_cli config init|add|update|delete|validate
-python -m kis_cli auth test|status|clear
-python -m kis_cli db init|schema|counts
-python -m kis_cli symbols download --market NASDAQ
-python -m kis_cli symbols search --query apple
-python -m kis_cli chart daily --symbol AAPL --start 2025-01-01 --end 2025-12-31 --save
-python -m kis_cli chart minutes --symbol AAPL --interval-minutes 1
-python -m kis_cli query ohlcv --symbol AAPL --limit 10
-python -m kis_cli query minutes --symbol AAPL --interval-minutes 1
-python -m kis_cli logs runs
-python -m kis_cli logs api
+python -m finlabs_cli accounts list
+python -m finlabs_cli accounts register
+python -m finlabs_cli auth status
+python -m finlabs_cli auth refresh --alias kiwoom-main
+python -m finlabs_cli chart domestic --alias kiwoom-main --symbol 005930 --interval daily
+python -m finlabs_cli realtime run --alias kiwoom-main
 ```
 
 Planned only; do not document as available unless implemented:
 
 ```bash
-python -m kis_cli price current --symbol AAPL --market NASDAQ
-python -m kis_cli stream trades --symbol AAPL --market NAS
-python -m kis_cli stream quotes --symbol AAPL --market NAS
+python -m finlabs_cli realtime monitor
 ```
 
 ## Storage Rules
@@ -154,12 +144,10 @@ Use OS-appropriate user directories via `platformdirs` or equivalent.
 Recommended defaults:
 
 ```text
-Config: ~/.config/kis-cli/config.yaml
-Data:   ~/.local/share/kis-cli/
-Cache:  ~/.cache/kis-cli/
-Logs:   ~/.local/state/kis-cli/logs/
-
-These paths currently keep the legacy `kis-cli` app name for local data compatibility.
+Config: ~/.config/finlabs-cli/
+Data:   ~/.local/share/finlabs/
+Cache:  ~/.cache/finlabs-cli/
+Logs:   ~/.local/state/finlabs/
 ```
 
 Never commit secrets, account numbers, access/refresh tokens, local DB files, logs, raw market data, or private config files. Mask secrets in all CLI output and logs.
@@ -170,7 +158,7 @@ Prefer `uv`:
 
 ```bash
 uv sync
-uv run python -m kis_cli --help
+uv run python -m finlabs_cli --help
 uv run python -m pytest
 uv run ruff check .
 ```
@@ -193,14 +181,14 @@ When adding a command, manually verify at least one success path and one failure
 
 ## Project Metadata Rules
 
-`pyproject.toml` is kept for dependency metadata only. Local CLI execution uses `python -m kis_cli`.
+`pyproject.toml` is kept for dependency metadata only. Local CLI execution uses `python -m finlabs_cli`.
 
 Do not add package build configuration, console-script entry points, or build artifacts unless packaging is explicitly requested again.
 
 ## Documentation Rules
 
 - Keep `README.md` practical: install, configure, initialize DB, core commands, examples, development commands.
-- Use `python -m kis_cli` for local CLI examples in docs.
+- Use `python -m finlabs_cli` for local CLI examples in docs.
 - Only document implemented commands as available.
 - Clearly mark unfinished features as planned.
 - Do not include real secrets, account numbers, or private paths.

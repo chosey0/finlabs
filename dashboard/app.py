@@ -17,7 +17,7 @@ ensure_repo_root_on_path()
 
 import streamlit as st
 
-from kis_cli.server.config import base_url
+from dashboard.config import base_url
 
 st.set_page_config(page_title="finlabs dashboard", layout="wide")
 
@@ -27,18 +27,13 @@ st.markdown(
     """
 This dashboard has two data paths:
 
-- **Collect** sends on-demand collection jobs to the localhost **job server**
-  (`{server}`), which holds your KIS credentials and writes to the DuckDB
-  warehouse through a single worker.
+- **Collect** sends on-demand collection jobs to a configured **job server**
+  (`{server}`), when one is running.
 - **Chart** and **Fractal** read the warehouse **directly** (read-only, with
-  lock-aware retries) and never touch the job server.
+  lock-aware retries) and do not require the job server.
 
-### Running the two processes
+### Running the dashboard
 ```bash
-# 1) start the job server (owns KIS credentials)
-python -m kis_cli.server
-
-# 2) start this dashboard
 streamlit run dashboard/app.py
 ```
 Use the sidebar to open the **Collect**, **Chart**, and **Fractal** pages.

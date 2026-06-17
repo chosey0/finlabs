@@ -14,7 +14,7 @@ databases; they never call a real brokerage API or touch user data directories.
 | `architecture/` | Cross-package dependency and transport-boundary guards |
 | `brokers/kis/` | Pure KIS SDK surface, parser, facade, and realtime tests |
 | `brokers/toss/` | Pure Toss SDK tests |
-| `applications/kis_cli/` | KIS CLI, service, server, and transitional storage tests |
+| `applications/finlabs_cli/` | FinLabs CLI account, auth, chart, and realtime command tests |
 | `applications/dashboard/` | Dashboard transport and retry behavior |
 | `research/fractal/` | Fractal research implementation tests |
 | `research/tokenizers/` | Tokenizer research implementation tests |
@@ -56,7 +56,7 @@ architecture and integration tests belong directly under shared central areas.
 ### Internal
 
 - `modules`: layered core and broker SDKs
-- `kis_cli`: transitional CLI, services, storage, and server
+- `finlabs_cli`: broker SDK operation CLI
 - `dashboard`, `research`: application and experimental consumers
 
 ### External

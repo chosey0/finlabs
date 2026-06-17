@@ -8,7 +8,7 @@ from rich.table import Table
 
 from finlabs_cli.app.token_store import JsonTokenStore
 from finlabs_cli.models.account import Account
-from finlabs_cli.models.realtime import ActiveSubscription
+from finlabs_cli.models.realtime import ActiveSubscription, RealtimeSubscriptionStatus
 
 
 def accounts_table(accounts: Sequence[Account]) -> Table:
@@ -103,6 +103,27 @@ def subscriptions_table(subscriptions: Sequence[ActiveSubscription]) -> Table:
             item.symbol,
             item.tr_id,
             item.tr_key,
+        )
+    return table
+
+
+def realtime_status_table(statuses: Sequence[RealtimeSubscriptionStatus]) -> Table:
+    table = Table(title="Realtime Subscriptions")
+    table.add_column("Account")
+    table.add_column("Symbol")
+    table.add_column("Market")
+    table.add_column("TR ID")
+    table.add_column("Received Timestamp(exchange_ts)")
+    table.add_column("Received", justify="right")
+    for item in statuses:
+        subscription = item.subscription
+        table.add_row(
+            subscription.account_alias,
+            subscription.symbol,
+            subscription.market,
+            subscription.tr_id,
+            item.exchange_ts,
+            str(item.received),
         )
     return table
 

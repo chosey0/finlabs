@@ -57,24 +57,31 @@ def test_list_available_series_missing_warehouse_returns_empty(tmp_path) -> None
 def test_weekly_and_monthly_series_are_readable(tmp_path) -> None:
     # Regression: Collect offers 1w/1mo, so reads of those intervals must work
     # (previously load_candles only matched 1d and crashed the Chart page).
-    from kis_cli.storage import connect, init_database
-    from kis_cli.storage.repositories import insert_ohlcv_bar
-
     db_path = tmp_path / "wh.duckdb"
-    init_database(db_path)
-    with connect(db_path) as connection:
+    with duckdb.connect(str(db_path)) as connection:
+        connection.execute(
+            """
+            CREATE TABLE ohlcv_bars (
+                market TEXT NOT NULL,
+                symbol TEXT NOT NULL,
+                interval TEXT NOT NULL,
+                timestamp TEXT NOT NULL,
+                open DOUBLE NOT NULL,
+                high DOUBLE NOT NULL,
+                low DOUBLE NOT NULL,
+                close DOUBLE NOT NULL,
+                volume BIGINT NOT NULL
+            )
+            """
+        )
         for interval, ts in (("1w", "2024-01-01"), ("1mo", "2024-01-31"), ("1d", "2024-02-01")):
-            insert_ohlcv_bar(
-                connection,
-                market="NASDAQ",
-                symbol="NVDA",
-                interval=interval,
-                timestamp=ts,
-                open=1.0,
-                high=2.0,
-                low=0.5,
-                close=1.5,
-                volume=100,
+            connection.execute(
+                """
+                INSERT INTO ohlcv_bars
+                    (market, symbol, interval, timestamp, open, high, low, close, volume)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                ["NASDAQ", "NVDA", interval, ts, 1.0, 2.0, 0.5, 1.5, 100],
             )
 
     series = reader.list_available_series(db_path)

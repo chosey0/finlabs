@@ -21,7 +21,7 @@
 
 이 패키지는 broker SDK 계층입니다. DuckDB/SQLite 저장, CLI, 설정 파일,
 대시보드, canonical domain model 변환은 담당하지 않습니다. 그런 작업은
-상위 `modules.adapters` / `modules.orchestration` / `kis_cli` 계층에서
+상위 `modules.adapters` / `modules.orchestration` / `finlabs_cli` 계층에서
 처리합니다.
 
 공식 문서:

@@ -388,7 +388,7 @@ def _parse_fixed_width(content: str, spec: DomesticMasterSpec) -> dict[str, str]
 def _download_zip(url: str, *, timeout_seconds: float) -> bytes:
     response = httpx.get(
         url,
-        headers={"User-Agent": "kis-cli/0.1.0"},
+        headers={"User-Agent": "finlabs-kis-sdk/0.1.0"},
         timeout=timeout_seconds,
         follow_redirects=True,
     )

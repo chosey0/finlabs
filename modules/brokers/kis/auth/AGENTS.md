@@ -20,7 +20,7 @@ Handles KIS REST OAuth token issuance, WebSocket approval key retrieval, and tok
 - Add new cache backends as separate classes implementing the `TokenCache` protocol (`get`/`set`/`delete`). Do not subclass `MemoryTokenCache`.
 - `TokenRecord` is frozen — to refresh an expiry, discard the existing record and issue a new one via `set()`.
 - Never log raw `app_key`, `app_secret`, `access_token`, or `approval_key`. All outgoing messages must pass through `mask_sensitive_message()`.
-- The SDK does not enforce token refresh margins — that is the caller's responsibility (the transitional `kis_cli.core.token_cache.TOKEN_REFRESH_MARGIN` = 5 min; this is slated to fold into KIS auth or `modules/config`).
+- The SDK does not enforce token refresh margins — that is the caller's responsibility.
 - The synchronous (`issue_access_token`) and async (`issue_access_token_async`) APIs return identical payloads — modifying one without the other will cause a regression.
 
 ### Testing Requirements

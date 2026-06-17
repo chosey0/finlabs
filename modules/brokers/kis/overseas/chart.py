@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any, Literal
 from modules.brokers.kis._internal.pacing import ContinuationPacer, call_with_continuation_pacing
 from modules.brokers.kis.endpoints.registry import lookup
 from modules.brokers.kis.models.ohlcv import OhlcvBar, OverseasMinuteBar
+from modules.brokers.kis.overseas.exchange import normalize_overseas_exchange
 from modules.brokers.kis.parsers.rest import (
     date_value,
     format_date,
@@ -75,7 +76,7 @@ class OverseasChartAPI:
         normalized_symbol = symbol.strip().upper()
         if not normalized_symbol:
             raise ValueError("symbol must not be empty")
-        normalized_exchange = exchange.strip().upper()
+        normalized_exchange = normalize_overseas_exchange(exchange)
         market_label = market or normalized_exchange
         start_date = _coerce_date(start)
         end_date = _coerce_date(end)
@@ -163,7 +164,7 @@ class OverseasChartAPI:
         normalized_symbol = symbol.strip().upper()
         if not normalized_symbol:
             raise ValueError("symbol must not be empty")
-        normalized_exchange = exchange.strip().upper()
+        normalized_exchange = normalize_overseas_exchange(exchange)
         market_label = market or normalized_exchange
         start_at = (
             start if isinstance(start, datetime) else parse_minute_datetime(start)

@@ -4,7 +4,7 @@ These are cheap text/import assertions, not behavioural tests, but they guard th
 two structural invariants the design depends on:
 
 - AC8: dashboard read pages must not import the FastAPI HTTP client.
-- library-first: the job core (jobs.py) must not import FastAPI.
+- removed legacy app: runtime Python code must not import the deleted CLI package.
 """
 
 from __future__ import annotations
@@ -39,22 +39,20 @@ def test_read_pages_do_not_import_api_client() -> None:
         )
 
 
-def test_job_core_is_fastapi_free() -> None:
-    modules = _imported_modules("kis_cli/server/jobs.py")
-    assert not any(m == "fastapi" or m.startswith("fastapi.") for m in modules), (
-        "jobs.py must stay transport-agnostic (no FastAPI)"
-    )
-
-
-def test_job_core_does_not_import_services() -> None:
-    modules = _imported_modules("kis_cli/server/jobs.py")
-    assert not any(m.startswith("kis_cli.services") for m in modules), (
-        "jobs.py must stay service-agnostic"
-    )
-
-
 def _python_files(relative_dir: str) -> tuple[Path, ...]:
     return tuple(sorted((REPO_ROOT / relative_dir).rglob("*.py")))
+
+
+def test_runtime_code_does_not_import_removed_cli_package() -> None:
+    removed_package = "kis" + "_cli"
+    for relative_dir in ("dashboard", "finlabs_cli", "modules", "research"):
+        for path in _python_files(relative_dir):
+            modules = _imported_modules(str(path.relative_to(REPO_ROOT)))
+            assert not any(
+                m == removed_package or m.startswith(f"{removed_package}.") for m in modules
+            ), (
+                f"{path} must not import the removed CLI package"
+            )
 
 
 def test_modules_broker_sdks_stay_standalone() -> None:
