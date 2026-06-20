@@ -7,7 +7,7 @@
 [![Python](https://img.shields.io/badge/Python_3.12+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![DuckDB](https://img.shields.io/badge/DuckDB-FFF000?style=for-the-badge&logo=duckdb&logoColor=black)](https://duckdb.org/)
 [![Typer](https://img.shields.io/badge/Typer-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://typer.tiangolo.com/)
-[![Tests](https://img.shields.io/badge/Tests-25_Passing-00C853?style=for-the-badge&logo=pytest&logoColor=white)](./tests/)
+[![Tests](https://img.shields.io/badge/Tests-Passing-00C853?style=for-the-badge&logo=pytest&logoColor=white)](./tests/)
 
 Investing.com, 이데일리, 이투데이, 한국경제, 서울경제, 뉴스핌 RSS를 하나의 표준 모델로 정규화하고 **멱등하게 수집·저장·분석**합니다.
 
@@ -23,7 +23,7 @@ Investing.com, 이데일리, 이투데이, 한국경제, 서울경제, 뉴스핌
 
 핵심 아이디어는 단순 감성 분석이 아니라 **과거 급등 직전 뉴스 패턴과의 유사도(Contrastive Vector Similarity)**입니다. "좋은 뉴스인가?"가 아니라 "과거 급등 직전 뉴스와 얼마나 비슷한가? 급등하지 않은 유사 뉴스와는 얼마나 다른가?"를 판단하고, 여기에 거래대금·변동성·테마 확산·시장 국면 등 **Market Context features**를 결합해 학습 모델(LightGBM)로 점수화합니다. 뉴스 설계는 [뉴스 모듈 PLAN](./PLAN.md), 전체 데이터 플랫폼과 구현 순서는 [통합 PLAN](../../PLAN.md)에 정리되어 있습니다.
 
-현재 구현된 범위는 그 기반이 되는 데이터 수집 파이프라인입니다. 언론사마다 다른 RSS 필드를 표준 스키마로 변환하고, 기사 URL 기반의 결정적 ID와 DuckDB 제약 조건으로 중복 저장을 방지합니다. 파이프라인은 RSS 메타데이터 수집, 기사 본문 수집, 기초 분석 단계로 분리되며, 이 중 **본문 직접 수집은 언론사 이용약관에 따라 비활성화**되어 있고 네이버 뉴스 검색 API 연동으로 대체할 예정입니다. 각 단계는 다시 실행해도 이미 처리한 항목을 건너뛰며, 성공·실패 상태와 처리 건수를 `pipeline_runs`에 기록합니다.
+현재 구현된 범위는 그 기반이 되는 데이터 수집 파이프라인과 재사용 가능한 네이버 뉴스 검색 클라이언트입니다. 언론사마다 다른 RSS 필드를 표준 스키마로 변환하고, 기사 URL 기반의 결정적 ID와 DuckDB 제약 조건으로 중복 저장을 방지합니다. **본문 직접 수집은 언론사 이용약관에 따라 비활성화**되어 있습니다. 네이버 연동은 현재 키워드와 날짜로 제목·요약·링크·발행시각을 조회하는 독립 모듈까지 구현됐으며, 파이프라인 저장과 과거 백필 실행기는 아직 연결되지 않았습니다.
 
 ---
 
@@ -32,10 +32,11 @@ Investing.com, 이데일리, 이투데이, 한국경제, 서울경제, 뉴스핌
 | | 기능 | 설명 |
 |---|------|------|
 | **[RSS 수집]** | 언론사별 파서 | 6개 매체의 전체·카테고리 RSS를 공통 `CanonicalRssEntry`로 변환 |
+| **[네이버 검색]** | 키워드·날짜 검색 API | 지정 날짜의 제목·요약·링크·발행시각을 완전성 검증과 함께 반환하는 재사용 모듈 |
 | **[카테고리]** | 출처별 분리 저장 | 매체 도메인, 피드 카테고리, XML 원문 카테고리를 구분해 보존 |
 | **[중복 방지]** | 결정적 기사 ID | 기사 URL의 SHA-256 해시와 데이터베이스 제약으로 중복 적재 방지 |
 | **[진행 표시]** | 수집 진행바·집계 | `collect-rss` 실행 중 소스별 진행바를 표시하고 완료 후 언론사·카테고리별 수집 결과를 표로 출력 |
-| **[본문 수집]** | 비활성화 (이용약관) | 언론사 페이지 직접 수집은 약관 위배로 중단. 코드·선택자 registry는 보존, 네이버 뉴스 API 전환 예정 |
+| **[본문 수집]** | 비활성화 (이용약관) | 언론사 페이지 직접 수집은 약관 위배로 중단. 네이버 API는 기사 전문이 아닌 제목·요약만 제공 |
 | **[오류 격리]** | 기사 단위 실패 격리 | 차단·삭제된 기사 한 건의 실패가 배치를 중단시키지 않고 다음 실행에서 재시도 |
 | **[본문 재처리]** | Parser 버전 추적 | 언론사 parser 버전이 바뀌면 기존 기사 본문을 자동으로 다시 수집 |
 | **[기초 분석]** | 본문 통계 | 분석기 버전과 본문 해시를 기준으로 문자 수·단어 수 계산 |
@@ -62,7 +63,7 @@ collect-rss
 rss_items
     │
     ▼
-collect-articles (비활성화 — 이용약관, 네이버 뉴스 API 전환 예정)
+collect-articles (비활성화 — 이용약관)
     │  publisher parser → cleaned text → content hash + parser version
     ▼
 articles
@@ -112,7 +113,8 @@ article_analyses
 > 행위는 언론사 이용약관(데이터 크롤링 금지 조항)에 위배되어 모든 매체의
 > 본문 직접 수집(`collect-articles`)을 비활성화했습니다. 본문·요약 확보는
 > [네이버 뉴스 검색 API](https://developers.naver.com/docs/serviceapi/search/news/news.md)만
-> 사용할 예정입니다 (빅카인즈는 유료 전환으로 제외). 상세 정책은
+> 사용합니다 (빅카인즈는 유료 전환으로 제외). 현재 구현은 검색 결과
+> 메타데이터 조회 모듈이며 파이프라인 저장·백필 연결은 후속 범위입니다. 상세 정책은
 > [PLAN.md 4.4절](./PLAN.md)을 참고하세요.
 
 기본 소스는 총 63개이며 `collect-rss` 실행 시 전체 피드와 제공된 카테고리별 피드를 함께 수집합니다. 매체별 구성은 Investing.com 16개, 이데일리 1개, 이투데이 11개, 한국경제 12개, 서울경제 12개, 뉴스핌 11개입니다. URL과 카테고리 설정의 기준은 [`pipeline.py`](./pipeline.py)의 `DEFAULT_FEED_SOURCES`입니다.
@@ -172,7 +174,7 @@ uv run --group news python -m modules.news.main update-symbols
 uv run --group news python -m modules.news.main collect-rss
 
 # (비활성화) 본문 직접 수집 — 언론사 이용약관 위배로 실행이 차단됨
-# 본문·요약 확보는 네이버 뉴스 검색 API 연동으로 대체 예정 (PLAN.md 4.4절)
+# 제목·요약 검색은 아래의 독립 Naver API 모듈을 사용 (PLAN.md 4.4절)
 # uv run --group news python -m modules.news.main collect-articles --limit 100
 
 # 아직 현재 버전으로 분석되지 않은 기사 분석
@@ -183,6 +185,45 @@ uv run --group news python -m modules.news.main extract-entities --limit 100
 ```
 
 명령은 필요한 스키마를 자동으로 생성합니다. 기본 데이터베이스는 `modules/news/db/news.db`이며 Git에서 제외됩니다.
+
+### 네이버 뉴스 검색 API
+
+네이버 개발자 센터에서 애플리케이션을 등록하고 검색 API 사용 권한을 활성화해야 합니다. 클라이언트는 환경 변수를 직접 읽지 않으므로 자격증명을 호출 측에서 주입합니다.
+
+```python
+import os
+from datetime import date
+
+from modules.news.naver import NaverNewsClient
+
+
+with NaverNewsClient(
+    client_id=os.environ["NAVER_CLIENT_ID"],
+    client_secret=os.environ["NAVER_CLIENT_SECRET"],
+) as client:
+    articles = client.search("삼성전자", date(2026, 6, 18))
+
+for article in articles:
+    print(article.published_at, article.title, article.canonical_url)
+```
+
+`search()`는 불변 `NaverNewsArticle` 튜플을 최신 발행순으로 반환합니다. 제목과 요약의 HTML entity 및 `<b>` 강조 태그는 제거되며, 동일 canonical URL은 결정적으로 하나만 유지됩니다. 날짜 비교는 네이버가 반환한 `pubDate`의 원래 UTC offset을 보존한 상태에서 수행합니다.
+
+네이버 API는 검색 결과를 최대 `start=1000`까지만 제공합니다. 지정 날짜의 전체 결과를 확인할 수 없거나 응답의 `total`과 페이지 길이가 모순되면 부분 결과를 반환하지 않고 각각 `NaverNewsIncompleteSearchError` 또는 `NaverNewsMalformedResponseError`를 발생시킵니다. 429와 5xx 및 네트워크 오류는 기본 3회까지 제한적으로 재시도합니다.
+
+공개 오류는 모두 `NaverNewsError`를 상속합니다.
+
+| 오류 | 의미 |
+|------|------|
+| `NaverNewsValidationError` | 빈 키워드, 잘못된 날짜 또는 잘못된 클라이언트 설정 |
+| `NaverNewsAuthenticationError` | 자격증명 누락 또는 인증 실패 |
+| `NaverNewsPermissionError` | 애플리케이션의 검색 API 권한 부족 |
+| `NaverNewsRateLimitError` | 재시도 후에도 호출 한도 초과 |
+| `NaverNewsUpstreamError` | 네트워크 또는 네이버 서버 오류 |
+| `NaverNewsMalformedResponseError` | 응답 구조·페이지 메타데이터 불일치 |
+| `NaverNewsIncompleteSearchError` | API 페이지 한계로 완전한 날짜 결과를 보장할 수 없음 |
+
+테스트에서는 `HttpTransport` Protocol을 구현한 가짜 transport를 주입할 수 있습니다. 주입한 transport의 생명주기는 호출자가 관리합니다.
 
 ### 데이터베이스 경로 지정
 
@@ -246,6 +287,10 @@ uv run --group news python -m modules.news.main collect-rss \
 ```text
 modules/news/
 ├── main.py                    Typer CLI와 DB별 단일 writer 실행 경계
+├── naver/
+│   ├── client.py              키워드·날짜 검색, 페이지네이션, 재시도와 HTTP 경계
+│   ├── errors.py              공개 타입 오류 계층
+│   └── models.py              불변 검색 결과 모델
 ├── pipeline.py                RSS·본문·분석 단계와 실행 이력 조율
 ├── articles/
 │   └── parsers.py             언론사별 본문 선택자와 parser 버전 registry
@@ -270,6 +315,7 @@ modules/news/
 ├── tests/
 │   ├── test_article_parsers.py  언론사별 본문 선택자 회귀 테스트
 │   ├── test_entity_extraction.py  entity 추출·이벤트 taxonomy 회귀 테스트
+│   ├── test_naver_news.py     네이버 검색·완전성·재시도 회귀 테스트
 │   ├── test_rss_pipeline.py   파서·CRUD·멱등성·마이그레이션 회귀 테스트
 │   └── test_symbols.py        종목 마스터 스냅샷 갱신 회귀 테스트
 ├── symbols.py                 KIS 다운로드와 뉴스 DB 동기화
@@ -328,7 +374,7 @@ uv run ruff check modules/news
 
 ## Current Scope
 
-`collect-articles`(언론사 페이지 본문 직접 수집)는 언론사 이용약관 위배로 **비활성화**되어 실행 시 안내 메시지와 함께 종료됩니다. 언론사별 본문 선택자 registry, parser 버전 기반 재처리, 기사 단위 오류 격리 코드는 네이버 뉴스 검색 API 연동 시 재사용을 위해 보존되어 있습니다. 원문 HTML은 저장하지 않는 정책도 유지됩니다.
+`collect-articles`(언론사 페이지 본문 직접 수집)는 언론사 이용약관 위배로 **비활성화**되어 실행 시 안내 메시지와 함께 종료됩니다. 네이버 검색 클라이언트는 독립 공개 API로 구현됐지만 CLI, DuckDB 저장, 백필 체크포인트에는 아직 연결되지 않았습니다. 네이버 API는 기사 전문을 제공하지 않으므로 이후 분석 입력은 제목과 요약을 기준으로 구성합니다.
 
 `analyze` 단계는 `basic-stats-v1` 분석기로 문자 수와 공백 기준 단어 수만 계산합니다. `extract-entities` 단계는 종목 마스터와 소규모 별칭 시드(삼전, 하이닉스, 네이버)로 종목 entity만 추출하며, 기업·산업·키워드 entity는 아직 추출하지 않습니다. 급등 이벤트의 계약·KIS/Toss 정규화·판정·저장은 각각 `modules.domain`, `modules.adapters`, `modules.orchestration`, `modules.storage`가 소유하며, 이 모듈은 해당 `(종목, 급등일)`을 뉴스 검색과 사례 라이브러리에 연결합니다. 이벤트 분류는 16종 taxonomy와 `ArticleEvent` DTO까지 구현되어 있고 LLM 호출 파이프라인은 미구현입니다. 전면적인 별칭 사전 구축, 과거 뉴스 백필, 임베딩·Vector Store, 점수화, 백테스트, 대시보드는 아래 로드맵의 대상입니다.
 
@@ -344,7 +390,8 @@ uv run ruff check modules/news
 | | KIS 종목 마스터 자동 갱신 | ✅ 구현됨 |
 | | 종목 마스터 기반 entity 추출, 이벤트 taxonomy·분류 DTO | ✅ 구현됨 |
 | | 공통 시장 계층의 KIS/Toss 일봉 기반 과거 급등 이벤트 추출 | ✅ 구현됨 |
-| | 네이버 뉴스 검색 API 연동 (본문·요약 확보 단일 경로), 별칭 사전 확장, 과거 뉴스 백필, Streamlit 기본 조회 | 예정 |
+| | 네이버 뉴스 검색 클라이언트 | ✅ 구현됨 |
+| | 네이버 검색 결과 저장·과거 뉴스 백필, 별칭 사전 확장, Streamlit 기본 조회 | 예정 |
 | **중기** (1~2개월) | 임베딩 모델 비교·선정, Vector Store(DuckDB VSS, point-in-time 필터), 급등/비급등 사례 라이브러리, LLM 이벤트 분류(taxonomy 기반), Market Context features, Entity 추출, Contrastive Similarity, 콘텐츠 기반 중복 제거 | 예정 |
 | **후기** (2~3개월) | 학습 기반 점수화(LightGBM), "뉴스 단독 vs 뉴스+시장" 비교 실험, 백테스트 엔진(체결 가능성·비용·베이스라인), 감성 분석(KR-FinBERT), RAG 설명 + 인용 강제, Dashboard 고도화 | 예정 |
 | **확장** (장기) | Qdrant 이전 검토, 뉴스 토큰 + 캔들 토큰 멀티모달 예측 연구 | 예정 |

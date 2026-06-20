@@ -544,7 +544,7 @@ market_return_5d, market_volatility, adr, limit_up_count
 - Qdrant 이전 검토
 - FinLabs 캔들 토큰화 연구와 결합 → **뉴스 토큰 + 캔들 토큰 멀티모달 예측** (논문 주제 후보)
 
-### 12.1 현재 구현 상태 (2026-06-13)
+### 12.1 현재 구현 상태 (2026-06-19)
 
 최근 변경사항과 현재 코드를 기준으로 로드맵 진행 상태를 다음처럼 판정한다.
 
@@ -556,7 +556,7 @@ market_return_5d, market_volatility, adr, limit_up_count
 | 이벤트 taxonomy | **계약만 구현** | `schema/event.py:12`의 16종 taxonomy와 DTO는 있으나 `article_events` 테이블, LLM 호출, 재시도·버전별 재분류는 없음 |
 | 기사 본문 직접 수집 금지 | **정책 회귀 발견** | PLAN 4.4절은 CLI 차단을 요구하지만 현재 `main.py:279`가 언론사 페이지 직접 수집 흐름을 다시 실행함 |
 | PostgreSQL `news` 스키마 | **미구현** | 현재 영속 테이블은 `db/init.py:77` 이하 DuckDB 스키마이며 루트 PLAN 단계 4의 PostgreSQL 전환 전 상태 |
-| 네이버 뉴스 검색 API와 과거 백필 | **미구현** | API client, 검색 쿼리, 호출량 제한, 체크포인트, 백필 실행 이력이 없음 |
+| 네이버 뉴스 검색 API와 과거 백필 | **부분 구현** | `naver/`에 키워드·날짜 검색 client, 원본 offset 날짜 필터, 페이지 완전성 검증, 제한 재시도와 타입 오류를 구현. 저장 repository, 호출량 예산, 체크포인트와 백필 실행기는 아직 없음 |
 | 급등 이벤트 추출과 사례 라이브러리 | **부분 구현** | 공통 `domain/adapters/orchestration/storage` 계층에 KIS/Toss 정규화, 거래대금 100억·1일/3거래일 +10% 판정, `surge_events` 저장 구현. 뉴스 연결과 positive/negative library는 미구현 |
 | Streamlit 기본 조회 | **미구현** | 뉴스 수집 상태·기사·Entity를 조회하는 화면이 없음 |
 
@@ -590,15 +590,18 @@ market_return_5d, market_volatility, adr, limit_up_count
 
 #### P2. 네이버 뉴스 검색 API 수집 경로 구현
 
-- 제목, `description`, 원문 링크, 발행시각을 canonical article 입력으로 변환한다.
+- **완료**: 제목, `description`, 원문 링크, 네이버 링크, timezone-aware 발행시각을 불변 `NaverNewsArticle`로 변환한다.
+- **완료**: 키워드와 단일 날짜를 입력받아 원본 `pubDate` offset 기준으로 필터링하고, `start=1000` 한계까지 결과 완전성을 검증한다. 완전성을 보장할 수 없으면 부분 결과 대신 타입 오류를 반환한다.
+- **완료**: 429·5xx·네트워크 오류의 제한 재시도, injectable transport와 sleep, 인증·권한·한도·상류·응답 오류 계층을 제공한다.
+- **남음**: 검색 결과를 canonical article 저장 입력과 파이프라인 실행 이력에 연결한다.
 - 전문이 제공되지 않는 계약에 맞춰 Entity·이벤트 분류 입력을 `제목 + 요약`으로 고정한다.
 - API 인증값은 환경 또는 공통 config에서 주입하고 로그·실행 이력에는 남기지 않는다.
-- 페이지네이션, 일 25,000건 한도, 오류 재시도, 중단 후 재개 체크포인트를 구현한다.
+- 일 25,000건 호출 예산과 중단 후 재개 체크포인트를 구현한다.
 
 **완료 기준**:
-- mocked API 응답으로 정상 수집, 빈 결과, 429/5xx 재시도, 잘못된 응답을 검증한다.
+- **완료**: mocked API 응답으로 정상 검색, 빈 결과, 페이지 한계, 혼합 offset, 429/5xx 재시도, 잘못된 응답을 검증한다.
 - 같은 검색 구간을 재실행해도 기사와 실행 체크포인트가 중복되지 않는다.
-- API 수집 경로는 언론사 페이지 HTML을 요청하지 않는다.
+- **완료**: API 검색 경로는 네이버 JSON endpoint만 호출하고 언론사 페이지 HTML을 요청하지 않는다.
 
 #### P3. 시점 보존 종목 마스터와 별칭 사전 확장
 

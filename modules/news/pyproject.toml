@@ -30,6 +30,7 @@ only-include = [
     "db",
     "entities.py",
     "main.py",
+    "naver",
     "pipeline.py",
     "rss",
     "schema",

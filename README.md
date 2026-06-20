@@ -11,7 +11,7 @@
 
 한국투자증권 해외주식 데이터와 RSS 뉴스를 **수집·정규화·저장·조회·분석**하는 Python 프로젝트입니다.
 
-[통합 계획서](./PLAN.md) · [FinLabs CLI](./finlabs_cli/README.md) · [KIS SDK](./modules/brokers/kis/README.md) · [Toss SDK](./modules/brokers/toss/README.md) · [News Pipeline](./modules/news/README.md) · [Research](./research/README.md)
+[통합 계획서](./PLAN.md) · [FinLabs CLI](./finlabs_cli/README.md) · [KIS SDK](./modules/brokers/kis/README.md) · [Toss SDK](./modules/brokers/toss/README.md) · [News Pipeline](./modules/news/README.md) · [News Intelligence 설계](./finlabs_intelligence/README.md) · [Research](./research/README.md)
 
 </div>
 
@@ -21,11 +21,11 @@
 
 FinLabs는 증권사 Open API를 독립적인 Python SDK로 구현하고, 그 위에 시장 데이터 수집 CLI, 저장소, 대시보드, 뉴스 파이프라인과 연구 도구를 확장하는 오픈소스 개발자 도구 프로젝트입니다.
 
-현재 중심은 증권사별 SDK와 이를 조작하는 `finlabs_cli`입니다. 동시에 Investing.com·이투데이·뉴스핌 RSS를 표준 모델로 정규화하는 뉴스 파이프라인과 Candlestick VQ-VAE Tokenizer 연구를 별도 트랙으로 개발하고 있습니다.
+현재 중심은 증권사별 SDK와 이를 조작하는 `finlabs_cli`입니다. 동시에 6개 매체의 RSS를 표준 모델로 정규화하는 뉴스 파이프라인, 키워드·날짜 기반 네이버 뉴스 검색 모듈과 Candlestick VQ-VAE Tokenizer 연구를 별도 트랙으로 개발하고 있습니다.
 
 코드베이스는 broker-agnostic 계층형 코어인 `modules/`로 이전 중입니다. SDK는 증권사별 차이를 캡슐화하고, 상위 애플리케이션은 canonical 모델과 orchestration 계층을 통해 데이터를 다루는 구조를 목표로 합니다.
 
-전체 방향, 구현 순서와 모듈 간 계약은 [통합 계획서(PLAN.md)](./PLAN.md)가 관리합니다. 뉴스, KIS 실시간 수집, Toss 장 운영 정보, 저장소와 orchestration의 상세 정책은 각 모듈의 PLAN이 단일 원본입니다.
+전체 방향과 장기 인프라 제안은 [통합 계획서(PLAN.md)](./PLAN.md)가 관리합니다. 현재 동작과 사용법은 각 README, 구현 예정 계약은 각 PLAN과 설계 문서를 기준으로 하며 서로 다른 상태를 혼용하지 않습니다.
 
 ---
 
@@ -37,10 +37,11 @@ FinLabs는 증권사 Open API를 독립적인 Python SDK로 구현하고, 그 �
 | **[Broker SDK]** | [Toss SDK](./modules/brokers/toss/README.md) | 구현됨 | 토스증권 현재가·캔들·종목정보와 국내·해외 장 운영 정보 조회, calendar adapter |
 | **[Market CLI]** | [FinLabs CLI](./finlabs_cli/README.md) | 구현 중 | 계좌 등록, 토큰 관리, KIS/Kiwoom 차트 조회, 실시간 세션 |
 | **[Core]** | `modules/` 계층형 코어 | 이전 중 | broker adapter, canonical domain, orchestration, warehouse read repository |
-| **[News]** | [News Pipeline](./modules/news/README.md) | 초기 구현 | RSS 정규화, 멱등 저장, 기초 통계 분석, systemd 실행. 본문 직접 수집은 언론사 약관 사유로 비활성화 (네이버 뉴스 API 전환 예정) |
+| **[News]** | [News Pipeline](./modules/news/README.md) | 초기 구현 | RSS 정규화, 멱등 저장, 기초 통계 분석, systemd 실행과 재사용 가능한 네이버 키워드·날짜 검색 API. 본문 직접 수집은 언론사 약관 사유로 비활성화 |
+| **[News Intelligence]** | [제품·데이터·모델 설계](./finlabs_intelligence/README.md) | 설계 완료·구현 전 | Trigger·Reaction 계층, feature·label·dataset·backtest·migration·Python interface 계약 |
 | **[Dashboard]** | `dashboard/` | 구현 중 | `modules.orchestration`을 통해 저장된 시장 데이터를 읽는 Streamlit UI |
 | **[Research]** | [Market Representation](./research/README.md) | 초기 연구 | Candlestick VQ-VAE Tokenizer 중심의 시장 표현 학습 |
-| **[Platform]** | PostgreSQL·TimescaleDB·Redis·Parquet | 계획 확정 | [통합 PLAN](./PLAN.md) 단계 1~6의 신규 데이터 플랫폼, 구현 전 |
+| **[Platform]** | PostgreSQL·TimescaleDB·Redis·Parquet | 장기 제안 | [통합 PLAN](./PLAN.md) 단계 1~6의 별도 플랫폼 계획, 구현 전·MVP 선행조건 아님 |
 | **[Next Broker]** | Kiwoom SDK·adapter | 예정 | 추가 국내주식 데이터 조회용 Kiwoom REST API 통합 |
 
 ---
@@ -55,7 +56,7 @@ FinLabs는 증권사 Open API를 독립적인 Python SDK로 구현하고, 그 �
 | **[저장소]** | 로컬 우선 데이터 | 시장 데이터는 DuckDB, 운영 로그는 SQLite에 저장 |
 | **[중복 방지]** | 멱등 적재 | 데이터베이스 고유 제약과 conflict 처리로 재실행 안전성 확보 |
 | **[조회]** | 공통 warehouse query | CLI·대시보드·연구가 `modules.orchestration.query`를 통해 동일 SQL 사용 |
-| **[뉴스]** | 3단계 뉴스 파이프라인 | RSS 수집 → 기사 본문 저장 → 버전 기반 기초 분석 |
+| **[뉴스]** | 수집·검색·기초 분석 | RSS 메타데이터 적재, 네이버 제목·요약 검색, 저장된 합법적 본문의 기초 통계·Entity 추출 |
 | **[운영]** | 실행 이력과 직렬화 | 뉴스 단계별 성공·실패 기록과 DuckDB 단일 writer 잠금 |
 
 ---
@@ -113,11 +114,11 @@ modules.domain                        pure shared contracts
 | Domain | `modules/domain/` | I/O가 없는 canonical dataclass와 Protocol |
 | Storage | `modules/storage/` | warehouse read SQL의 단일 출처 |
 
-`modules/news`는 이 broker 계층과 별도로 실행되는 독립 뉴스 파이프라인입니다. 자체 표준 뉴스 모델과 전용 DuckDB를 사용하며, 현재 시장 데이터용 `modules.domain` 또는 `modules.storage`에는 의존하지 않습니다.
+`modules/news`는 이 broker 계층과 별도로 실행되는 독립 뉴스 파이프라인입니다. 자체 표준 뉴스 모델과 전용 DuckDB를 사용하며, 현재 시장 데이터용 `modules.domain` 또는 `modules.storage`에는 의존하지 않습니다. [News Intelligence 설계](./finlabs_intelligence/README.md)는 향후 canonical domain·storage·orchestration 경계를 재사용하는 목표 구조이며 현재 구현으로 오해하면 안 됩니다.
 
-### 목표 데이터 플랫폼
+### 장기 데이터 플랫폼 제안
 
-[통합 계획서](./PLAN.md)가 확정한 전체 데이터 흐름입니다. Redis는 전달 계층이고 PostgreSQL과 검증된 Parquet가 영구 원본입니다.
+[통합 계획서](./PLAN.md)에 기록된 구현 전 장기 데이터 흐름입니다. 현재 기본 저장 계약은 DuckDB이고 SQLite는 운영 로그에 사용하며, PostgreSQL/Supabase는 선택적 mirror입니다. 아래 구조는 별도 승인과 구현 없이는 현재 write path가 아닙니다.
 
 ```text
 KIS WebSocket
@@ -127,8 +128,8 @@ KIS WebSocket
      -> Parquet archive writer
      -> Redis Pub/Sub live broadcast
 
-RSS / Article Fetcher
-  -> PostgreSQL news schema
+RSS / provider metadata
+  -> PostgreSQL news schema (장기 제안)
 
 Toss Market Calendar
   -> Toss SDK -> Toss Adapter -> PostgreSQL market schema
@@ -139,7 +140,7 @@ Monitoring Core
   -> Future FastAPI/WebSocket and PyQt
 ```
 
-영역별 상세 정책의 단일 원본은 다음 모듈 PLAN입니다.
+영역별 장기 구현 계획은 다음 모듈 PLAN에 있습니다. 현재 제공 기능은 각 README와 실제 public API를 기준으로 확인합니다.
 
 | 영역 | 단일 원본 |
 |---|---|
@@ -163,7 +164,8 @@ finlabs/
 │   ├── orchestration/          use case와 warehouse query
 │   ├── domain/                 canonical 데이터 계약
 │   ├── storage/                warehouse read repository
-│   └── news/                   RSS·본문·분석 뉴스 파이프라인
+│   └── news/                   RSS·네이버 검색·기초 분석 뉴스 파이프라인
+├── finlabs_intelligence/       뉴스 반응 랭킹 제품·데이터·모델 설계 문서
 ├── finlabs_cli/                broker SDK 조작용 Typer/Rich CLI
 ├── dashboard/                  Streamlit 시장 데이터 대시보드
 ├── research/                   시장 표현 학습 연구
@@ -225,7 +227,7 @@ uv run python -m finlabs_cli chart domestic --alias kiwoom-main --symbol 005930 
 ```bash
 uv run --group news python -m modules.news.main collect-rss
 # collect-articles는 언론사 이용약관에 따라 비활성화됨
-# 본문·요약 확보는 네이버 뉴스 검색 API 연동으로 대체 예정
+# 네이버 제목·요약 검색은 modules.news.naver 공개 API로 제공
 uv run --group news python -m modules.news.main analyze --limit 100
 ```
 
@@ -237,20 +239,21 @@ uv run --group news python -m modules.news.main analyze --limit 100
 
 | 저장소 | 용도 | 상태 |
 |--------|------|------|
-| DuckDB | 시장 데이터와 뉴스 파이프라인 데이터 | 운영 중, 읽기 전용 레거시 전환 예정 |
-| SQLite | 운영 로그 | 읽기 전용 레거시 전환 예정 |
-| PostgreSQL (TimescaleDB) | `control`·`market`·`news` 스키마, 틱·호가·1분봉·기사 영구 원본 | 계획 확정, 구현 전 |
-| Redis (Streams·Pub/Sub) | 실시간 이벤트 전달 계층 | 계획 확정, 구현 전 |
-| Parquet | 검증된 틱·호가 장기 아카이브 | 계획 확정, 구현 전 |
+| DuckDB | 시장 데이터와 뉴스 파이프라인 데이터 | 현재 primary, 운영 중 |
+| SQLite | 운영 로그 | 현재 사용 |
+| PostgreSQL (TimescaleDB) | 선택적 mirror 또는 장기 플랫폼의 `control`·`market`·`news` 스키마 | 구현 전 |
+| Redis (Streams·Pub/Sub) | 실시간 이벤트 전달 계층 | 장기 제안, 구현 전 |
+| Parquet | 검증된 틱·호가 장기 아카이브 | 장기 제안, 구현 전 |
 
-### 전환 정책
+### 저장소 정책
 
-[통합 계획서](./PLAN.md) 기준으로 신규 쓰기 경로는 PostgreSQL/TimescaleDB, Redis Streams와 검증된 Parquet를 사용합니다.
+[통합 계획서](./PLAN.md)의 PostgreSQL/TimescaleDB·Redis·Parquet 구조는 구현 전 장기 제안입니다. 현재 코드와 News Intelligence MVP는 다음 계약을 따릅니다.
 
-- 기존 `warehouse.duckdb`, `news.db`, SQLite는 이동·마이그레이션 없이 읽기 전용 레거시 보관소로 유지합니다.
-- 신규 인프라는 빈 상태로 시작하며 이중 쓰기를 하지 않습니다.
+- DuckDB를 primary warehouse로 사용하고 SQLite는 append-only 운영 로그로 제한합니다.
+- PostgreSQL/Supabase는 명시적으로 구현할 때만 선택적 mirror로 사용하며 dual-primary로 운영하지 않습니다.
+- 기존 `warehouse.duckdb`와 `modules/news/db/news.db`는 현재 활성 저장소이므로 구현 전 계획만으로 read-only 처리하지 않습니다.
 - MongoDB는 도입하지 않습니다.
-- 원문 HTML은 영구 보관하지 않고 정제 기사 본문만 저장합니다.
+- 언론사 원문 HTML을 scraping하지 않습니다. 네이버 연동은 제목·`description`·링크·발행시각만 사용합니다.
 
 로컬 DB, 로그, 토큰, 계좌번호, API 키와 개인 설정 파일은 Git에 포함하지 않습니다.
 
@@ -275,9 +278,9 @@ uv run --group news python -m modules.news.main --help
 
 ---
 
-## Roadmap
+## Long-term Platform Roadmap
 
-구현 순서와 단계별 완료 기준은 [통합 계획서](./PLAN.md)가 관리합니다. 요약:
+아래는 [통합 계획서](./PLAN.md)의 장기 플랫폼 제안 요약이며 현재 MVP의 선행조건이나 완료된 저장소 전환이 아닙니다.
 
 | 단계 | 범위 | 상태 |
 |:---:|------|:----:|
@@ -294,9 +297,9 @@ uv run --group news python -m modules.news.main --help
 
 ## Current Scope
 
-FinLabs는 아직 초기 개발 단계이며 PyPI 배포보다 로컬 개발과 기능 검증을 우선합니다. 주문 실행, 투자 전략, 백테스트, ML 기반 예측은 현재 기본 SDK·CLI 범위에 포함되지 않습니다.
+FinLabs는 아직 초기 개발 단계이며 PyPI 배포보다 로컬 개발과 기능 검증을 우선합니다. 주문 실행과 투자 전략은 범위 밖입니다. 백테스트와 ML 기반 뉴스 반응 랭킹은 [News Intelligence 설계](./finlabs_intelligence/README.md)에 정의되어 있지만 아직 public SDK·CLI로 구현되지 않았습니다.
 
-뉴스 분석은 현재 문자 수와 공백 기준 단어 수를 계산하는 `basic-stats-v1`까지만 구현되어 있습니다. AI 요약, 종목 연결, 감성 분석과 뉴스 검색 API는 아직 제공하지 않습니다.
+뉴스 모듈은 현재 RSS 적재, `basic-stats-v1`, 종목 마스터 기반 Entity 추출, taxonomy v1 DTO와 재사용 가능한 네이버 키워드·날짜 검색 API를 제공합니다. 네이버 검색 결과의 파이프라인 저장, Trigger 분류 실행기, 후보 확장, market feature·label, 모델 학습과 백테스트는 아직 구현되지 않았습니다.
 
 ---
 
