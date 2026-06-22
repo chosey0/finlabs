@@ -69,7 +69,17 @@ export function App() {
       setStatus("종목 검색에 실패했습니다.");
       return;
     }
-    const rows = result.data ?? [];
+    if (!Array.isArray(result.data)) {
+      // A non-array 200 body means the request did not reach the API as JSON
+      // (e.g. the SPA index.html served because /api is not proxied). Fail
+      // clearly instead of crashing the render with `.map is not a function`.
+      setCatalog([]);
+      setStatus(
+        "종목 검색 응답 형식이 올바르지 않습니다. API 서버(127.0.0.1:8000)가 실행 중이고 /api 프록시(개발 서버)가 동작하는지 확인하세요.",
+      );
+      return;
+    }
+    const rows = result.data;
     setCatalog(rows);
     setStatus(rows.length ? `${rows.length}개 종목을 찾았습니다.` : "검색 결과가 없습니다.");
   }
@@ -116,7 +126,18 @@ export function App() {
         },
       });
       if (result.error || !result.data) {
-        setStatus("완전한 뉴스 검색 결과를 확보하지 못했습니다.");
+        // Surface the real cause: 409 = Naver pagination/completeness, 502 =
+        // provider/auth error, 422 = validation. Without the backend's safe
+        // message every failure looks identical.
+        const detail = result.error as
+          | { message?: string; code?: string }
+          | undefined;
+        const status = result.response?.status;
+        setStatus(
+          detail?.message
+            ? `뉴스 검색 실패${status ? ` [${status}]` : ""}: ${detail.message}${detail.code ? ` (${detail.code})` : ""}`
+            : "완전한 뉴스 검색 결과를 확보하지 못했습니다.",
+        );
         return;
       }
       setDiscovery(result.data);
