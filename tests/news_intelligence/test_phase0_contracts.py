@@ -6,7 +6,7 @@ from decimal import Decimal
 import pytest
 
 from modules.adapters.brokers.kiwoom.news_intelligence import (
-    normalize_minute_candles,
+    normalize_chart_candles,
 )
 from modules.brokers.kiwoom.models.ohlcv import ChartBar
 from modules.domain.news_intelligence import (
@@ -28,7 +28,7 @@ def test_kiwoom_minute_rows_become_aware_ordered_deduplicated_candles() -> None:
         _bar("2026-06-17 09:30:00", raw={"different": "transport-only"}),
     ]
 
-    candles = normalize_minute_candles(
+    candles = normalize_chart_candles(
         bars,
         window_start=datetime(2026, 6, 17, 9, 30, tzinfo=KST),
         window_end=datetime(2026, 6, 17, 9, 31, tzinfo=KST),
@@ -46,20 +46,69 @@ def test_kiwoom_normalization_rejects_out_of_range_and_conflicting_duplicates() 
     end = datetime(2026, 6, 17, 9, 31, tzinfo=KST)
 
     with pytest.raises(ValueError, match="outside"):
-        normalize_minute_candles(
+        normalize_chart_candles(
             [_bar("2026-06-17 09:29:00")],
             window_start=start,
             window_end=end,
         )
 
     with pytest.raises(ValueError, match="conflicting duplicate"):
-        normalize_minute_candles(
+        normalize_chart_candles(
             [
                 _bar("2026-06-17 09:30:00"),
                 _bar("2026-06-17 09:30:00", close=Decimal("106")),
             ],
             window_start=start,
             window_end=end,
+        )
+
+
+def test_normalize_accepts_n_minute_bars() -> None:
+    bars = [
+        _bar("2026-06-17 09:35:00", interval="5min"),
+        _bar("2026-06-17 09:30:00", interval="5min"),
+    ]
+
+    candles = normalize_chart_candles(
+        bars,
+        window_start=datetime(2026, 6, 17, 9, 30, tzinfo=KST),
+        window_end=datetime(2026, 6, 17, 9, 35, tzinfo=KST),
+    )
+
+    assert [candle.timestamp.isoformat() for candle in candles] == [
+        "2026-06-17T09:30:00+09:00",
+        "2026-06-17T09:35:00+09:00",
+    ]
+    assert {candle.interval for candle in candles} == {"5min"}
+
+
+def test_normalize_anchors_daily_bars_at_close_and_ranges_by_date() -> None:
+    candles = normalize_chart_candles(
+        [_bar("2026-06-17", interval="1d"), _bar("2026-06-16", interval="1d")],
+        window_start=datetime(2026, 6, 1, tzinfo=KST),
+        window_end=datetime(2026, 6, 30, tzinfo=KST),
+    )
+
+    assert [candle.timestamp.isoformat() for candle in candles] == [
+        "2026-06-16T15:30:00+09:00",
+        "2026-06-17T15:30:00+09:00",
+    ]
+    assert {candle.interval for candle in candles} == {"1d"}
+
+    with pytest.raises(ValueError, match="outside"):
+        normalize_chart_candles(
+            [_bar("2026-07-01", interval="1d")],
+            window_start=datetime(2026, 6, 1, tzinfo=KST),
+            window_end=datetime(2026, 6, 30, tzinfo=KST),
+        )
+
+
+def test_normalize_rejects_unknown_interval() -> None:
+    with pytest.raises(ValueError, match="unsupported Kiwoom chart interval"):
+        normalize_chart_candles(
+            [_bar("2026-06-17", interval="1w")],
+            window_start=datetime(2026, 6, 1, tzinfo=KST),
+            window_end=datetime(2026, 6, 30, tzinfo=KST),
         )
 
 
@@ -165,11 +214,12 @@ def _bar(
     *,
     close: Decimal = Decimal("105"),
     raw: dict[str, str] | None = None,
+    interval: str = "1min",
 ) -> ChartBar:
     return ChartBar(
         market="KRX",
         symbol="005930",
-        interval="1min",
+        interval=interval,
         timestamp=timestamp,
         open=Decimal("100"),
         high=Decimal("110"),

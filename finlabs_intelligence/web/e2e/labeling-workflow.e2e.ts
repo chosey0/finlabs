@@ -14,6 +14,8 @@ test("real FastAPI and DuckDB labeling workflow", async ({ page }) => {
   expect(await catalogPayload.json()).toHaveLength(1);
   await expect(page.getByText("1개 종목을 찾았습니다.")).toBeVisible();
   await page.getByRole("button", { name: /테스트기업/ }).click();
+  await page.getByLabel("시작").fill("2026-06-17T09:00");
+  await page.getByLabel("종료").fill("2026-06-17T15:30");
   await page.getByRole("button", { name: "차트 불러오기" }).click();
   const chart = page.getByLabel("1분봉 차트");
   await expect(chart).toBeVisible();

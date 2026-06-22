@@ -27,6 +27,25 @@ export function kstLocalInputToIso(value: string): string {
   return `${value}:00+09:00`;
 }
 
+export function kstTodayLocalInput(
+  time: string,
+  now: Date = new Date(),
+): string {
+  if (!/^\d{2}:\d{2}$/.test(time)) {
+    throw new Error("시간을 분 단위까지 입력하세요.");
+  }
+  const dateParts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const values = Object.fromEntries(
+    dateParts.map((part) => [part.type, part.value]),
+  );
+  return `${values.year}-${values.month}-${values.day}T${time}`;
+}
+
 export function formatKstTimestamp(unixSeconds: number): string {
   return new Intl.DateTimeFormat("ko-KR", {
     timeZone: "Asia/Seoul",

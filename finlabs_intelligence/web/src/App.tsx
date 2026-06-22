@@ -24,12 +24,12 @@ import { CandleChart } from "./CandleChart";
 import {
   formatKstTimestamp,
   kstLocalInputToIso,
+  kstTodayLocalInput,
   toChartCandles,
 } from "./chartData";
 import type { ChartSelection } from "./chartSelection";
 
-const DEFAULT_START = "2026-06-17T09:00";
-const DEFAULT_END = "2026-06-17T15:30";
+const MINUTE_INTERVALS = [1, 3, 5, 10, 15, 30, 45, 60] as const;
 
 client.setConfig({ baseUrl: import.meta.env.VITE_API_BASE_URL ?? "" });
 
@@ -37,8 +37,10 @@ export function App() {
   const [query, setQuery] = useState("");
   const [catalog, setCatalog] = useState<CatalogItemResponse[]>([]);
   const [security, setSecurity] = useState<CatalogItemResponse | null>(null);
-  const [startAt, setStartAt] = useState(DEFAULT_START);
-  const [endAt, setEndAt] = useState(DEFAULT_END);
+  const [startAt, setStartAt] = useState(() => kstTodayLocalInput("09:00"));
+  const [endAt, setEndAt] = useState(() => kstTodayLocalInput("15:30"));
+  const [chartType, setChartType] = useState<"minute" | "daily">("minute");
+  const [intervalMinutes, setIntervalMinutes] = useState(1);
   const [chart, setChart] = useState<ChartResponse | null>(null);
   const [selection, setSelection] = useState<ChartSelection | null>(null);
   const [discovery, setDiscovery] = useState<DiscoverNewsResponse | null>(null);
@@ -50,6 +52,8 @@ export function App() {
   const [exportResult, setExportResult] = useState<ExportDatasetResponse | null>(null);
   const [status, setStatus] = useState("종목을 검색하세요.");
   const [busy, setBusy] = useState(false);
+  const [chartExpanded, setChartExpanded] = useState(true);
+  const [newsExpanded, setNewsExpanded] = useState(true);
 
   const chartCandles = useMemo(
     () => (chart ? toChartCandles(chart.candles) : []),
@@ -91,7 +95,8 @@ export function App() {
     setDiscovery(null);
     setSuggestions({});
     setAnnotations({});
-    setStatus("Kiwoom 1분봉을 조회하는 중입니다.");
+    const label = chartType === "daily" ? "일봉" : `${intervalMinutes}분봉`;
+    setStatus(`Kiwoom ${label}을 조회하는 중입니다.`);
     try {
       const result = await loadChart({
         path: { symbol: security.symbol },
@@ -99,6 +104,8 @@ export function App() {
           market: security.market,
           start_at: kstLocalInputToIso(startAt),
           end_at: kstLocalInputToIso(endAt),
+          chart_type: chartType,
+          interval_minutes: intervalMinutes,
         },
       });
       if (result.error || !result.data) {
@@ -106,7 +113,7 @@ export function App() {
         return;
       }
       setChart(result.data);
-      setStatus(`${result.data.candles.length}개 1분봉을 불러왔습니다.`);
+      setStatus(`${result.data.candles.length}개 ${label}을 불러왔습니다.`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "차트 조회에 실패했습니다.");
     } finally {
@@ -141,6 +148,7 @@ export function App() {
         return;
       }
       setDiscovery(result.data);
+      setNewsExpanded(true);
       const selectedOn = result.data.selected_candle_at.slice(0, 10);
       const suggestionPairs = await Promise.all(
         result.data.articles.map(async (article) => {
@@ -234,14 +242,18 @@ export function App() {
   }
 
   return (
-    <main className="workspace">
-      <header>
+    <main className="workspace h-[100dvh] overflow-hidden">
+      <header className="shrink-0">
         <p className="eyebrow">FINLABS · LOCAL DATA WORKBENCH</p>
-        <h1>뉴스 인텔리전스 라벨링 도구</h1>
-        <p className="lede">KIS 종목 카탈로그와 Kiwoom 1분봉을 기준으로 뉴스 관측 시점을 고정합니다.</p>
       </header>
 
-      <section className="panel search-panel" aria-labelledby="security-search">
+      <p aria-atomic="true" aria-live="polite" className="status" role="status">{status}</p>
+
+      <div
+        className="grid min-h-0 flex-1 items-start gap-5 max-lg:overflow-y-auto lg:grid-cols-[18rem_minmax(0,1fr)] lg:overflow-hidden"
+        data-testid="workspace-columns"
+      >
+      <aside className="panel search-panel min-h-0 lg:h-full" aria-labelledby="security-search">
         <div>
           <span className="step">01</span>
           <h2 id="security-search">국내 종목 선택</h2>
@@ -282,20 +294,61 @@ export function App() {
             {catalog[0].catalog_stale ? "⚠ 오래된 " : ""}임시 종목원: {catalog[0].catalog_source} · 수집 시각 {catalog[0].catalog_acquired_at} · 현재 명칭만 보장 · 스냅샷 {catalog[0].catalog_snapshot_id}
           </p>
         ) : null}
-      </section>
+      </aside>
 
+      <div className="analysis-layout min-h-0 min-w-0 lg:h-full" data-testid="work-area">
       <section className="panel chart-panel" aria-labelledby="chart-heading">
-        <div className="chart-heading">
+        <div className={chartExpanded ? "chart-heading expanded" : "chart-heading"}>
           <div>
             <span className="step">02</span>
-            <h2 id="chart-heading">1분봉 관측 시점</h2>
+            <h2 id="chart-heading">
+              <button
+                aria-controls="chart-accordion-content"
+                aria-expanded={chartExpanded}
+                className="accordion-toggle"
+                onClick={() => setChartExpanded((current) => !current)}
+                type="button"
+              >
+                차트 관측 시점
+                <span aria-hidden="true" className="accordion-icon">{chartExpanded ? "−" : "+"}</span>
+              </button>
+            </h2>
           </div>
           <div className="range-controls">
+            <label>차트
+              <select
+                aria-label="차트 종류"
+                onChange={(event) => setChartType(event.target.value as "minute" | "daily")}
+                value={chartType}
+              >
+                <option value="minute">분봉</option>
+                <option value="daily">일봉</option>
+              </select>
+            </label>
+            {chartType === "minute" ? (
+              <label>분 단위
+                <select
+                  aria-label="분봉 단위"
+                  onChange={(event) => setIntervalMinutes(Number(event.target.value))}
+                  value={intervalMinutes}
+                >
+                  {MINUTE_INTERVALS.map((minutes) => (
+                    <option key={minutes} value={minutes}>{minutes}분</option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
             <label>시작 <input onChange={(event) => setStartAt(event.target.value)} type="datetime-local" value={startAt} /></label>
             <label>종료 <input onChange={(event) => setEndAt(event.target.value)} type="datetime-local" value={endAt} /></label>
-            <button disabled={!security || busy} onClick={handleLoadChart} type="button">차트 불러오기</button>
+            <div className="chart-actions">
+              <button disabled={!security || busy} onClick={handleLoadChart} type="button">차트 불러오기</button>
+              <button disabled={!selection || !security || busy} onClick={handleDiscoverNews} type="button">
+                선택 구간 뉴스 검색
+              </button>
+            </div>
           </div>
         </div>
+        <div className="accordion-content" hidden={!chartExpanded} id="chart-accordion-content">
         {chart ? (
           <CandleChart
             candles={chartCandles}
@@ -305,6 +358,7 @@ export function App() {
         ) : (
           <div className="chart-empty">종목과 조회 범위를 선택하면 Kiwoom 차트를 표시합니다.</div>
         )}
+        </div>
         <output aria-live="polite" className="selection" data-testid="selected-candle">
           {selection ? (
             <>
@@ -313,24 +367,34 @@ export function App() {
             </>
           ) : "캔들을 클릭하면 직전 1시간의 뉴스 검색 구간을 확정합니다."}
         </output>
-        <div className="discover-action">
-          <button disabled={!selection || !security || busy} onClick={handleDiscoverNews} type="button">
-            선택 구간 뉴스 검색
-          </button>
-        </div>
       </section>
 
-      {discovery ? (
-        <section className="panel news-panel" aria-labelledby="news-heading">
+      <section className="panel news-panel" aria-labelledby="news-heading">
           <div className="news-heading">
             <div>
               <span className="step">03</span>
-              <h2 id="news-heading">검색 뉴스</h2>
+              <h2 id="news-heading">
+                <button
+                  aria-controls="news-accordion-content"
+                  aria-expanded={newsExpanded}
+                  className="accordion-toggle"
+                  onClick={() => setNewsExpanded((current) => !current)}
+                  type="button"
+                >
+                  검색 뉴스
+                  <span aria-hidden="true" className="accordion-icon">{newsExpanded ? "−" : "+"}</span>
+                </button>
+              </h2>
             </div>
             <p>
-              historical_publication_proxy / published_at_proxy · {discovery.plan_version} · 예상 API 비용 {discovery.expected_call_count}회 · 실행 {discovery.executed_call_count}회 · {discovery.complete ? "완전" : "불완전"}
+              {discovery
+                ? `historical_publication_proxy / published_at_proxy · ${discovery.plan_version} · 예상 API 비용 ${discovery.expected_call_count}회 · 실행 ${discovery.executed_call_count}회 · ${discovery.complete ? "완전" : "불완전"}`
+                : "선택한 차트 구간의 뉴스가 여기에 표시됩니다."}
             </p>
           </div>
+          <div className="accordion-content news-accordion-content" hidden={!newsExpanded} id="news-accordion-content">
+          {discovery ? (
+            <>
           <label className="actor-input">
             라벨 작업자
             <input onChange={(event) => setActor(event.target.value)} value={actor} />
@@ -399,10 +463,15 @@ export function App() {
               </div>
             ) : null}
           </div>
-        </section>
-      ) : null}
+            </>
+          ) : (
+            <div className="news-empty">캔들을 선택한 뒤 뉴스 검색을 실행하세요.</div>
+          )}
+          </div>
+      </section>
 
-      <p aria-live="polite" className="status">{status}</p>
+      </div>
+      </div>
     </main>
   );
 }

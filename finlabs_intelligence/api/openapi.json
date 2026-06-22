@@ -1132,6 +1132,27 @@
               "title": "End At",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "chart_type",
+            "required": false,
+            "schema": {
+              "default": "minute",
+              "pattern": "^(minute|daily)$",
+              "title": "Chart Type",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "interval_minutes",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "title": "Interval Minutes",
+              "type": "integer"
+            }
           }
         ],
         "responses": {

@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from finlabs_intelligence.api.app import app
 from modules.brokers.kiwoom.models.ohlcv import ChartBar
-from modules.adapters.brokers.kiwoom.news_intelligence import normalize_minute_candles
+from modules.adapters.brokers.kiwoom.news_intelligence import normalize_chart_candles
 from modules.domain.news_intelligence import IntelligenceCandle, MarketDataProviderError
 from modules.orchestration.news_intelligence import NewsIntelligenceServices
 from modules.storage.news_intelligence.catalog import (
@@ -114,7 +114,7 @@ class _FailingMarketData:
         del market, symbol
         raise MarketDataProviderError("Kiwoom market data request failed")
 
-    async def minute_bars(self, **kwargs):
+    async def chart_bars(self, **kwargs):
         del kwargs
         raise AssertionError("unreachable")
 
@@ -126,15 +126,18 @@ class _FakeMinuteMarketData:
     async def validate_symbol(self, *, market: str, symbol: str) -> None:
         self.validated.append((market, symbol))
 
-    async def minute_bars(
+    async def chart_bars(
         self,
         *,
         market: str,
         symbol: str,
+        chart_type: str = "minute",
+        interval_minutes: int = 1,
         window_start: datetime,
         window_end: datetime,
     ) -> tuple[IntelligenceCandle, ...]:
-        return normalize_minute_candles(
+        del chart_type, interval_minutes
+        return normalize_chart_candles(
             [
                 _bar(symbol, "2026-06-17 09:31:00"),
                 _bar(symbol, "2026-06-17 09:30:00"),

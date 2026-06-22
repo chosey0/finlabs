@@ -66,14 +66,16 @@ from modules.news.intelligence.processors.snapshot import (
 )
 
 
-class MinuteMarketDataPort(Protocol):
+class ChartMarketDataPort(Protocol):
     async def validate_symbol(self, *, market: str, symbol: str) -> None: ...
 
-    async def minute_bars(
+    async def chart_bars(
         self,
         *,
         market: str,
         symbol: str,
+        chart_type: str,
+        interval_minutes: int,
         window_start: datetime,
         window_end: datetime,
     ) -> tuple[IntelligenceCandle, ...]: ...
@@ -138,7 +140,7 @@ class ReactionResult:
 @dataclass(frozen=True, slots=True)
 class NewsIntelligenceServices:
     catalog_snapshot: CatalogSnapshot
-    market_data: MinuteMarketDataPort
+    market_data: ChartMarketDataPort
     news_search: NewsDateSearchPort | None = None
     annotation_writer: SingleWriter | None = None
     export_root: Path | None = None
@@ -156,7 +158,11 @@ class NewsIntelligenceServices:
         symbol: str,
         window_start: datetime,
         window_end: datetime,
+        chart_type: str = "minute",
+        interval_minutes: int = 1,
     ) -> ChartResult:
+        if chart_type not in {"minute", "daily"}:
+            raise ValueError("chart_type must be 'minute' or 'daily'")
         security = next(
             (
                 item
@@ -168,9 +174,11 @@ class NewsIntelligenceServices:
         if security is None:
             raise ValueError("security is not present in the frozen catalog snapshot")
         await self.market_data.validate_symbol(market=market, symbol=symbol)
-        candles = await self.market_data.minute_bars(
+        candles = await self.market_data.chart_bars(
             market=market,
             symbol=symbol,
+            chart_type=chart_type,
+            interval_minutes=interval_minutes,
             window_start=window_start,
             window_end=window_end,
         )

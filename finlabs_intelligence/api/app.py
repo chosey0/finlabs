@@ -296,6 +296,8 @@ async def chart_load(
     market: str = Query(pattern="^(KOSPI|KOSDAQ)$"),
     start_at: datetime = Query(),
     end_at: datetime = Query(),
+    chart_type: str = Query(default="minute", pattern="^(minute|daily)$"),
+    interval_minutes: int = Query(default=1),
 ) -> ChartResponse:
     try:
         result = await services.load_chart(
@@ -303,14 +305,18 @@ async def chart_load(
             symbol=symbol,
             window_start=start_at,
             window_end=end_at,
+            chart_type=chart_type,
+            interval_minutes=interval_minutes,
         )
     except MarketDataProviderError as error:
         raise HTTPException(status_code=502, detail=str(error)) from error
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
+    interval = "1d" if chart_type == "daily" else f"{interval_minutes}min"
     return ChartResponse(
         market=market,
         symbol=symbol,
+        interval=interval,
         identity_checksum=result.identity_checksum,
         candles=[
             CandleResponse(

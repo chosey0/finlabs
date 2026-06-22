@@ -33,15 +33,17 @@ class E2EMarketData:
         if (market, symbol) != ("KOSDAQ", "123456"):
             raise ValueError("unknown E2E security")
 
-    async def minute_bars(
+    async def chart_bars(
         self,
         *,
         market: str,
         symbol: str,
+        chart_type: str = "minute",
+        interval_minutes: int = 1,
         window_start: datetime,
         window_end: datetime,
     ) -> tuple[IntelligenceCandle, ...]:
-        del window_start, window_end
+        del chart_type, interval_minutes, window_start, window_end
         return tuple(
             IntelligenceCandle(
                 market=market,

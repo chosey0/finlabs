@@ -742,6 +742,14 @@ export type LoadChartData = {
          * End At
          */
         end_at: string;
+        /**
+         * Chart Type
+         */
+        chart_type?: string;
+        /**
+         * Interval Minutes
+         */
+        interval_minutes?: number;
     };
     url: '/api/charts/{symbol}';
 };
