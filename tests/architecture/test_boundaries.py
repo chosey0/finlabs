@@ -105,3 +105,22 @@ def test_legacy_kis_package_is_removed() -> None:
     assert not (REPO_ROOT / "kis").exists(), (
         "top-level kis package was removed; import modules.brokers.kis directly"
     )
+
+
+def test_news_intelligence_processors_are_io_free() -> None:
+    forbidden_prefixes = (
+        "duckdb",
+        "psycopg",
+        "fastapi",
+        "httpx",
+        "modules.adapters",
+        "modules.brokers",
+        "modules.orchestration",
+        "modules.storage",
+        "pathlib",
+    )
+    for path in _python_files("modules/news/intelligence/processors"):
+        modules = _imported_modules(str(path.relative_to(REPO_ROOT)))
+        assert not any(module.startswith(forbidden_prefixes) for module in modules), (
+            f"{path} must remain a pure processor without provider, I/O or storage imports"
+        )
