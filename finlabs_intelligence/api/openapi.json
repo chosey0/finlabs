@@ -1,0 +1,1502 @@
+{
+  "components": {
+    "schemas": {
+      "AnnotationRequest": {
+        "properties": {
+          "actor": {
+            "title": "Actor",
+            "type": "string"
+          },
+          "final_value": {
+            "title": "Final Value",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "sample_id": {
+            "title": "Sample Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sample_id",
+          "final_value",
+          "actor"
+        ],
+        "title": "AnnotationRequest",
+        "type": "object"
+      },
+      "AnnotationRevisionResponse": {
+        "properties": {
+          "actor": {
+            "title": "Actor",
+            "type": "string"
+          },
+          "annotation_id": {
+            "title": "Annotation Id",
+            "type": "string"
+          },
+          "article_id": {
+            "title": "Article Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "evidence": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "final_value": {
+            "title": "Final Value",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "previous_annotation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Annotation Id"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "rule_version": {
+            "title": "Rule Version",
+            "type": "string"
+          },
+          "sample_id": {
+            "title": "Sample Id",
+            "type": "string"
+          },
+          "security_id": {
+            "title": "Security Id",
+            "type": "string"
+          },
+          "suggestion_value": {
+            "title": "Suggestion Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "annotation_id",
+          "sample_id",
+          "article_id",
+          "security_id",
+          "revision",
+          "previous_annotation_id",
+          "final_value",
+          "suggestion_value",
+          "evidence",
+          "rule_version",
+          "actor",
+          "note",
+          "created_at"
+        ],
+        "title": "AnnotationRevisionResponse",
+        "type": "object"
+      },
+      "CandleResponse": {
+        "properties": {
+          "close": {
+            "title": "Close",
+            "type": "string"
+          },
+          "high": {
+            "title": "High",
+            "type": "string"
+          },
+          "low": {
+            "title": "Low",
+            "type": "string"
+          },
+          "open": {
+            "title": "Open",
+            "type": "string"
+          },
+          "timestamp": {
+            "format": "date-time",
+            "title": "Timestamp",
+            "type": "string"
+          },
+          "volume": {
+            "title": "Volume",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "timestamp",
+          "open",
+          "high",
+          "low",
+          "close",
+          "volume"
+        ],
+        "title": "CandleResponse",
+        "type": "object"
+      },
+      "CatalogItemResponse": {
+        "properties": {
+          "alias_terms": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Alias Terms",
+            "type": "array"
+          },
+          "catalog_acquired_at": {
+            "format": "date-time",
+            "title": "Catalog Acquired At",
+            "type": "string"
+          },
+          "catalog_checksum": {
+            "title": "Catalog Checksum",
+            "type": "string"
+          },
+          "catalog_snapshot_id": {
+            "title": "Catalog Snapshot Id",
+            "type": "string"
+          },
+          "catalog_source": {
+            "title": "Catalog Source",
+            "type": "string"
+          },
+          "catalog_stale": {
+            "title": "Catalog Stale",
+            "type": "boolean"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "historical_name_status": {
+            "default": "current_only",
+            "title": "Historical Name Status",
+            "type": "string"
+          },
+          "market": {
+            "title": "Market",
+            "type": "string"
+          },
+          "security_id": {
+            "title": "Security Id",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "security_id",
+          "market",
+          "symbol",
+          "display_name",
+          "alias_terms",
+          "catalog_snapshot_id",
+          "catalog_source",
+          "catalog_acquired_at",
+          "catalog_checksum",
+          "catalog_stale"
+        ],
+        "title": "CatalogItemResponse",
+        "type": "object"
+      },
+      "ChartResponse": {
+        "properties": {
+          "candles": {
+            "items": {
+              "$ref": "#/components/schemas/CandleResponse"
+            },
+            "title": "Candles",
+            "type": "array"
+          },
+          "identity_checksum": {
+            "title": "Identity Checksum",
+            "type": "string"
+          },
+          "interval": {
+            "default": "1min",
+            "title": "Interval",
+            "type": "string"
+          },
+          "market": {
+            "title": "Market",
+            "type": "string"
+          },
+          "replayable": {
+            "default": false,
+            "title": "Replayable",
+            "type": "boolean"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "market",
+          "symbol",
+          "identity_checksum",
+          "candles"
+        ],
+        "title": "ChartResponse",
+        "type": "object"
+      },
+      "DirectMentionEvidenceResponse": {
+        "properties": {
+          "alias_id": {
+            "title": "Alias Id",
+            "type": "string"
+          },
+          "end": {
+            "title": "End",
+            "type": "integer"
+          },
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "matched_text": {
+            "title": "Matched Text",
+            "type": "string"
+          },
+          "start": {
+            "title": "Start",
+            "type": "integer"
+          },
+          "term": {
+            "title": "Term",
+            "type": "string"
+          }
+        },
+        "required": [
+          "alias_id",
+          "term",
+          "field",
+          "start",
+          "end",
+          "matched_text"
+        ],
+        "title": "DirectMentionEvidenceResponse",
+        "type": "object"
+      },
+      "DiscoverNewsRequest": {
+        "properties": {
+          "security_id": {
+            "title": "Security Id",
+            "type": "string"
+          },
+          "selected_candle_at": {
+            "format": "date-time",
+            "title": "Selected Candle At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "security_id",
+          "selected_candle_at"
+        ],
+        "title": "DiscoverNewsRequest",
+        "type": "object"
+      },
+      "DiscoverNewsResponse": {
+        "properties": {
+          "articles": {
+            "items": {
+              "$ref": "#/components/schemas/DiscoveredArticleResponse"
+            },
+            "title": "Articles",
+            "type": "array"
+          },
+          "calls": {
+            "items": {
+              "$ref": "#/components/schemas/DiscoveryPlanCallResponse"
+            },
+            "title": "Calls",
+            "type": "array"
+          },
+          "complete": {
+            "title": "Complete",
+            "type": "boolean"
+          },
+          "executed_call_count": {
+            "title": "Executed Call Count",
+            "type": "integer"
+          },
+          "expected_call_count": {
+            "title": "Expected Call Count",
+            "type": "integer"
+          },
+          "plan_version": {
+            "title": "Plan Version",
+            "type": "string"
+          },
+          "security_id": {
+            "title": "Security Id",
+            "type": "string"
+          },
+          "selected_candle_at": {
+            "format": "date-time",
+            "title": "Selected Candle At",
+            "type": "string"
+          },
+          "window_end": {
+            "format": "date-time",
+            "title": "Window End",
+            "type": "string"
+          },
+          "window_start": {
+            "format": "date-time",
+            "title": "Window Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "security_id",
+          "selected_candle_at",
+          "window_start",
+          "window_end",
+          "plan_version",
+          "expected_call_count",
+          "executed_call_count",
+          "complete",
+          "calls",
+          "articles"
+        ],
+        "title": "DiscoverNewsResponse",
+        "type": "object"
+      },
+      "DiscoveredArticleResponse": {
+        "properties": {
+          "article_id": {
+            "title": "Article Id",
+            "type": "string"
+          },
+          "canonical_url": {
+            "title": "Canonical Url",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "matched_alias_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Matched Alias Ids",
+            "type": "array"
+          },
+          "matched_call_ordinals": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Matched Call Ordinals",
+            "type": "array"
+          },
+          "naver_url": {
+            "title": "Naver Url",
+            "type": "string"
+          },
+          "original_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Url"
+          },
+          "published_at": {
+            "format": "date-time",
+            "title": "Published At",
+            "type": "string"
+          },
+          "sample_id": {
+            "title": "Sample Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sample_id",
+          "article_id",
+          "title",
+          "description",
+          "published_at",
+          "original_url",
+          "naver_url",
+          "canonical_url",
+          "matched_alias_ids",
+          "matched_call_ordinals"
+        ],
+        "title": "DiscoveredArticleResponse",
+        "type": "object"
+      },
+      "DiscoveryPlanCallResponse": {
+        "properties": {
+          "alias_id": {
+            "title": "Alias Id",
+            "type": "string"
+          },
+          "ordinal": {
+            "title": "Ordinal",
+            "type": "integer"
+          },
+          "provider_date": {
+            "title": "Provider Date",
+            "type": "string"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ordinal",
+          "alias_id",
+          "query",
+          "provider_date"
+        ],
+        "title": "DiscoveryPlanCallResponse",
+        "type": "object"
+      },
+      "ExportDatasetRequest": {
+        "properties": {
+          "sinks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Sinks",
+            "type": "array"
+          }
+        },
+        "required": [
+          "sinks"
+        ],
+        "title": "ExportDatasetRequest",
+        "type": "object"
+      },
+      "ExportDatasetResponse": {
+        "properties": {
+          "dataset_id": {
+            "title": "Dataset Id",
+            "type": "string"
+          },
+          "sinks": {
+            "items": {
+              "$ref": "#/components/schemas/ExportSinkResponse"
+            },
+            "title": "Sinks",
+            "type": "array"
+          }
+        },
+        "required": [
+          "dataset_id",
+          "sinks"
+        ],
+        "title": "ExportDatasetResponse",
+        "type": "object"
+      },
+      "ExportSinkResponse": {
+        "properties": {
+          "artifact_checksums": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Artifact Checksums",
+            "type": "array"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "relative_paths": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Relative Paths",
+            "type": "array"
+          },
+          "sink": {
+            "title": "Sink",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sink",
+          "state",
+          "relative_paths",
+          "artifact_checksums",
+          "error_code"
+        ],
+        "title": "ExportSinkResponse",
+        "type": "object"
+      },
+      "FreezeDatasetRequest": {
+        "properties": {
+          "annotation_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Annotation Ids",
+            "type": "array"
+          },
+          "cohort": {
+            "title": "Cohort",
+            "type": "string"
+          },
+          "dataset_id": {
+            "title": "Dataset Id",
+            "type": "string"
+          },
+          "purpose": {
+            "title": "Purpose",
+            "type": "string"
+          }
+        },
+        "required": [
+          "dataset_id",
+          "purpose",
+          "cohort",
+          "annotation_ids"
+        ],
+        "title": "FreezeDatasetRequest",
+        "type": "object"
+      },
+      "FreezeDatasetResponse": {
+        "properties": {
+          "cohort": {
+            "title": "Cohort",
+            "type": "string"
+          },
+          "dataset_id": {
+            "title": "Dataset Id",
+            "type": "string"
+          },
+          "exclusions": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Exclusions",
+            "type": "array"
+          },
+          "manifest": {
+            "additionalProperties": true,
+            "title": "Manifest",
+            "type": "object"
+          },
+          "members": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Members",
+            "type": "array"
+          },
+          "purpose": {
+            "title": "Purpose",
+            "type": "string"
+          },
+          "snapshot_checksum": {
+            "title": "Snapshot Checksum",
+            "type": "string"
+          }
+        },
+        "required": [
+          "dataset_id",
+          "purpose",
+          "cohort",
+          "snapshot_checksum",
+          "manifest",
+          "members",
+          "exclusions"
+        ],
+        "title": "FreezeDatasetResponse",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HealthResponse": {
+        "properties": {
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "HealthResponse",
+        "type": "object"
+      },
+      "ReactionPreviewRequest": {
+        "properties": {
+          "sample_id": {
+            "title": "Sample Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sample_id"
+        ],
+        "title": "ReactionPreviewRequest",
+        "type": "object"
+      },
+      "ReactionPreviewResponse": {
+        "properties": {
+          "abnormal_return": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Abnormal Return"
+          },
+          "anchor_basis": {
+            "title": "Anchor Basis",
+            "type": "string"
+          },
+          "benchmark_return": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Benchmark Return"
+          },
+          "cohort": {
+            "title": "Cohort",
+            "type": "string"
+          },
+          "effective_label_anchor": {
+            "format": "date-time",
+            "title": "Effective Label Anchor",
+            "type": "string"
+          },
+          "exclusion_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exclusion Reason"
+          },
+          "feature_cutoff_at": {
+            "format": "date-time",
+            "title": "Feature Cutoff At",
+            "type": "string"
+          },
+          "is_strong_reaction": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Strong Reaction"
+          },
+          "label_version": {
+            "title": "Label Version",
+            "type": "string"
+          },
+          "label_window_end": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label Window End"
+          },
+          "reaction_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reaction Class"
+          },
+          "stock_return": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stock Return"
+          },
+          "turnover_zscore": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Turnover Zscore"
+          }
+        },
+        "required": [
+          "effective_label_anchor",
+          "anchor_basis",
+          "cohort",
+          "feature_cutoff_at",
+          "label_window_end",
+          "stock_return",
+          "benchmark_return",
+          "abnormal_return",
+          "turnover_zscore",
+          "reaction_class",
+          "is_strong_reaction",
+          "exclusion_reason",
+          "label_version"
+        ],
+        "title": "ReactionPreviewResponse",
+        "type": "object"
+      },
+      "RelevanceSuggestionRequest": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "security_id": {
+            "title": "Security Id",
+            "type": "string"
+          },
+          "selected_on": {
+            "format": "date",
+            "title": "Selected On",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "security_id",
+          "title",
+          "description",
+          "selected_on"
+        ],
+        "title": "RelevanceSuggestionRequest",
+        "type": "object"
+      },
+      "RelevanceSuggestionResponse": {
+        "properties": {
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/DirectMentionEvidenceResponse"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "rule_version": {
+            "title": "Rule Version",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "value",
+          "rule_version",
+          "evidence"
+        ],
+        "title": "RelevanceSuggestionResponse",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "Local-first collection and labeling API.",
+    "title": "FinLabs News Intelligence API",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/annotations": {
+      "post": {
+        "operationId": "createAnnotation",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnnotationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnnotationRevisionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Annotation"
+      }
+    },
+    "/api/annotations/{sample_id}": {
+      "get": {
+        "operationId": "getAnnotationHistory",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sample_id",
+            "required": true,
+            "schema": {
+              "title": "Sample Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AnnotationRevisionResponse"
+                  },
+                  "title": "Response Getannotationhistory",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Annotation History"
+      }
+    },
+    "/api/catalog": {
+      "get": {
+        "operationId": "searchCatalog",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CatalogItemResponse"
+                  },
+                  "title": "Response Searchcatalog",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Catalog Search"
+      }
+    },
+    "/api/charts/{symbol}": {
+      "get": {
+        "operationId": "loadChart",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "symbol",
+            "required": true,
+            "schema": {
+              "title": "Symbol",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "market",
+            "required": true,
+            "schema": {
+              "pattern": "^(KOSPI|KOSDAQ)$",
+              "title": "Market",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "start_at",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "Start At",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end_at",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "End At",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChartResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Chart Load"
+      }
+    },
+    "/api/datasets": {
+      "post": {
+        "operationId": "freezeDataset",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FreezeDatasetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FreezeDatasetResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Freeze Dataset Route"
+      }
+    },
+    "/api/datasets/preview": {
+      "post": {
+        "operationId": "previewReaction",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReactionPreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReactionPreviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Reaction Route"
+      }
+    },
+    "/api/datasets/{dataset_id}/exports": {
+      "get": {
+        "operationId": "getDatasetExports",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "dataset_id",
+            "required": true,
+            "schema": {
+              "title": "Dataset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportDatasetResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Status Route"
+      },
+      "post": {
+        "operationId": "exportDataset",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "dataset_id",
+            "required": true,
+            "schema": {
+              "title": "Dataset Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportDatasetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportDatasetResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Dataset Route"
+      }
+    },
+    "/api/datasets/{dataset_id}/exports/{sink}/retry": {
+      "post": {
+        "operationId": "retryDatasetExport",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "dataset_id",
+            "required": true,
+            "schema": {
+              "title": "Dataset Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sink",
+            "required": true,
+            "schema": {
+              "title": "Sink",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportDatasetResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retry Export Route"
+      }
+    },
+    "/api/health": {
+      "get": {
+        "operationId": "getHealth",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health"
+      }
+    },
+    "/api/news/discover": {
+      "post": {
+        "operationId": "discoverNews",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiscoverNewsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscoverNewsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Discover News"
+      }
+    },
+    "/api/relevance/suggest": {
+      "post": {
+        "operationId": "suggestRelevance",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RelevanceSuggestionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelevanceSuggestionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Suggest Relevance"
+      }
+    }
+  }
+}
