@@ -55,7 +55,7 @@ research/                        # orchestration query 또는 export artifact �
 | `domain` | 불변 DTO, enum, Protocol | DB·HTTP·filesystem·모델 import |
 | `news.naver` | 인증 header, HTTP, 응답 parsing, provider 오류 | DB write, model inference, 환경변수 직접 조회 |
 | `news.trigger/candidates/features/labels` | 결정적 변환·산식 | 전역 DB 접근, CLI 출력, transaction 관리 |
-| `storage` | DuckDB SQL, repository, schema version | provider client, 분류·모델 로직 |
+| `storage` | PostgreSQL SQL, repository, schema version | provider client, 분류·모델 로직 |
 | `orchestration` | use case, 의존성 조립, write·run log | provider별 parsing, raw SQL |
 | CLI/API/dashboard | 입력 검증·표현 | feature 산식, SQL, 직접 모델 학습 |
 
@@ -548,7 +548,7 @@ class NewsIntelligenceUnitOfWork(Protocol):
     def rollback(self) -> None: ...
 ```
 
-Orchestration만 Unit of Work를 연다. processor와 provider client는 transaction을 알지 못한다. DuckDB single-writer lock은 concrete UoW 또는 orchestration runner가 소유한다.
+Orchestration만 Unit of Work를 연다. processor와 provider client는 transaction을 알지 못한다. PostgreSQL 단일 writer 직렬화(인프로세스 FIFO + `pg_advisory_xact_lock`)는 concrete UoW 또는 orchestration runner가 소유한다.
 
 ## 12. Orchestration command·result
 
@@ -756,10 +756,10 @@ NewsIntelligenceError
 
 ## 17. 동기·비동기 정책
 
-- 현재 네이버 client와 DuckDB pipeline은 동기 interface를 유지한다.
+- 현재 네이버 client와 PostgreSQL 접근은 동기 interface를 유지한다.
 - CPU/DB batch를 임의로 `async`로 감싸지 않는다.
 - FastAPI 등 async transport는 thread worker 또는 job orchestration을 통해 동기 use case를 호출한다.
-- 동일 DuckDB에 병렬 writer를 만들지 않는다.
+- 단일 writer를 직렬화하며(인프로세스 FIFO + `pg_advisory_xact_lock`) 병렬 write transaction을 만들지 않는다.
 - 모델 batch inference 내부 병렬성은 config와 artifact에 기록한다.
 
 ## 18. Public API와 호환성
@@ -772,7 +772,7 @@ NewsIntelligenceError
 
 ### 내부 구현
 
-- SQL statement, DuckDB connection
+- SQL statement, PostgreSQL connection
 - parser helper, feature 산식 helper
 - concrete LightGBM object
 - migration mapper와 compatibility view
@@ -818,7 +818,7 @@ CLI는 Typer를 사용하고 `python -m finlabs_cli` 계약을 따른다. 별도
 ## 21. 구현 순서
 
 1. canonical DTO·validation과 current-to-target mapper
-2. repository Protocol과 DuckDB concrete repository
+2. repository Protocol과 PostgreSQL concrete repository
 3. search-and-ingest orchestration과 immutable first-seen
 4. Trigger·entity·candidate processor
 5. point-in-time market reader와 feature builder

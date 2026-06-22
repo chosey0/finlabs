@@ -111,8 +111,8 @@ Backtest·평가 보고서
 
 ### 4.4 저장소와 문서 우선순위
 
-- 현재 primary warehouse는 DuckDB이고 SQLite는 운영 로그에만 사용한다.
-- PostgreSQL/Supabase는 선택적 mirror이며 별도 구현 전에는 source of truth가 아니다.
+- News Intelligence의 source of truth는 PostgreSQL(예: Supabase, RDS, 자체 호스팅)이며 표준 libpq 연결 문자열 `INTELLIGENCE_DATABASE_URL`로 접근한다. catalog(`domestic_symbols`)도 같은 DB에서 읽고, `scripts/load_kis_symbols_to_supabase.py`(KIS 직행) 또는 `scripts/seed_intelligence_catalog.py`(DuckDB 원본 → DB)로 적재한다.
+- 레거시 뉴스 수집 pipeline(`modules/news`)의 warehouse는 여전히 DuckDB이고 SQLite는 운영 로그에만 사용한다.
 - 현재 뉴스 pipeline의 동작·명령은 [`modules/news/README.md`](../modules/news/README.md)를 따른다.
 - 현재 모듈의 장기 작업은 [`modules/news/PLAN.md`](../modules/news/PLAN.md), News Intelligence의 목표 계약은 이 폴더의 문서를 따른다.
 - 필드 의미는 [Feature Dictionary](./docs/FeatureDictionary.md), 물리·논리 데이터 구조는 [Training Data Model](./docs/TrainDataTable.md), 전환 순서는 [Migration](./docs/Migration.md)을 우선한다.
@@ -205,3 +205,24 @@ MVP는 다음 조건을 모두 만족할 때 완료로 판정한다.
 
 
 기존 pipeline의 구현 상태와 운영 명령은 [`modules/news/README.md`](../modules/news/README.md), 기존 모듈의 장기 계획은 [`modules/news/PLAN.md`](../modules/news/PLAN.md)를 따른다. 이 폴더는 그 위에 추가할 뉴스 지능 계층의 제품·데이터·모델·평가 계약을 설명한다.
+
+## 11. 학습 데이터 수집 웹 도구
+
+현재 구현된 로컬 MVP는 KIS `domestic_symbols` 스냅샷 검색, Kiwoom 주식 1분봉과 `ka20005` KOSPI/KOSDAQ 벤치마크 조회, 캔들 선택, Naver의 정확한 직전 1시간 검색, 직접 언급 제안, 사람의 append-only 라벨 수정, 30거래분 반응 preview, 버전 스냅샷과 PostgreSQL(DB)·JSON·CSV 출력을 제공한다. 검색 결과는 서버가 발급한 안정적인 `sample_id`로 저장되며 라벨은 종목-기사-유효 라벨 anchor 단위로 귀속된다. 데이터셋 고정 API는 저장된 최신 annotation revision ID만 받아 label·anchor·cohort·검색 계획·annotation provenance를 서버에서 다시 해석하므로 클라이언트가 학습 정답을 주입할 수 없다.
+
+필수 환경변수는 `INTELLIGENCE_DATABASE_URL`(PostgreSQL libpq 연결 문자열), `KIWOOM_APP_KEY`, `KIWOOM_SECRET_KEY`, `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`이다. KIS 종목 master는 `scripts/load_kis_symbols_to_supabase.py`로 `domestic_symbols`에 먼저 적재돼 있어야 한다(자격증명 불필요, DB 연결 문자열만 필요). 세션 레벨 설정을 쓰므로 transaction-mode 풀러가 아닌 직접 연결 또는 session-mode 풀러를 사용한다. 전체 검증의 Playwright E2E는 로컬 Google Chrome을 headless로 사용한다. 자격증명과 export 파일은 저장소에 커밋하지 않는다.
+
+```bash
+# API — 단일 프로세스 + 인프로세스 FIFO writer. 교차 프로세스 직렬화는 Postgres advisory lock(pg_advisory_xact_lock)이 담당한다.
+uv run --group server uvicorn finlabs_intelligence.api.runtime:app --host 127.0.0.1 --port 8000
+
+# Web — 별도 터미널
+cd finlabs_intelligence/web
+bun install --frozen-lockfile
+bun run dev
+
+# 전체 오프라인 검증
+./scripts/verify-news-intelligence.sh
+```
+
+화면과 manifest는 historical backfill을 `historical_publication_proxy` cohort와 `published_at_proxy` anchor로 명시하며 canonical live `t0`로 표현하지 않는다. `POST /api/datasets`는 immutable 스냅샷만 PostgreSQL에 고정하고, `POST /api/datasets/{dataset_id}/exports`가 선택한 DB·JSON·CSV sink를 별도 idempotency 단위로 내보낸다. 각 artifact는 pending 상태를 먼저 기록한 뒤 임시 파일 `fsync`와 원자적 rename을 수행하며, rename 뒤 상태 기록이 끊겨도 checksum으로 복구한다. 검색 완전성·전체 Naver 호출 계획, 종목원 stale 상태, annotation revision·actor·rule evidence, reaction 출처와 제외 사유, sink별 성공/실패도 함께 고정한다. JSON/CSV는 OS 사용자 데이터 디렉터리 아래 `news-intelligence-exports/`에 backend가 정한 안전한 이름으로 기록된다. 전체 검증에는 실제 FastAPI, 일회용 Postgres 스키마와 headless Chrome을 사용하는 catalog→chart→news→annotation revisions→freeze→export E2E가 포함된다.

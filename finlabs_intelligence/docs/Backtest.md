@@ -267,7 +267,7 @@ Rule hybrid를 추가할 수 있지만 서로 다른 단위의 원시 값을 임
 
 `run_id`, scenario, K, slice dimension/value별 지표와 표본 수, 신뢰구간을 저장한다. 전체 평균만 저장하면 후속 분석을 재현할 수 없다.
 
-물리 SQL은 [Training Data Model](./TrainDataTable.md)의 논리 schema와 [Migration](./Migration.md)의 DuckDB-primary 전환 규칙에 맞춰 별도 확정한다.
+물리 SQL은 [Training Data Model](./TrainDataTable.md)의 논리 schema와 [Migration](./Migration.md)의 PostgreSQL-primary 전환 규칙에 맞춰 별도 확정한다.
 
 ## 14. 누수·재현성 검증
 

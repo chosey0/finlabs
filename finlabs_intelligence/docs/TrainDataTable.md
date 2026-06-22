@@ -88,7 +88,7 @@ market data ─────── market_features       │
 - 생성 시간과 모델 기준 시각을 구분
 - enum 성격 값은 `CHECK` 또는 reference table로 제한
 
-SQL 예시는 타입·제약을 명확히 표현하기 위해 PostgreSQL 문법을 사용한 논리 설계 초안이다. MVP primary 저장소는 DuckDB이며 실제 DDL과 migration은 [Migration](./Migration.md)의 저장소 책임과 프로젝트 명명 규칙을 따른다. PostgreSQL/Supabase는 선택적 mirror로 별도 관리한다.
+SQL 예시는 타입·제약을 명확히 표현하기 위해 PostgreSQL 문법을 사용한 논리 설계 초안이다. News Intelligence의 primary 저장소는 PostgreSQL(예: Supabase, RDS, 자체 호스팅)이며 실제 DDL과 migration은 [Migration](./Migration.md)의 저장소 책임과 프로젝트 명명 규칙을 따른다. 레거시 `modules/news` 수집 pipeline의 warehouse는 별도로 DuckDB를 유지한다.
 
 ## 6. `news_items`
 

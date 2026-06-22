@@ -22,7 +22,7 @@
 1. 기존 RSS·네이버 검색·entity·taxonomy 자산을 중단 없이 재사용한다.
 2. 기존 `rss_items.created_at`·수집 실행 이력을 immutable `first_seen_at` 계약으로 전환한다.
 3. 원천 뉴스, 파생 이벤트, 후보, feature, label, dataset snapshot을 분리한다.
-4. 현재 DuckDB 중심 로컬 운영과 선택적 PostgreSQL mirror의 책임을 혼용하지 않는다.
+4. News Intelligence의 PostgreSQL 저장소와 레거시 뉴스 수집 pipeline의 DuckDB 책임을 혼용하지 않는다.
 5. 모든 전환 단계를 재실행 가능하고 rollback 가능하게 만든다.
 
 ## 2. 현재 상태와 목표 상태
@@ -66,17 +66,17 @@ news_clusters       news_events          │
 
 ## 3. 저장소 선택과 책임
 
-FinLabs의 primary warehouse는 DuckDB다. SQLite는 운영 로그에만 사용하며 PostgreSQL/Supabase는 선택적 mirror다.
+News Intelligence의 primary 저장소는 PostgreSQL(예: Supabase, RDS, 자체 호스팅)이며 표준 libpq 연결 문자열 `INTELLIGENCE_DATABASE_URL`로 접근한다. 레거시 뉴스 수집 pipeline(`modules/news`)의 warehouse는 여전히 DuckDB이고, SQLite는 운영 로그에만 사용한다.
 
-이 계획은 News Intelligence MVP의 현재 로컬 저장소 전환 범위다. 루트 `PLAN.md`의 PostgreSQL/TimescaleDB·Redis·Parquet 구조는 별도 장기 플랫폼 제안이며 MVP의 선행조건이 아니다. 그 플랫폼을 실제 채택하면 DuckDB↔PostgreSQL dual-write를 추가하지 않고 승인된 export/import 또는 신규 적재 절차를 별도 설계한다.
+이 계획은 News Intelligence MVP의 로컬 저장소 전환 범위다. 루트 `PLAN.md`의 TimescaleDB·Redis·Parquet 구조는 별도 장기 플랫폼 제안이며 MVP의 선행조건이 아니다.
 
 | 저장소 | 책임 | 마이그레이션 원칙 |
 |---|---|---|
-| DuckDB | 로컬 원천·파생 데이터와 분석 warehouse | MVP primary, schema migration 적용 대상 |
+| PostgreSQL | News Intelligence 원천·파생 데이터와 catalog | MVP primary, schema migration 적용 대상 |
+| DuckDB | 레거시 뉴스 수집 pipeline·분석 warehouse | NI 외 영역에서 유지 |
 | SQLite | 실행 이력·오류 등 operational log | 시장·학습 데이터 저장 금지 |
-| PostgreSQL/Supabase | 선택적 공유·mirror | primary 전환으로 간주하지 않으며 별도 승인 필요 |
 
-[Training Data Model](./TrainDataTable.md)의 SQL은 데이터 계약을 설명하는 설계 초안이다. 실제 migration은 DuckDB 문법·제약과 프로젝트 migration 도구에 맞춰 작성한다. PostgreSQL mirror가 필요하면 동일 논리 계약을 별도 DDL로 관리하고 dual-primary 구조를 만들지 않는다.
+[Training Data Model](./TrainDataTable.md)의 SQL은 데이터 계약을 설명하는 설계 초안이다. 실제 migration은 PostgreSQL 문법·제약과 프로젝트 migration 도구에 맞춰 작성한다.
 
 ## 4. 마이그레이션 원칙
 
@@ -170,7 +170,7 @@ Backfill 우선순위는 다음과 같다.
 - `dataset_versions`, `dataset_members`
 - migration run·issue·checkpoint metadata
 
-필수 제약은 [Training Data Model](./TrainDataTable.md)을 따르되 DuckDB가 지원하지 않는 제약은 write transaction과 검증 query로 보완한다.
+필수 제약은 [Training Data Model](./TrainDataTable.md)을 따르며 PostgreSQL의 `CHECK`·`FOREIGN KEY`·`UNIQUE` 제약으로 직접 표현한다.
 
 **종료 조건**: empty DB와 legacy fixture DB 모두에 expand migration이 성공하고 두 번째 실행은 no-op이다.
 
@@ -288,7 +288,7 @@ reader를 한 번에 모두 바꾸지 않고 다음 순서로 전환한다.
 ## 9. Transaction·locking·성능
 
 - schema DDL과 대규모 backfill을 하나의 장시간 transaction으로 묶지 않는다.
-- DuckDB single-writer 제약을 존중하고 기존 pipeline lock을 재사용한다.
+- News Intelligence write는 단일 writer로 직렬화한다(인프로세스 FIFO + `pg_advisory_xact_lock`); 병렬 write transaction을 만들지 않는다.
 - batch는 commit 가능한 크기로 제한하고 메모리·DB 파일 증가량을 관찰한다.
 - index 또는 정렬 구조는 backfill access pattern을 근거로 추가한다.
 - 대규모 derived backfill은 원천 ingestion과 시간대를 분리한다.
@@ -374,4 +374,4 @@ old table 삭제, column 재사용, irreversible file compaction은 backup resto
 5. 동일 migration config와 source snapshot으로 row key·checksum을 재현한다.
 6. 새 reader·writer의 rollback 절차가 복사본 DB에서 검증된다.
 7. legacy cleanup 이전에 old path 사용량이 0임을 확인한다.
-8. primary DuckDB와 선택적 mirror의 소유권·동기화 방향이 명확하다.
+8. primary PostgreSQL 저장소와 레거시 DuckDB 소스의 소유권·전환 방향이 명확하다.

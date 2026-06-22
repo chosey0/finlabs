@@ -204,7 +204,7 @@ uv sync
 | RSS news pipeline | `uv sync --group news` |
 | Scrapy crawler | `uv sync --group crawler` |
 | Toss SDK | `uv sync --group toss` |
-| PostgreSQL mirror | `uv sync --group postgres` |
+| PostgreSQL (News Intelligence 저장소) | `uv sync --group postgres` |
 
 ### FinLabs CLI
 
@@ -247,10 +247,10 @@ uv run --group news python -m modules.news.main analyze --limit 100
 
 ### 저장소 정책
 
-[통합 계획서](./PLAN.md)의 PostgreSQL/TimescaleDB·Redis·Parquet 구조는 구현 전 장기 제안입니다. 현재 코드와 News Intelligence MVP는 다음 계약을 따릅니다.
+[통합 계획서](./PLAN.md)의 TimescaleDB·Redis·Parquet 구조는 구현 전 장기 제안입니다. 현재 코드는 다음 계약을 따릅니다.
 
-- DuckDB를 primary warehouse로 사용하고 SQLite는 append-only 운영 로그로 제한합니다.
-- PostgreSQL/Supabase는 명시적으로 구현할 때만 선택적 mirror로 사용하며 dual-primary로 운영하지 않습니다.
+- 시장 데이터와 레거시 뉴스 수집 pipeline은 DuckDB를 primary warehouse로 사용하고 SQLite는 append-only 운영 로그로 제한합니다.
+- **News Intelligence 라벨링 도구는 PostgreSQL(예: Supabase)을 primary 저장소로 사용**하며 libpq 연결 문자열 `INTELLIGENCE_DATABASE_URL`로 접근합니다. catalog(`domestic_symbols`)도 같은 DB에서 읽습니다. 설정은 [News Intelligence README](./finlabs_intelligence/README.md)를 참고하세요.
 - 기존 `warehouse.duckdb`와 `modules/news/db/news.db`는 현재 활성 저장소이므로 구현 전 계획만으로 read-only 처리하지 않습니다.
 - MongoDB는 도입하지 않습니다.
 - 언론사 원문 HTML을 scraping하지 않습니다. 네이버 연동은 제목·`description`·링크·발행시각만 사용합니다.
