@@ -1,0 +1,1 @@
+"""Pure news-intelligence processors."""
