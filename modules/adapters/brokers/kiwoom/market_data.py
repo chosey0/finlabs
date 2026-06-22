@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 
 from modules.brokers.kiwoom.client import KiwoomClient
@@ -10,6 +11,8 @@ from modules.brokers.kiwoom.exceptions import KiwoomError
 from modules.domain.news_intelligence import IntelligenceCandle, MarketDataProviderError
 
 from .news_intelligence import normalize_minute_candles
+
+_logger = logging.getLogger(__name__)
 
 
 class KiwoomMinuteMarketData:
@@ -25,6 +28,9 @@ class KiwoomMinuteMarketData:
                 market="KRX",
             )
         except KiwoomError as error:
+            _logger.warning(
+                "Kiwoom validate_symbol failed for %s:%s: %s", market, symbol, error
+            )
             raise MarketDataProviderError(
                 "Kiwoom market data request failed"
             ) from error
@@ -48,6 +54,14 @@ class KiwoomMinuteMarketData:
                 start_date=window_start.strftime("%Y-%m-%d %H%M%S"),
             )
         except KiwoomError as error:
+            _logger.warning(
+                "Kiwoom minute_bars failed for %s:%s [%s~%s]: %s",
+                market,
+                symbol,
+                window_start,
+                window_end,
+                error,
+            )
             raise MarketDataProviderError(
                 "Kiwoom market data request failed"
             ) from error
