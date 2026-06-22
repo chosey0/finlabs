@@ -30,11 +30,11 @@ research = [
 crawler = ["scrapy>=2.16.0"]
 news = ["finlabs-news"]
 toss = ["finlabs-toss"]
-postgres = ["psycopg[binary]>=3.2.0"]
+postgres = ["psycopg[binary]>=3.2.0", "psycopg-pool>=3.2.0"]
 
 [tool.uv]
 package = false
-default-groups = ["dev"]
+default-groups = ["dev", "postgres"]
 
 [tool.uv.sources]
 finlabs-core = { workspace = true }
