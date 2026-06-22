@@ -233,7 +233,8 @@ research/notebooks/research/
 
 # Generated fractal event plots
 research/fractal/event_plots/
-
+*.env
 *.pptx
 temp/
 news_surge_ranker/
+node_modules/
