@@ -24,6 +24,16 @@ MINUTE = register(
     )
 )
 
+INDUSTRY_MINUTE = register(
+    EndpointSpec(
+        name="domestic.chart.industry_minute",
+        method="POST",
+        path="/api/dostk/chart",
+        api_id="ka20005",
+        supports_continuation=True,
+    )
+)
+
 DAILY = register(
     EndpointSpec(
         name="domestic.chart.daily",

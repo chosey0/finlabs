@@ -65,6 +65,28 @@ def test_domestic_minute_chart_stops_when_start_datetime_is_reached() -> None:
     ]
 
 
+def test_industry_minute_chart_uses_ka20005_contract() -> None:
+    parent = _IndustryMinuteParent()
+
+    bars = asyncio.run(
+        DomesticChartAPI(parent).industry_minute(
+            "101",
+            base_date="2026-06-17",
+            start_date="2026-06-17 093000",
+            max_pages=1,
+        )
+    )
+
+    assert parent.api_id == "ka20005"
+    assert parent.json_body == {
+        "inds_cd": "101",
+        "tic_scope": "1",
+        "base_dt": "20260617",
+    }
+    assert bars[0].market == "KRX-INDEX"
+    assert bars[0].symbol == "101"
+
+
 def test_domestic_monthly_chart_accepts_year_month_start_and_base_date() -> None:
     parent = _MonthlyParent()
 
@@ -164,6 +186,20 @@ class _MonthlyParent:
                 _row("20260401", key="dt"),
                 _row("20260301", key="dt"),
             ],
+        )
+
+
+class _IndustryMinuteParent:
+    def __init__(self) -> None:
+        self.api_id = ""
+        self.json_body = {}
+
+    async def request_raw(self, spec, *args, **kwargs) -> HttpResponse:
+        self.api_id = spec.api_id
+        self.json_body = kwargs["json_body"]
+        return _chart_response(
+            key="inds_min_pole_qry",
+            rows=[_row("20260617093000")],
         )
 
 

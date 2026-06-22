@@ -12,13 +12,19 @@ from modules.brokers.kiwoom._internal.http import HttpResponse
 from modules.brokers.kiwoom.endpoints.registry import lookup
 from modules.brokers.kiwoom.exceptions import KiwoomApiError
 from modules.brokers.kiwoom.models.ohlcv import ChartBar
-from modules.brokers.kiwoom.parsers.rest import chart_rows, format_date, parse_chart_bar, parse_date
+from modules.brokers.kiwoom.parsers.rest import (
+    chart_rows,
+    format_date,
+    parse_chart_bar,
+    parse_date,
+)
 
 if TYPE_CHECKING:
     from modules.brokers.kiwoom.client import KiwoomClient
 
 _TICK_SPEC = lookup("domestic.chart.tick")
 _MINUTE_SPEC = lookup("domestic.chart.minute")
+_INDUSTRY_MINUTE_SPEC = lookup("domestic.chart.industry_minute")
 _DAILY_SPEC = lookup("domestic.chart.daily")
 _WEEKLY_SPEC = lookup("domestic.chart.weekly")
 _MONTHLY_SPEC = lookup("domestic.chart.monthly")
@@ -92,6 +98,38 @@ class DomesticChartAPI:
             chart_type="minute",
             symbol=symbol,
             market=market,
+            interval=f"{interval_minutes}min",
+            body=body,
+            max_pages=max_pages,
+            start_date=start_date,
+            end_date=base_date,
+        )
+
+    async def industry_minute(
+        self,
+        index_code: str,
+        *,
+        interval_minutes: int = 1,
+        base_date: str | Date | None = None,
+        max_pages: int | None = None,
+        start_date: str | None = None,
+    ) -> list[ChartBar]:
+        """Fetch industry minute rows from ``ka20005``."""
+        if interval_minutes not in _MINUTE_SCOPES:
+            raise ValueError(
+                "interval_minutes must be one of: 1, 3, 5, 10, 15, 30, 45, 60"
+            )
+        body = {
+            "inds_cd": _normalize_symbol(index_code),
+            "tic_scope": str(interval_minutes),
+        }
+        if base_date is not None:
+            body["base_dt"] = _format_optional_date(base_date)
+        return await self._fetch_chart(
+            spec=_INDUSTRY_MINUTE_SPEC,
+            chart_type="industry_minute",
+            symbol=index_code,
+            market="KRX-INDEX",
             interval=f"{interval_minutes}min",
             body=body,
             max_pages=max_pages,
@@ -337,7 +375,9 @@ async def _request_with_rate_limit_retry(
                 next_key=next_key,
             )
         except KiwoomApiError as exc:
-            if not _is_rate_limit_error(exc) or attempt >= len(_RATE_LIMIT_RETRY_DELAYS):
+            if not _is_rate_limit_error(exc) or attempt >= len(
+                _RATE_LIMIT_RETRY_DELAYS
+            ):
                 raise
             await asyncio.sleep(delay_seconds)
     raise RuntimeError("unreachable")
@@ -354,7 +394,7 @@ def _boundary_key(chart_type: str, value: str | None) -> str:
     text = value.strip()
     if not text:
         raise ValueError("start_date must not be empty")
-    if chart_type in {"tick", "minute"}:
+    if chart_type in {"tick", "minute", "industry_minute"}:
         return _parse_boundary_datetime(text)
     if chart_type in {"daily", "weekly"}:
         return parse_date(text).isoformat()
@@ -378,7 +418,7 @@ def _end_boundary_key(chart_type: str, value: str | Date | None) -> str | None:
         text = value.strip()
     if not text:
         return None
-    if chart_type in {"tick", "minute"}:
+    if chart_type in {"tick", "minute", "industry_minute"}:
         return f"{parse_date(text).isoformat()} 23:59:59"
     if chart_type in {"daily", "weekly"}:
         return parse_date(text).isoformat()
@@ -394,7 +434,7 @@ def _end_boundary_key(chart_type: str, value: str | Date | None) -> str | None:
 
 
 def _bar_boundary_key(chart_type: str, bar: ChartBar) -> str:
-    if chart_type in {"tick", "minute"}:
+    if chart_type in {"tick", "minute", "industry_minute"}:
         return _parse_boundary_datetime(bar.timestamp)
     if chart_type in {"daily", "weekly"}:
         return parse_date(bar.timestamp).isoformat()

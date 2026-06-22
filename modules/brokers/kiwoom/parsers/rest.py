@@ -9,6 +9,7 @@ from modules.brokers.kiwoom.models.ohlcv import ChartBar
 _CHART_ROW_KEYS: dict[str, str] = {
     "tick": "stk_tic_chart_qry",
     "minute": "stk_min_pole_chart_qry",
+    "industry_minute": "inds_min_pole_qry",
     "daily": "stk_dt_pole_chart_qry",
     "weekly": "stk_stk_pole_chart_qry",
     "monthly": "stk_mth_pole_chart_qry",
@@ -81,7 +82,9 @@ def parse_chart_datetime(value: str) -> str:
     formats = ("%Y%m%d%H%M%S", "%Y%m%d%H%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M")
     for datetime_format in formats:
         try:
-            return datetime.strptime(text, datetime_format).strftime("%Y-%m-%d %H:%M:%S")
+            return datetime.strptime(text, datetime_format).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
         except ValueError:
             continue
     raise ValueError(f"invalid Kiwoom chart datetime: {value}")
