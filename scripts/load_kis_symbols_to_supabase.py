@@ -1,7 +1,7 @@
-"""Download the KIS domestic symbol master straight into PostgreSQL.
+"""Download KIS symbol masters straight into PostgreSQL.
 
 This skips the DuckDB warehouse entirely: it pulls the KIS-published master file
-for each domestic market, maps it to the news-intelligence ``domestic_symbols``
+for each configured market, maps it to the news-intelligence ``domestic_symbols``
 schema, and atomically replaces the catalog in PostgreSQL. The KIS master files
 are public downloads, so only the PostgreSQL connection string is required — no
 Kiwoom or KIS credentials.
@@ -9,7 +9,7 @@ Kiwoom or KIS credentials.
 Usage:
     INTELLIGENCE_DATABASE_URL=postgresql://... \
         uv run --group postgres python -m scripts.load_kis_symbols_to_supabase \
-        [--markets KOSPI KOSDAQ] [--dsn postgresql://...]
+        [--markets KOSPI KOSDAQ NASDAQ AMEX NYSE] [--dsn postgresql://...]
 """
 
 from __future__ import annotations
@@ -24,10 +24,10 @@ from modules.brokers.kis import (
     download_symbol_master,
     normalize_market,
 )
-from modules.storage.news_intelligence.database import resolve_dsn
+from modules.storage.news_intelligence.database import load_env, resolve_dsn
 from scripts.seed_intelligence_catalog import _COLUMNS, seed
 
-DOMESTIC_MARKETS = ("KOSPI", "KOSDAQ")
+SYMBOL_MARKETS = ("KOSPI", "KOSDAQ", "NASDAQ", "AMEX", "NYSE")
 _KST = ZoneInfo("Asia/Seoul")
 
 
@@ -35,10 +35,10 @@ def _normalize_markets(markets: Iterable[str]) -> tuple[str, ...]:
     normalized = tuple(dict.fromkeys(normalize_market(market) for market in markets))
     if not normalized:
         raise SystemExit("at least one market is required")
-    unsupported = [market for market in normalized if market not in DOMESTIC_MARKETS]
+    unsupported = [market for market in normalized if market not in SYMBOL_MARKETS]
     if unsupported:
         raise SystemExit(
-            f"only domestic markets are supported: {', '.join(DOMESTIC_MARKETS)}"
+            f"supported markets are: {', '.join(SYMBOL_MARKETS)}"
         )
     return normalized
 
@@ -50,7 +50,7 @@ def collect_rows(
     timeout_seconds: float = 30.0,
     on_market_downloaded=None,
 ) -> list[tuple[object, ...]]:
-    """Download each market's master and flatten it to domestic_symbols rows."""
+    """Download each market's master and flatten it to catalog rows."""
 
     downloaded_at = datetime.now(_KST).isoformat()
     rows: list[tuple[object, ...]] = []
@@ -67,12 +67,13 @@ def collect_rows(
 
 
 def main() -> None:
+    load_env()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--markets",
         nargs="+",
-        default=list(DOMESTIC_MARKETS),
-        help="Domestic markets to load (default: KOSPI KOSDAQ).",
+        default=list(SYMBOL_MARKETS),
+        help="Markets to load (default: KOSPI KOSDAQ NASDAQ AMEX NYSE).",
     )
     parser.add_argument(
         "--dsn",
@@ -96,7 +97,7 @@ def main() -> None:
         on_market_downloaded=_announce,
     )
     count = seed(resolve_dsn(args.dsn), rows)
-    print(f"loaded {count} domestic symbols into PostgreSQL")
+    print(f"loaded {count} symbols into PostgreSQL")
 
 
 if __name__ == "__main__":
