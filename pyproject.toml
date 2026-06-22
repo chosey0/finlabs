@@ -10,6 +10,7 @@ dependencies = [
     "finlabs-kis",
     "httpx>=0.27.0",
     "platformdirs>=4.0.0",
+    "python-dotenv>=1.0.0",
     "rich>=13.0.0",
     "rich-inquirer>=0.1.8",
     "textual>=8.2.7",

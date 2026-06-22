@@ -16,6 +16,22 @@ from psycopg_pool import ConnectionPool
 
 DSN_ENV_VAR = "INTELLIGENCE_DATABASE_URL"
 
+
+def load_env() -> None:
+    """Load a local ``.env`` into the process environment for entrypoints.
+
+    Call this only from entrypoints (the API runtime, scripts) — never at import
+    time of a library module, or tests that import storage would silently inherit
+    a developer ``.env`` DSN. ``override=False`` keeps already-exported variables
+    (shell/CI) authoritative over the file.
+    """
+
+    from dotenv import load_dotenv
+
+    # interpolate=False keeps a literal "$" in values (e.g. a DB password) from
+    # being treated as shell-style variable expansion.
+    load_dotenv(override=False, interpolate=False)
+
 # Connections are pinned to the Korean-equity domain timezone so timestamptz
 # values round-trip as +09:00 aware datetimes, independent of the host or the
 # server's configured timezone. (DuckDB previously rendered in the host's local

@@ -15,9 +15,12 @@ from modules.brokers.kiwoom.client import KiwoomClient
 from modules.news.naver import NaverNewsClient
 from modules.orchestration.news_intelligence import NewsIntelligenceServices
 from modules.storage.news_intelligence.catalog import load_catalog_snapshot
-from modules.storage.news_intelligence.database import resolve_dsn
+from modules.storage.news_intelligence.database import load_env, resolve_dsn
 from modules.storage.news_intelligence.writer import SingleWriter
 from modules.storage.warehouse import data_dir
+
+# Load a local .env before startup reads credentials/DSN from the environment.
+load_env()
 
 
 @asynccontextmanager

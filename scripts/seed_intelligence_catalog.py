@@ -21,7 +21,7 @@ from pathlib import Path
 
 import duckdb
 
-from modules.storage.news_intelligence.database import connect, resolve_dsn
+from modules.storage.news_intelligence.database import connect, load_env, resolve_dsn
 from modules.storage.warehouse import default_warehouse_file
 
 _COLUMNS = (
@@ -73,6 +73,7 @@ def seed(dsn: str, rows: list[tuple[object, ...]]) -> int:
 
 
 def main() -> None:
+    load_env()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--source",

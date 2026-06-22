@@ -24,6 +24,7 @@ from modules.domain.news_intelligence import (
     approved_kiwoom_benchmark,
 )
 from modules.orchestration.news_intelligence import NewsIntelligenceServices
+from modules.storage.news_intelligence.database import load_env
 from modules.storage.news_intelligence.writer import SingleWriter
 
 
@@ -138,6 +139,7 @@ def _catalog() -> CatalogSnapshot:
 
 
 def main() -> None:
+    load_env()
     with tempfile.TemporaryDirectory(prefix="finlabs-intelligence-e2e-") as root:
         app.state.news_intelligence_services = NewsIntelligenceServices(
             catalog_snapshot=_catalog(),
