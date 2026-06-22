@@ -315,6 +315,42 @@ def test_search_uses_start_1000_when_it_can_prove_completeness() -> None:
     assert transport.calls[-1]["params"]["start"] == 1000
 
 
+def test_search_stops_at_target_date_boundary_for_high_volume_keyword() -> None:
+    # A popular keyword reports far more than the pagination cap (total=5000),
+    # but once pagination passes the target date's earliest possible instant
+    # (its midnight at +14:00) the date is fully covered, so the search completes
+    # without hitting the start=1000 limit or raising an incomplete error.
+    target_items = [
+        _item(
+            "Fri, 19 Jun 2026 12:00:00 +0900",
+            original_url=f"https://publisher.example/target/{index}",
+            naver_url=f"https://n.news.naver.com/target/{index}",
+        )
+        for index in range(100)
+    ]
+    older_items = [
+        _item(
+            "Thu, 18 Jun 2026 09:00:00 +0900",
+            original_url=f"https://publisher.example/older/{index}",
+            naver_url=f"https://n.news.naver.com/older/{index}",
+        )
+        for index in range(100)
+    ]
+    transport = ScriptedTransport(
+        FakeResponse(_page(target_items, total=5000)),
+        FakeResponse(_page(older_items, start=101, total=5000)),
+    )
+
+    articles = NaverNewsClient("client", "secret", transport=transport).search(
+        "삼성전자",
+        date(2026, 6, 19),
+    )
+
+    assert len(articles) == 100
+    assert all(article.published_at.date() == date(2026, 6, 19) for article in articles)
+    assert [call["params"]["start"] for call in transport.calls] == [1, 101]
+
+
 def test_search_rejects_short_page_when_metadata_says_results_remain() -> None:
     transport = ScriptedTransport(
         FakeResponse(_page([_item("Fri, 19 Jun 2026 12:00:00 +0900")], total=1000))

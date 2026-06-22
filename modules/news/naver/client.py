@@ -6,7 +6,7 @@ import html
 import re
 import time
 from collections.abc import Callable, Mapping
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any, Protocol
 
@@ -27,6 +27,11 @@ from .models import NaverNewsArticle
 NAVER_NEWS_SEARCH_URL = "https://openapi.naver.com/v1/search/news.json"
 NAVER_MAX_DISPLAY = 100
 NAVER_MAX_START = 1000
+# Widest civil UTC offset (+14:00). Results are sorted by instant descending, so
+# once an article's instant precedes the target date's earliest possible instant
+# (its midnight at +14:00), no remaining article can fall on that provider-offset
+# date in any timezone — date coverage is complete and pagination can stop.
+_MAX_CIVIL_OFFSET = timezone(timedelta(hours=14))
 _HIGHLIGHT_TAG = re.compile(r"</?b\s*>", re.IGNORECASE)
 
 
@@ -87,6 +92,12 @@ class NaverNewsClient:
         """지정 날짜의 검색 결과를 완전성 보장과 함께 반환한다."""
 
         normalized_keyword = _validate_search_input(keyword, published_on)
+        earliest_target_instant = datetime(
+            published_on.year,
+            published_on.month,
+            published_on.day,
+            tzinfo=_MAX_CIVIL_OFFSET,
+        )
         articles_by_url: dict[str, NaverNewsArticle] = {}
         start = 1
 
@@ -94,14 +105,17 @@ class NaverNewsClient:
             payload = self._request_page(keyword=normalized_keyword, start=start)
             items, total = _parse_page(payload, expected_start=start)
 
+            passed_target_window = False
             for item in items:
                 article = _parse_article(item)
                 item_date = article.published_at.date()
                 if item_date == published_on:
                     _keep_preferred_duplicate(articles_by_url, article)
+                if article.published_at < earliest_target_instant:
+                    passed_target_window = True
 
             exhausted = start + len(items) > total
-            if exhausted:
+            if exhausted or passed_target_window:
                 break
             if len(items) < NAVER_MAX_DISPLAY:
                 raise NaverNewsMalformedResponseError(
