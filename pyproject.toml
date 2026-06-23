@@ -29,6 +29,7 @@ research = [
     "torch>=2.2.0",
 ]
 crawler = ["scrapy>=2.16.0"]
+modeling = ["lightgbm>=4.0.0"]
 news = ["finlabs-news"]
 toss = ["finlabs-toss"]
 postgres = ["psycopg[binary]>=3.2.0", "psycopg-pool>=3.2.0"]
