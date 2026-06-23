@@ -26,8 +26,13 @@ def test_kiwoom_reaction_adapter_loads_approved_aligned_benchmark() -> None:
 
     assert result.benchmark_proof == approved_kiwoom_benchmark("KOSDAQ")
     assert chart.industry_code == "101"
-    assert result.session_minutes[0] == anchor
-    assert result.session_minutes[30] == anchor + timedelta(minutes=30)
+    # session_minutes is now the real KRX regular-session grid for the trading
+    # date(s) the stock actually traded, not a fabricated anchor..+30 stub.
+    assert result.session_minutes[0] == datetime(2026, 6, 17, 9, 0, tzinfo=KST)
+    assert result.session_minutes[-1] == datetime(2026, 6, 17, 15, 30, tzinfo=KST)
+    assert len(result.session_minutes) == 391
+    assert anchor in result.session_minutes
+    assert anchor + timedelta(minutes=30) in result.session_minutes
     assert len(result.stock_points) == len(result.benchmark_points) == 51
     assert len(result.source_checksum) == 64
 

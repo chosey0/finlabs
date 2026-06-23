@@ -6,9 +6,19 @@ import hashlib
 import io
 import json
 import csv
+import statistics
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Mapping
+from decimal import Decimal
+from typing import Any, Mapping, Sequence
+
+from modules.news.intelligence.processors.sampling import (
+    DEFAULT_EVENT_HORIZON_MINUTES,
+    DEFAULT_SPLIT_RATIOS,
+    EventMember,
+    assign_event_groups,
+    assign_split,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,12 +38,17 @@ def build_dataset_snapshot(
     purpose: str,
     cohort: str,
     candidates: tuple[Mapping[str, Any], ...],
+    split_salt: str | None = None,
+    split_ratios: Sequence[tuple[str, float]] = DEFAULT_SPLIT_RATIOS,
+    event_horizon_minutes: int = DEFAULT_EVENT_HORIZON_MINUTES,
+    surge_threshold_std: Decimal = Decimal("2"),
 ) -> DatasetSnapshot:
     if purpose not in {"relevance_training", "reaction_training", "combined"}:
         raise ValueError("unsupported dataset purpose")
     if cohort not in {"live_first_seen", "historical_publication_proxy"}:
         raise ValueError("unsupported dataset cohort")
-    included: list[Mapping[str, Any]] = []
+    salt = dataset_id if split_salt is None else split_salt
+    included: list[dict[str, Any]] = []
     excluded: list[Mapping[str, Any]] = []
     for candidate in candidates:
         frozen = _canonical_member(candidate, cohort)
@@ -51,14 +66,65 @@ def build_dataset_snapshot(
         )
     )
     excluded.sort(key=lambda row: (row["article_id"], row["reason"]))
+
+    # Cluster samples whose label windows can overlap into one event, then route
+    # every member of an event to the same fold so a shared price move never
+    # straddles train/test. event_id/split are derived (not stored on samples)
+    # so they recompute identically and remain auditable in the manifest.
+    event_ids = assign_event_groups(
+        (
+            EventMember(
+                key=row["sample_id"],
+                security_id=row["security_id"],
+                anchor=datetime.fromisoformat(row["effective_label_anchor"]),
+            )
+            for row in included
+        ),
+        horizon_minutes=event_horizon_minutes,
+    )
+    split_counts: dict[str, int] = {}
+    distinct_events: set[str] = set()
+    for row in included:
+        event_id = event_ids[row["sample_id"]]
+        split = assign_split(event_id, salt=salt, ratios=split_ratios)
+        row["event_id"] = event_id
+        row["split"] = split
+        distinct_events.add(event_id)
+        split_counts[split] = split_counts.get(split, 0) + 1
+
+    # Cross-sectional standardization (per trading day, across that day's names)
+    # and the derived binary surge target. The per-stock time-series standardized
+    # value is the primary label; this adds the contemporaneous cross-section so
+    # ranking can compare names within a day. Same-time cross-section is not
+    # leakage: it is available at inference when ranking the day's candidates.
+    _assign_cross_sectional_std(included)
+    surge_count = 0
+    for row in included:
+        surge = _surge_label(row["abnormal_return_std"], surge_threshold_std)
+        row["surge_label"] = surge
+        surge_count += surge
+
     manifest = {
-        "schema_version": "news-intelligence-dataset-v1",
+        "schema_version": "news-intelligence-dataset-v3",
         "dataset_id": dataset_id,
         "purpose": purpose,
         "cohort": cohort,
         "included_count": len(included),
         "excluded_count": len(excluded),
         "exclusion_counts": _counts(excluded),
+        "event_count": len(distinct_events),
+        "split_counts": dict(sorted(split_counts.items())),
+        "origin_counts": _origin_counts(included),
+        "surge_count": surge_count,
+        "label_config": {
+            "primary_target": "abnormal_return_std",
+            "surge_threshold_std": str(surge_threshold_std),
+        },
+        "split_config": {
+            "salt": salt,
+            "event_horizon_minutes": event_horizon_minutes,
+            "ratios": [list(item) for item in split_ratios],
+        },
         "member_annotation_revision_ids": [row["annotation_id"] for row in included],
     }
     logical = {
@@ -106,6 +172,15 @@ def snapshot_csv_bytes(snapshot: DatasetSnapshot) -> bytes:
         "symbol",
         "reaction_class",
         "reaction_exclusion_reason",
+        "beta",
+        "abnormal_return",
+        "abnormal_return_std",
+        "abnormal_return_std_xs",
+        "turnover_zscore",
+        "surge_label",
+        "sample_origin",
+        "event_id",
+        "split",
         "provenance_json",
         "annotation_json",
     ]
@@ -187,6 +262,13 @@ def _canonical_member(candidate: Mapping[str, Any], cohort: str) -> Mapping[str,
         "symbol": str(candidate["symbol"]),
         "reaction_class": candidate["reaction_class"],
         "reaction_exclusion_reason": candidate["reaction_exclusion_reason"],
+        "sample_origin": _validated_origin(
+            candidate.get("sample_origin", "event_selected")
+        ),
+        "beta": _decimal_str(candidate.get("beta")),
+        "abnormal_return": _decimal_str(candidate.get("abnormal_return")),
+        "abnormal_return_std": _decimal_str(candidate.get("abnormal_return_std")),
+        "turnover_zscore": _decimal_str(candidate.get("turnover_zscore")),
         "provenance": json.loads(
             json.dumps(candidate["provenance"], ensure_ascii=False, sort_keys=True)
         ),
@@ -210,6 +292,10 @@ def _exclusion_reason(purpose: str, row: Mapping[str, Any]) -> str | None:
             or row["reaction_class"] is None
         ):
             return str(row["reaction_exclusion_reason"] or "reaction_label_missing")
+        # The primary target is the standardized abnormal return; a sample without
+        # it cannot serve the surge regression even if the categorical view exists.
+        if row.get("abnormal_return_std") is None:
+            return "reaction_std_unavailable"
     return None
 
 
@@ -219,6 +305,59 @@ def _counts(rows: list[Mapping[str, Any]]) -> Mapping[str, int]:
         reason = str(row["reason"])
         result[reason] = result.get(reason, 0) + 1
     return dict(sorted(result.items()))
+
+
+def _origin_counts(rows: list[Mapping[str, Any]]) -> Mapping[str, int]:
+    result: dict[str, int] = {}
+    for row in rows:
+        origin = str(row["sample_origin"])
+        result[origin] = result.get(origin, 0) + 1
+    return dict(sorted(result.items()))
+
+
+def _assign_cross_sectional_std(rows: list[dict[str, Any]]) -> None:
+    """Standardize the beta-adjusted abnormal return within each trading day.
+
+    Mutates each row with ``abnormal_return_std_xs`` (a string or ``None``). Days
+    with fewer than two valued members, or zero cross-sectional dispersion, leave
+    the field ``None``.
+    """
+
+    by_day: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        row["abnormal_return_std_xs"] = None
+        if row["abnormal_return"] is None:
+            continue
+        day = datetime.fromisoformat(row["effective_label_anchor"]).date().isoformat()
+        by_day.setdefault(day, []).append(row)
+
+    for members in by_day.values():
+        values = [Decimal(member["abnormal_return"]) for member in members]
+        if len(values) < 2:
+            continue
+        mean = statistics.mean(values)
+        deviation = statistics.pstdev(values)
+        if deviation == 0:
+            continue
+        for member, value in zip(members, values):
+            member["abnormal_return_std_xs"] = str((value - mean) / deviation)
+
+
+def _surge_label(standardized: str | None, threshold: Decimal) -> int:
+    if standardized is None:
+        return 0
+    return 1 if Decimal(standardized) >= threshold else 0
+
+
+def _decimal_str(value: Any) -> str | None:
+    return None if value is None else str(value)
+
+
+def _validated_origin(value: Any) -> str:
+    origin = str(value)
+    if origin not in {"event_selected", "random_control"}:
+        raise ValueError("unsupported sample origin")
+    return origin
 
 
 def _json_bytes(value: Any) -> bytes:

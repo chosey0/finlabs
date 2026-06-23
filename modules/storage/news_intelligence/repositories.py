@@ -6,6 +6,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from decimal import Decimal
 from enum import StrEnum
 from typing import Any
 
@@ -61,6 +62,11 @@ class SampleRecord:
     provenance_json: str
     reaction_class: str | None
     reaction_exclusion_reason: str | None
+    sample_origin: str = "event_selected"
+    beta: Decimal | None = None
+    abnormal_return: Decimal | None = None
+    abnormal_return_std: Decimal | None = None
+    turnover_zscore: Decimal | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -412,17 +418,28 @@ def upsert_sample(
     for value in (sample.published_at, sample.effective_label_anchor, created_at):
         if value.tzinfo is None or value.utcoffset() is None:
             raise ValueError("sample timestamps must be timezone-aware")
+    if sample.sample_origin not in {"event_selected", "random_control"}:
+        raise ValueError("unsupported sample origin")
     connection.execute(
         """
         INSERT INTO intelligence_samples (
             sample_id, article_id, security_id, market, symbol, title, description,
             published_at, effective_label_anchor, anchor_basis, cohort,
-            provenance_json, reaction_class, reaction_exclusion_reason, created_at
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            provenance_json, reaction_class, reaction_exclusion_reason,
+            sample_origin, beta, abnormal_return, abnormal_return_std,
+            turnover_zscore, created_at
+        ) VALUES (
+            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+            %s, %s
+        )
         ON CONFLICT (sample_id) DO UPDATE SET
             provenance_json = excluded.provenance_json,
             reaction_class = excluded.reaction_class,
-            reaction_exclusion_reason = excluded.reaction_exclusion_reason
+            reaction_exclusion_reason = excluded.reaction_exclusion_reason,
+            beta = excluded.beta,
+            abnormal_return = excluded.abnormal_return,
+            abnormal_return_std = excluded.abnormal_return_std,
+            turnover_zscore = excluded.turnover_zscore
         """,
         [
             sample.sample_id,
@@ -439,6 +456,11 @@ def upsert_sample(
             sample.provenance_json,
             sample.reaction_class,
             sample.reaction_exclusion_reason,
+            sample.sample_origin,
+            sample.beta,
+            sample.abnormal_return,
+            sample.abnormal_return_std,
+            sample.turnover_zscore,
             created_at,
         ],
     )
@@ -452,7 +474,8 @@ def load_sample(
         SELECT sample_id, article_id, security_id, market, symbol, title, description,
                published_at, effective_label_anchor,
                anchor_basis, cohort, provenance_json, reaction_class,
-               reaction_exclusion_reason
+               reaction_exclusion_reason, sample_origin,
+               beta, abnormal_return, abnormal_return_std, turnover_zscore
         FROM intelligence_samples WHERE sample_id = %s
         """,
         [sample_id],
@@ -474,6 +497,11 @@ def load_sample(
         provenance_json=row[11],
         reaction_class=row[12],
         reaction_exclusion_reason=row[13],
+        sample_origin=row[14],
+        beta=row[15],
+        abnormal_return=row[16],
+        abnormal_return_std=row[17],
+        turnover_zscore=row[18],
     )
 
 
@@ -492,7 +520,8 @@ def load_authoritative_candidates(
                    s.reaction_class, s.reaction_exclusion_reason,
                    r.discovery_provenance_json,
                    r.revision, r.suggestion_value, r.evidence_json, r.rule_version,
-                   r.actor, r.note, r.created_at
+                   r.actor, r.note, r.created_at, s.sample_origin,
+                   s.abnormal_return, s.abnormal_return_std, s.beta, s.turnover_zscore
             FROM intelligence_relevance_revisions r
             JOIN intelligence_samples s ON s.sample_id = r.sample_id
             WHERE r.annotation_id = %s
@@ -537,6 +566,11 @@ def load_authoritative_candidates(
                 "symbol": row[9],
                 "reaction_class": row[10],
                 "reaction_exclusion_reason": row[11],
+                "sample_origin": row[20],
+                "abnormal_return": row[21],
+                "abnormal_return_std": row[22],
+                "beta": row[23],
+                "turnover_zscore": row[24],
                 "provenance": provenance,
                 "annotation": annotation,
             }

@@ -56,6 +56,104 @@ def test_snapshot_is_stably_ordered_partitioned_and_purpose_filtered() -> None:
     assert combined.exclusions[0]["reason"] == "uncertain_relevance"
 
 
+def test_snapshot_groups_events_and_assigns_leakage_safe_splits() -> None:
+    from datetime import timedelta
+
+    base = datetime(2026, 6, 17, 9, 30, tzinfo=KST)
+
+    def at(article_id: str, anchor, origin="event_selected"):
+        return {
+            **_candidate(article_id, f"ann-{article_id}", "relevant"),
+            "effective_label_anchor": anchor,
+            "sample_origin": origin,
+        }
+
+    near_a = at("a", base)
+    near_b = at("b", base + timedelta(minutes=25))  # same event as a (gap 25 <= 30)
+    far_c = at("c", base + timedelta(minutes=120))  # separate event
+    control = at("d", base + timedelta(minutes=200), origin="random_control")
+
+    snapshot = build_dataset_snapshot(
+        dataset_id="dataset-split",
+        purpose="relevance_training",
+        cohort="historical_publication_proxy",
+        candidates=(near_a, near_b, far_c, control),
+        event_horizon_minutes=30,
+    )
+
+    members = {row["article_id"]: row for row in snapshot.members}
+    assert members["a"]["event_id"] == members["b"]["event_id"]
+    assert members["a"]["split"] == members["b"]["split"]  # no cross-fold leakage
+    assert members["a"]["event_id"] != members["c"]["event_id"]
+    assert all("split" in row for row in snapshot.members)
+
+    manifest = snapshot.manifest
+    assert manifest["schema_version"] == "news-intelligence-dataset-v3"
+    assert manifest["event_count"] == 3
+    assert sum(manifest["split_counts"].values()) == manifest["included_count"] == 4
+    assert manifest["origin_counts"] == {"event_selected": 3, "random_control": 1}
+    assert manifest["split_config"]["event_horizon_minutes"] == 30
+
+
+def test_snapshot_stores_continuous_label_cross_section_and_surge() -> None:
+    from datetime import timedelta
+    from decimal import Decimal
+
+    base = datetime(2026, 6, 17, 9, 30, tzinfo=KST)
+
+    def reaction_candidate(article_id, anchor, abnormal, std, security="KOSDAQ:123456"):
+        candidate = {
+            **_candidate(article_id, f"ann-{article_id}", "relevant"),
+            "effective_label_anchor": anchor,
+            "security_id": security,
+            "reaction_class": "positive",
+            "reaction_exclusion_reason": None,
+            "abnormal_return": Decimal(abnormal),
+            "abnormal_return_std": Decimal(std),
+            "beta": Decimal("1.2"),
+            "turnover_zscore": Decimal("2.5"),
+        }
+        return candidate
+
+    # Three names on the same day -> cross-sectional standardization is defined;
+    # std values straddle the surge threshold (2.0).
+    a = reaction_candidate("a", base, "0.01", "1.0", "KOSDAQ:111111")
+    b = reaction_candidate("b", base + timedelta(minutes=1), "0.05", "2.5", "KOSDAQ:222222")
+    c = reaction_candidate("c", base + timedelta(minutes=2), "0.09", "3.0", "KOSDAQ:333333")
+    # A sample missing the standardized target must be excluded from reaction data.
+    no_std = {
+        **_candidate("d", "ann-d", "relevant"),
+        "effective_label_anchor": base,
+        "security_id": "KOSDAQ:444444",
+        "reaction_class": "positive",
+        "reaction_exclusion_reason": None,
+        "abnormal_return": Decimal("0.04"),
+        "abnormal_return_std": None,
+    }
+
+    snapshot = build_dataset_snapshot(
+        dataset_id="dataset-surge",
+        purpose="reaction_training",
+        cohort="historical_publication_proxy",
+        candidates=(a, b, c, no_std),
+        surge_threshold_std=Decimal("2"),
+    )
+
+    members = {row["article_id"]: row for row in snapshot.members}
+    assert set(members) == {"a", "b", "c"}  # no_std excluded
+    assert snapshot.exclusions == ({"article_id": "d", "reason": "reaction_std_unavailable"},)
+    # Continuous primary label is carried as a canonical string.
+    assert members["b"]["abnormal_return_std"] == "2.5"
+    # Cross-sectional standardization is defined (>=2 names that day, non-zero spread).
+    assert all(members[a]["abnormal_return_std_xs"] is not None for a in ("a", "b", "c"))
+    # Surge target derived from the time-series standardized value at threshold 2.0.
+    assert members["a"]["surge_label"] == 0
+    assert members["b"]["surge_label"] == 1
+    assert members["c"]["surge_label"] == 1
+    assert snapshot.manifest["surge_count"] == 2
+    assert snapshot.manifest["label_config"]["primary_target"] == "abnormal_return_std"
+
+
 def test_snapshot_rejects_unsupported_labels_and_mismatched_anchor_basis() -> None:
     candidate = _candidate("article", "ann", "invented")
     with pytest.raises(ValueError, match="unsupported final"):

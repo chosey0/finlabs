@@ -66,7 +66,7 @@ def test_schema_migration_is_idempotent_and_has_no_raw_candle_table(
 ) -> None:
     connection = connect(intelligence_dsn)
     try:
-        assert initialize_schema(connection) == (1, 2, 3, 4)
+        assert initialize_schema(connection) == (1, 2, 3, 4, 5, 6)
         assert initialize_schema(connection) == ()
         table_names = {
             row[0]

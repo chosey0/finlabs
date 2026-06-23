@@ -6,6 +6,7 @@ import asyncio
 import hashlib
 import json
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -63,6 +64,10 @@ from modules.news.intelligence.processors.snapshot import (
     build_dataset_snapshot,
     snapshot_csv_bytes,
     snapshot_json_bytes,
+)
+from modules.news.intelligence.processors.sampling import (
+    ControlSamplePoint,
+    build_control_sampling_plan,
 )
 
 
@@ -187,16 +192,42 @@ class NewsIntelligenceServices:
             identity_checksum=candle_identity_checksum(candles),
         )
 
+    def plan_control_samples(
+        self,
+        *,
+        securities: Sequence[str],
+        sessions: Sequence[tuple[str, Sequence[datetime]]],
+        seed: str,
+        per_session: int = 1,
+    ) -> tuple[ControlSamplePoint, ...]:
+        """Draw reproducible random anchors for move-independent negatives.
+
+        Each returned point is meant to be replayed through ``discover_news``
+        with ``origin="random_control"`` so that news enters the dataset via
+        randomly chosen times rather than only via surge-selected candles,
+        removing the selection bias that conditions samples on the outcome.
+        """
+
+        return build_control_sampling_plan(
+            securities=securities,
+            sessions=sessions,
+            seed=seed,
+            per_session=per_session,
+        )
+
     async def discover_news(
         self,
         *,
         security_id: str,
         selected_candle_at: datetime,
+        origin: str = "event_selected",
     ) -> NewsDiscoveryResult:
         if self.news_search is None:
             raise RuntimeError("news search service is unavailable")
         if selected_candle_at.tzinfo is None or selected_candle_at.utcoffset() is None:
             raise ValueError("selected_candle_at must be timezone-aware")
+        if origin not in {"event_selected", "random_control"}:
+            raise ValueError("unsupported sample origin")
         security = self._security(security_id)
 
         selected_kst = selected_candle_at.astimezone(KST)
@@ -297,6 +328,7 @@ class NewsIntelligenceServices:
                 "catalog_snapshot_id": self.catalog_snapshot.snapshot_id,
                 "catalog_version": self.catalog_snapshot.version,
                 "catalog_checksum": self.catalog_snapshot.checksum,
+                "sample_origin": origin,
                 "selected_candle_at": selected_kst.isoformat(),
                 "discovery_plan": {
                     "version": plan.version,
@@ -357,6 +389,7 @@ class NewsIntelligenceServices:
                             ),
                             reaction_class=None,
                             reaction_exclusion_reason="benchmark_unavailable",
+                            sample_origin=origin,
                         ),
                         created_at=created_at,
                     )
@@ -426,6 +459,14 @@ class NewsIntelligenceServices:
             "session_id": data.session_id,
             "source_checksum": data.source_checksum,
             "label_version": result.label_version,
+            "anchor_adjustment": result.anchor_adjustment,
+            "feature_cutoff_at": result.feature_cutoff_at.isoformat(),
+            "label_window_start": (
+                result.label_window_start.isoformat()
+                if result.label_window_start is not None
+                else None
+            ),
+            "pre_anchor_drift": result.pre_anchor_drift,
         }
         updated = replace(
             sample,
@@ -434,6 +475,10 @@ class NewsIntelligenceServices:
             ),
             reaction_class=result.reaction_class,
             reaction_exclusion_reason=result.exclusion_reason,
+            beta=result.beta,
+            abnormal_return=result.abnormal_return,
+            abnormal_return_std=result.abnormal_return_std,
+            turnover_zscore=result.turnover_zscore,
         )
         await asyncio.to_thread(
             self.annotation_writer.execute,

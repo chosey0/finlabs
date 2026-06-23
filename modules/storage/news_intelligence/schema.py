@@ -6,7 +6,7 @@ from collections.abc import Iterable
 
 import psycopg
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 6
 
 _MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
     (
@@ -200,6 +200,36 @@ _MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
                 ),
                 '{}'
             )
+            """,
+        ),
+    ),
+    (
+        5,
+        (
+            # Distinguish outcome-conditioned samples (a candle was selected,
+            # usually because it surged) from move-independent random controls.
+            # Existing rows were all collected via candle selection, so they
+            # backfill to 'event_selected'.
+            """
+            ALTER TABLE intelligence_samples
+            ADD COLUMN sample_origin VARCHAR NOT NULL DEFAULT 'event_selected'
+            CHECK (sample_origin IN ('event_selected', 'random_control'))
+            """,
+        ),
+    ),
+    (
+        6,
+        (
+            # Persist the continuous reaction magnitude as the canonical label.
+            # ``abnormal_return_std`` (per-stock time-series standardized) is the
+            # primary regression target; ``reaction_class`` becomes a derived view.
+            # Older rows predate this label version and stay NULL.
+            """
+            ALTER TABLE intelligence_samples
+            ADD COLUMN beta NUMERIC,
+            ADD COLUMN abnormal_return NUMERIC,
+            ADD COLUMN abnormal_return_std NUMERIC,
+            ADD COLUMN turnover_zscore NUMERIC
             """,
         ),
     ),

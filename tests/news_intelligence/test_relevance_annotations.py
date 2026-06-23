@@ -109,7 +109,7 @@ def test_human_annotation_edits_append_authoritative_revision_history(
 
 def test_schema_v3_is_forward_only_and_idempotent(intelligence_dsn: str) -> None:
     with psycopg.connect(intelligence_dsn) as connection:
-        assert initialize_schema(connection) == (1, 2, 3, 4)
+        assert initialize_schema(connection) == (1, 2, 3, 4, 5, 6)
         assert initialize_schema(connection) == ()
 
 

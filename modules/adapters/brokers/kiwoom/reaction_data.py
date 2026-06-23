@@ -16,6 +16,7 @@ from modules.domain.news_intelligence import (
     ReactionSourceData,
     approved_kiwoom_benchmark,
 )
+from modules.news.intelligence.processors.session_grid import regular_session_minutes
 
 _TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
 
@@ -41,7 +42,11 @@ class KiwoomReactionMarketData:
         anchor = effective_label_anchor.astimezone(KST).replace(second=0, microsecond=0)
         proof = approved_kiwoom_benchmark(market)
         window_start = anchor - timedelta(hours=2)
-        window_end = anchor + timedelta(hours=2)
+        # Reach forward far enough to capture the next trading session so an
+        # after-hours/weekend anchor can roll forward to it. Seven days covers a
+        # weekend plus a multi-day KRX holiday; longer closures fail closed in the
+        # labeler via an incomplete forward window.
+        window_end = anchor + timedelta(days=7)
         start_date = window_start.strftime("%Y-%m-%d %H%M%S")
 
         try:
@@ -64,9 +69,12 @@ class KiwoomReactionMarketData:
             ) from error
         stock_points = _points(stock_bars, window_start, window_end)
         benchmark_points = _points(benchmark_bars, window_start, window_end)
-        session_minutes = tuple(
-            anchor + timedelta(minutes=index) for index in range(31)
-        )
+        # Kiwoom only returns bars on trading days, so the dates that actually
+        # carry stock bars are the real trading calendar (holidays drop out). The
+        # regular-session grid over those dates lets the labeler roll an off-session
+        # anchor forward and run the 30-minute window across session boundaries.
+        trading_dates = {point.timestamp.astimezone(KST).date() for point in stock_points}
+        session_minutes = regular_session_minutes(trading_dates)
         checksum = _source_checksum(stock_points, benchmark_points, proof.api_id)
         return ReactionSourceData(
             stock_points=stock_points,

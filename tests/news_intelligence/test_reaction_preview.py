@@ -54,6 +54,122 @@ def test_reaction_uses_exact_30th_trading_minute_and_only_pre_anchor_features() 
     assert result.exclusion_reason is None
 
 
+def test_reaction_rolls_after_hours_anchor_to_next_session_open() -> None:
+    from datetime import date
+
+    from modules.news.intelligence.processors.session_grid import (
+        regular_session_minutes,
+    )
+
+    grid = regular_session_minutes([date(2026, 6, 17), date(2026, 6, 18)])
+    anchor = datetime(2026, 6, 17, 16, 0, tzinfo=KST)  # after the 06-17 close
+    next_open = datetime(2026, 6, 18, 9, 0, tzinfo=KST)
+
+    # Stock/benchmark points: a short pre-open tail (for turnover history) plus the
+    # required forward window at the next session open.
+    covered = [grid[385 + index] for index in range(6)]  # 06-17 15:25..15:30
+    covered += [next_open + timedelta(minutes=index) for index in range(31)]
+    stock = tuple(
+        MarketPoint(
+            timestamp=ts,
+            close=Decimal("100") if ts <= next_open else Decimal("103"),
+            turnover=Decimal(index + 1),
+        )
+        for index, ts in enumerate(covered)
+    )
+    benchmark = tuple(
+        MarketPoint(
+            timestamp=ts,
+            close=Decimal("100") if ts <= next_open else Decimal("101"),
+            turnover=Decimal("1"),
+        )
+        for ts in covered
+    )
+
+    result = preview_reaction(
+        effective_label_anchor=anchor,
+        stock_points=stock,
+        benchmark_points=benchmark,
+        session_minutes=grid,
+    )
+
+    assert result.exclusion_reason is None
+    assert result.anchor_adjustment == "rolled_to_next_session"
+    assert result.feature_cutoff_at == anchor  # information time is unchanged
+    assert result.label_window_start == next_open
+    assert result.label_window_end == next_open + timedelta(minutes=30)
+    assert result.abnormal_return == Decimal("0.02")
+    assert result.pre_anchor_drift is None  # not meaningful for a rolled anchor
+
+
+def test_reaction_flags_pre_anchor_drift_for_in_session_anchor() -> None:
+    start = datetime(2026, 6, 17, 9, 0, tzinfo=KST)
+    session = tuple(start + timedelta(minutes=index) for index in range(80))
+    anchor = session[30]  # 09:30, in session
+    pre = session[25]  # 09:25, five minutes earlier
+    # Stock jumps in the five minutes before the anchor (timestamp lagging event).
+    stock = tuple(
+        MarketPoint(
+            timestamp=ts,
+            close=Decimal("105") if ts >= anchor else Decimal("100"),
+            turnover=Decimal(index + 1),
+        )
+        for index, ts in enumerate(session)
+    )
+    benchmark = tuple(
+        MarketPoint(timestamp=ts, close=Decimal("100"), turnover=Decimal("1"))
+        for ts in session
+    )
+
+    result = preview_reaction(
+        effective_label_anchor=anchor,
+        stock_points=stock,
+        benchmark_points=benchmark,
+        session_minutes=session,
+    )
+
+    assert result.anchor_adjustment == "none"
+    assert pre in {point.timestamp for point in stock}
+    assert result.pre_anchor_abnormal_return == Decimal("0.05")
+    assert result.pre_anchor_drift is True
+
+
+def test_reaction_estimates_beta_and_standardizes_abnormal_return() -> None:
+    start = datetime(2026, 6, 17, 9, 0, tzinfo=KST)
+    session = tuple(start + timedelta(minutes=index) for index in range(80))
+    anchor = session[30]
+    # Flat benchmark -> beta falls back to 1; stock has pre-anchor variance so the
+    # abnormal-return volatility (denominator) is non-zero and standardization runs.
+    stock = tuple(
+        MarketPoint(
+            timestamp=ts,
+            close=(
+                Decimal("105")
+                if ts > anchor
+                else Decimal("100") + (index % 2)  # alternates 100/101 pre-anchor
+            ),
+            turnover=Decimal(index + 1),
+        )
+        for index, ts in enumerate(session)
+    )
+    benchmark = tuple(
+        MarketPoint(timestamp=ts, close=Decimal("100"), turnover=Decimal("1"))
+        for ts in session
+    )
+
+    result = preview_reaction(
+        effective_label_anchor=anchor,
+        stock_points=stock,
+        benchmark_points=benchmark,
+        session_minutes=session,
+    )
+
+    assert result.exclusion_reason is None
+    assert result.beta == Decimal("1")  # zero-variance benchmark -> fallback
+    assert result.abnormal_return == Decimal("0.05")  # 105/100 - 1, flat benchmark
+    assert result.abnormal_return_std is not None  # standardized primary target
+
+
 def test_reaction_rejects_a_horizon_with_missing_intermediate_minutes() -> None:
     anchor = datetime(2026, 6, 17, 9, 30, tzinfo=KST)
     session = tuple(anchor + timedelta(minutes=index) for index in range(31))
