@@ -1,6 +1,6 @@
 import type { CandlestickData, UTCTimestamp } from "lightweight-charts";
 
-import type { CandleResponse } from "./api/generated/types.gen";
+import type { CandleResponse } from "../../api/generated/types.gen";
 
 export function toChartCandles(
   candles: readonly CandleResponse[],
