@@ -55,6 +55,8 @@ PARSERS: Mapping[str, BaseRssParser] = {
     "hankyung": RssParser("hankyung"),
     "newspim": RssParser("newspim"),
     "sedaily": RssParser("sedaily"),
+    # 동아일보 RSS의 summary는 본문 요약이 아니라 이미지 HTML이라 요약을 쓰지 않는다.
+    "donga": RssParser("donga", use_summary=False),
 }
 
 

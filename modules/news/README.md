@@ -9,7 +9,7 @@
 [![Typer](https://img.shields.io/badge/Typer-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://typer.tiangolo.com/)
 [![Tests](https://img.shields.io/badge/Tests-Passing-00C853?style=for-the-badge&logo=pytest&logoColor=white)](./tests/)
 
-Investing.com, 이데일리, 이투데이, 한국경제, 서울경제, 뉴스핌 RSS를 하나의 표준 모델로 정규화하고 **멱등하게 수집·저장·분석**합니다.
+Investing.com, 이데일리, 이투데이, 한국경제, 서울경제, 뉴스핌, 동아일보 RSS를 하나의 표준 모델로 정규화하고 **멱등하게 수집·저장·분석**합니다.
 
 [FinLabs](../../README.md) · [뉴스 모듈 계획서](./PLAN.md) · [통합 계획서](../../PLAN.md) · [회귀 테스트](./tests/test_rss_pipeline.py)
 
@@ -107,6 +107,7 @@ article_analyses
 | 한국경제 | `https://www.hankyung.com/feed/all-news` | 미사용 |
 | 서울경제 | `https://www.sedaily.com/rss/newsall` | 미사용 |
 | 뉴스핌 | `http://rss.newspim.com/news/category/1` | 사용 |
+| 동아일보 | `https://rss.donga.com/total.xml` | 미사용 |
 
 모든 RSS 소스는 API 키 없이 수집합니다.
 
@@ -118,7 +119,7 @@ article_analyses
 > 메타데이터 조회 모듈이며 파이프라인 저장·백필 연결은 후속 범위입니다. 상세 정책은
 > [PLAN.md 4.4절](./PLAN.md)을 참고하세요.
 
-기본 소스는 총 63개이며 `collect-rss` 실행 시 전체 피드와 제공된 카테고리별 피드를 함께 수집합니다. 매체별 구성은 Investing.com 16개, 이데일리 1개, 이투데이 11개, 한국경제 12개, 서울경제 12개, 뉴스핌 11개입니다. URL과 카테고리 설정의 기준은 [`pipeline.py`](./pipeline.py)의 `DEFAULT_FEED_SOURCES`입니다.
+기본 소스는 총 72개이며 `collect-rss` 실행 시 전체 피드와 제공된 카테고리별 피드를 함께 수집합니다. 매체별 구성은 Investing.com 16개, 이데일리 1개, 이투데이 11개, 한국경제 12개, 서울경제 12개, 뉴스핌 11개, 동아일보 9개입니다. URL과 카테고리 설정의 기준은 [`pipeline.py`](./pipeline.py)의 `DEFAULT_FEED_SOURCES`입니다.
 
 `--feed publisher=URL` 옵션을 반복하면 지원 언론사의 RSS URL을 실행 단위로 교체할 수 있습니다.
 
@@ -131,6 +132,7 @@ article_analyses
 | 한국경제 | 증권, 경제, 부동산, IT, 정치, 국제, 사회, 생활, 오피니언, 스포츠, 연예 |
 | 서울경제 | 증권, 부동산, 경제, 정치, 사회, 국제, IT, 오피니언, 생활, 스포츠, 연예 |
 | 뉴스핌 | 정치, 경제, 사회, 글로벌, 산업, 증권/금융, 부동산, 라이프/여행, 문화/연예, 스포츠 |
+| 동아일보 | 정치, 사회, 경제, 국제, 과학, 연예, 스포츠, 건강 (전체 피드 포함) |
 | 이데일리 | 전체 피드만 등록. XML 원문 카테고리는 `source_categories`에 저장 |
 
 카테고리는 용도를 분리해 저장합니다.
@@ -242,7 +244,7 @@ uv run --group news python -m modules.news.main analyze \
 
 ### RSS URL 교체
 
-`publisher` 값은 `investing.com`, `edaily`, `etoday`, `hankyung`, `newspim`, `sedaily` 중 하나여야 합니다.
+`publisher` 값은 `investing.com`, `edaily`, `etoday`, `hankyung`, `newspim`, `sedaily`, `donga` 중 하나여야 합니다.
 
 ```bash
 uv run --group news python -m modules.news.main collect-rss \

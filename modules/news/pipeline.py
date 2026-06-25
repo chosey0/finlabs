@@ -109,6 +109,16 @@ SEDAILY_CATEGORY_FEEDS = {
     "스포츠": "https://www.sedaily.com/rss/sports",
     "연예": "https://www.sedaily.com/rss/entertainment",
 }
+DONGA_CATEGORY_FEEDS = {
+    "정치": "https://rss.donga.com/politics.xml",
+    "사회": "https://rss.donga.com/national.xml",
+    "경제": "https://rss.donga.com/economy.xml",
+    "국제": "https://rss.donga.com/international.xml",
+    "과학": "https://rss.donga.com/science.xml",
+    "연예": "https://rss.donga.com/culture.xml",
+    "스포츠": "https://rss.donga.com/sports.xml",
+    "건강": "https://rss.donga.com/health.xml",
+}
 
 
 def _category_feed_sources(
@@ -388,6 +398,12 @@ DEFAULT_FEED_SOURCES = (
         PARSERS["newspim"],
         feed_category="스포츠",
     ),
+    FeedSource(
+        publisher="donga",
+        url="https://rss.donga.com/total.xml",
+        parser=PARSERS["donga"],
+    ),
+    *_category_feed_sources("donga", DONGA_CATEGORY_FEEDS),
 )
 
 

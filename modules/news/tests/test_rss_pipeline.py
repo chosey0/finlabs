@@ -119,6 +119,17 @@ def _published_parsed() -> time.struct_time:
             "sedaily",
             None,
         ),
+        (
+            PARSERS["donga"],
+            {
+                "link": "https://www.donga.com/news/article/all/1",
+                "published": "Wed, 10 Jun 2026 21:00:00 +0900",
+                "summary": "<img src='https://dimg.donga.com/x.jpg'> 본문 일부",
+                "title": "Donga title",
+            },
+            "donga",
+            None,
+        ),
     ],
 )
 def test_provider_parser_returns_canonical_entry(parser, raw, publisher, summary):
@@ -193,6 +204,9 @@ def test_default_feed_sources_include_configured_categories():
     assert categorized[("hankyung", "연예")].endswith("feed/entertainment")
     assert categorized[("sedaily", "증권")].endswith("rss/finance")
     assert categorized[("sedaily", "연예")].endswith("rss/entertainment")
+    assert categorized[("donga", "경제")].endswith("economy.xml")
+    assert categorized[("donga", "건강")].endswith("health.xml")
+    assert categorized[("donga", "사회")].endswith("national.xml")
     assert all(
         source.domain_category == "금융"
         for source in DEFAULT_FEED_SOURCES
@@ -206,6 +220,7 @@ def test_default_feed_sources_include_configured_categories():
     }
     assert uncategorized["hankyung"] == "https://www.hankyung.com/feed/all-news"
     assert uncategorized["sedaily"] == "https://www.sedaily.com/rss/newsall"
+    assert uncategorized["donga"] == "https://rss.donga.com/total.xml"
 
 
 def test_crud_uses_one_canonical_contract(news_connection):
