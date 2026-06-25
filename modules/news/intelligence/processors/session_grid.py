@@ -63,6 +63,27 @@ def regular_session_minutes(trading_dates: Iterable[date]) -> tuple[datetime, ..
     return tuple(minutes)
 
 
+def weekday_trading_sessions(
+    start: date, end: date
+) -> tuple[tuple[str, tuple[datetime, ...]], ...]:
+    """Regular-session minute grids for each weekday in ``[start, end]``.
+
+    A control-sampling calendar for ``build_control_sampling_plan``: weekends are
+    skipped, holidays are left in (a control anchor on a holiday simply yields no
+    Kiwoom data downstream and is dropped), so no holiday source is required here.
+    """
+
+    if end < start:
+        raise ValueError("end must not precede start")
+    sessions: list[tuple[str, tuple[datetime, ...]]] = []
+    current = start
+    while current <= end:
+        if current.weekday() < 5:  # Monday..Friday
+            sessions.append((current.isoformat(), regular_session_minutes([current])))
+        current += timedelta(days=1)
+    return tuple(sessions)
+
+
 def resolve_reaction_anchor(
     *,
     anchor: datetime,

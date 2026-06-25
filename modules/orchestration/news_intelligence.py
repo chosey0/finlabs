@@ -18,8 +18,11 @@ from modules.domain.news_intelligence import (
     DiscoveredNewsArticle,
     IntelligenceCandle,
     KST,
+    MarketDataProviderError,
     NewsArticleCandidate,
+    NewsDiscoveryIncompleteError,
     NewsDiscoveryResult,
+    NewsProviderError,
     ReactionSourceData,
     approved_kiwoom_benchmark,
     build_discovery_plan,
@@ -143,6 +146,13 @@ class ReactionResult:
 
 
 @dataclass(frozen=True, slots=True)
+class ControlCollectionResult:
+    planned: int
+    skipped: int
+    sample_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class NewsIntelligenceServices:
     catalog_snapshot: CatalogSnapshot
     market_data: ChartMarketDataPort
@@ -213,6 +223,53 @@ class NewsIntelligenceServices:
             sessions=sessions,
             seed=seed,
             per_session=per_session,
+        )
+
+    async def collect_control_samples(
+        self,
+        *,
+        securities: Sequence[str],
+        sessions: Sequence[tuple[str, Sequence[datetime]]],
+        seed: str,
+        per_session: int = 1,
+    ) -> ControlCollectionResult:
+        """Run move-independent random-control discovery across a seeded plan.
+
+        Each plan point is discovered with ``origin="random_control"`` so the
+        resulting samples populate the bottom of the surge ranking without the
+        outcome-conditioned selection bias. Points that cannot be discovered
+        (unknown security, no complete news window, no valid alias) are skipped so
+        one bad draw does not abort the batch.
+        """
+
+        plan = self.plan_control_samples(
+            securities=securities,
+            sessions=sessions,
+            seed=seed,
+            per_session=per_session,
+        )
+        sample_ids: list[str] = []
+        skipped = 0
+        for point in plan:
+            try:
+                result = await self.discover_news(
+                    security_id=point.security_id,
+                    selected_candle_at=point.control_anchor,
+                    origin="random_control",
+                )
+            except (
+                NewsDiscoveryIncompleteError,
+                NewsProviderError,
+                MarketDataProviderError,
+                ValueError,
+            ):
+                skipped += 1
+                continue
+            sample_ids.extend(article.sample_id for article in result.articles)
+        return ControlCollectionResult(
+            planned=len(plan),
+            skipped=skipped,
+            sample_ids=tuple(sample_ids),
         )
 
     async def discover_news(
