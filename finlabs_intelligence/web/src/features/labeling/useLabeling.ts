@@ -33,8 +33,6 @@ export interface Labeling {
   readonly setSelectedSinks: (updater: (current: string[]) => string[]) => void;
   readonly datasetResult: FreezeDatasetResponse | null;
   readonly exportResult: ExportDatasetResponse | null;
-  readonly newsExpanded: boolean;
-  readonly setNewsExpanded: (updater: (current: boolean) => boolean) => void;
   readonly discoverNews: (selection: ChartSelection | null) => Promise<void>;
   readonly annotate: (article: Article, finalValue: FinalValue) => Promise<void>;
   readonly freeze: () => Promise<void>;
@@ -49,7 +47,6 @@ export function useLabeling({ security, setStatus, setBusy }: Deps): Labeling {
   const [selectedSinks, setSelectedSinks] = useState(["db", "json", "csv"]);
   const [datasetResult, setDatasetResult] = useState<FreezeDatasetResponse | null>(null);
   const [exportResult, setExportResult] = useState<ExportDatasetResponse | null>(null);
-  const [newsExpanded, setNewsExpanded] = useState(true);
 
   const reset = useCallback(() => {
     setDiscovery(null);
@@ -84,7 +81,6 @@ export function useLabeling({ security, setStatus, setBusy }: Deps): Labeling {
         return;
       }
       setDiscovery(result.data);
-      setNewsExpanded(() => true);
       const selectedOn = result.data.selected_candle_at.slice(0, 10);
       const suggestionPairs = await Promise.all(
         result.data.articles.map(async (article) => {
@@ -182,8 +178,6 @@ export function useLabeling({ security, setStatus, setBusy }: Deps): Labeling {
     setSelectedSinks,
     datasetResult,
     exportResult,
-    newsExpanded,
-    setNewsExpanded,
     discoverNews,
     annotate,
     freeze,

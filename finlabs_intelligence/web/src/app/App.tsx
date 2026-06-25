@@ -1,16 +1,19 @@
 import { useState } from "react";
 
 import { ChartPanel } from "../features/chart/ChartPanel";
+import { SelectionBridge } from "../features/chart/SelectionBridge";
 import { useChart } from "../features/chart/useChart";
+import { DatasetControls } from "../features/labeling/DatasetControls";
 import { NewsPanel } from "../features/labeling/NewsPanel";
 import { useLabeling } from "../features/labeling/useLabeling";
-import { SecurityPanel } from "../features/security/SecurityPanel";
+import { SearchBar } from "../features/security/SearchBar";
 import { useCatalogSearch } from "../features/security/useCatalogSearch";
 import type { CatalogItemResponse } from "../shared/api";
 
-// Composition root: owns the cross-feature shared state (selected security,
-// status line, busy flag) and orchestrates the workflow resets. Each feature
-// owns its own state and async actions through its hook.
+// Composition root. Top to bottom: a command bar (search), the selection bridge
+// (signature), the two-pane workbench (chart | news always co-visible), and a
+// footer that carries dataset export and the status line. App owns the
+// cross-feature shared state and orchestrates the workflow resets.
 export function App() {
   const [security, setSecurity] = useState<CatalogItemResponse | null>(null);
   const [status, setStatus] = useState("종목을 검색하세요.");
@@ -37,35 +40,41 @@ export function App() {
   }
 
   return (
-    <main className="workspace h-[100dvh] overflow-hidden">
-      <header className="shrink-0">
+    <main className="app">
+      <header className="commandbar">
         <p className="eyebrow">FINLABS · LOCAL DATA WORKBENCH</p>
-      </header>
-
-      <p aria-atomic="true" aria-live="polite" className="status" role="status">{status}</p>
-
-      <div
-        className="grid min-h-0 flex-1 items-start gap-5 max-lg:overflow-y-auto lg:grid-cols-[18rem_minmax(0,1fr)] lg:overflow-hidden"
-        data-testid="workspace-columns"
-      >
-        <SecurityPanel
+        <SearchBar
           search={search}
           security={security}
           busy={busy}
           onSelect={handleSelectSecurity}
         />
+      </header>
 
-        <div className="analysis-layout min-h-0 min-w-0 lg:h-full" data-testid="work-area">
-          <ChartPanel
-            chart={chart}
-            security={security}
-            busy={busy}
-            onLoadChart={handleLoadChart}
-            onDiscover={handleDiscover}
-          />
-          <NewsPanel labeling={labeling} busy={busy} />
-        </div>
+      <SelectionBridge selection={chart.selection} />
+
+      <div className="workbench" data-testid="workspace-columns">
+        <ChartPanel
+          chart={chart}
+          security={security}
+          busy={busy}
+          onLoadChart={handleLoadChart}
+          onDiscover={handleDiscover}
+        />
+        <NewsPanel labeling={labeling} busy={busy} />
       </div>
+
+      <footer className="statusbar">
+        <DatasetControls
+          selectedSinks={labeling.selectedSinks}
+          setSelectedSinks={labeling.setSelectedSinks}
+          busy={busy}
+          onFreeze={labeling.freeze}
+          datasetResult={labeling.datasetResult}
+          exportResult={labeling.exportResult}
+        />
+        <p aria-atomic="true" aria-live="polite" className="status" role="status">{status}</p>
+      </footer>
     </main>
   );
 }

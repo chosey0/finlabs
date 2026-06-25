@@ -21,8 +21,6 @@ export interface ChartWorkspace {
   readonly setIntervalMinutes: (value: number) => void;
   readonly chart: ChartResponse | null;
   readonly selection: ChartSelection | null;
-  readonly chartExpanded: boolean;
-  readonly setChartExpanded: (updater: (current: boolean) => boolean) => void;
   readonly chartCandles: ReturnType<typeof toChartCandles>;
   readonly handleSelection: (next: ChartSelection) => void;
   readonly loadChart: () => Promise<void>;
@@ -36,7 +34,6 @@ export function useChart({ security, setStatus, setBusy }: Deps): ChartWorkspace
   const [intervalMinutes, setIntervalMinutes] = useState(1);
   const [chart, setChart] = useState<ChartResponse | null>(null);
   const [selection, setSelection] = useState<ChartSelection | null>(null);
-  const [chartExpanded, setChartExpanded] = useState(true);
 
   const chartCandles = useMemo(
     () => (chart ? toChartCandles(chart.candles) : []),
@@ -92,8 +89,6 @@ export function useChart({ security, setStatus, setBusy }: Deps): ChartWorkspace
     setIntervalMinutes,
     chart,
     selection,
-    chartExpanded,
-    setChartExpanded,
     chartCandles,
     handleSelection,
     loadChart,

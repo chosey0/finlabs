@@ -6,19 +6,20 @@ import { App } from "./App";
 afterEach(cleanup);
 
 describe("App composition root", () => {
-  it("renders the workbench shell with the three workflow panels", () => {
+  it("renders the command bar, bridge, and two-pane workbench", () => {
     render(<App />);
 
-    // Header + status mirror the sidebar-layout e2e expectations.
+    // Header + status mirror the layout e2e expectations.
     expect(screen.getByText("FINLABS · LOCAL DATA WORKBENCH")).toBeTruthy();
     expect(screen.getByText("종목을 검색하세요.")).toBeTruthy();
     expect(screen.queryAllByRole("heading", { level: 1 })).toHaveLength(0);
 
-    // Each workflow step is its own feature panel by accessible region/name.
-    expect(screen.getByRole("complementary", { name: "국내 종목 선택" })).toBeTruthy();
-    expect(screen.getByRole("region", { name: /차트 관측 시점/ })).toBeTruthy();
-    expect(screen.getByRole("region", { name: /검색 뉴스/ })).toBeTruthy();
+    // Command-bar search plus the two co-visible panes.
+    expect(screen.getByLabelText("종목명 또는 종목코드")).toBeTruthy();
     expect(screen.getByRole("button", { name: "검색" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "차트" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "뉴스" })).toBeTruthy();
+    expect(screen.getByTestId("selected-candle")).toBeTruthy();
   });
 
   it("starts in the empty chart and news states", () => {
