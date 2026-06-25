@@ -7,7 +7,7 @@ Wants=network-online.target
 Type=oneshot
 User=finlabs
 WorkingDirectory=/opt/finlabs
-Environment=NEWS_DB_PATH=/var/lib/finlabs-news/news.duckdb
+# Supply INTELLIGENCE_DATABASE_URL (shared Supabase DSN) and KIS credentials here.
 EnvironmentFile=-/etc/finlabs-news.env
 ExecStart=/usr/bin/env uv run --group news python -m modules.news.main update-symbols
 TimeoutStartSec=30min

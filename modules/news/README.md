@@ -341,7 +341,11 @@ sudo systemctl status finlabs-news.timer
 sudo systemctl status finlabs-news-symbols.timer
 ```
 
+각 service는 `EnvironmentFile=-/etc/finlabs-news.env`에서 환경 변수를 읽으므로 그 파일에 `INTELLIGENCE_DATABASE_URL`(과 종목 갱신용 KIS 자격증명)을 둡니다.
+
 `finlabs-news-symbols.timer`는 매일 오전 9시(Asia/Seoul)에 KOSPI·KOSDAQ·NASDAQ·NYSE·AMEX 마스터를 갱신합니다. 다운로드가 비어 있거나 한 시장이라도 실패하면 두 테이블의 기존 스냅샷을 모두 유지합니다.
+
+systemd 없이 더 잦은 주기로 RSS만 수집하려면 `scripts/collect_rss_loop.sh`를 쓸 수 있습니다. 기본 60초 간격으로 `collect-rss`를 멱등 재실행하며(중첩 방지·단일 인스턴스 잠금), `INTERVAL_SECONDS`로 간격을, 추가 인자로 피드를 좁힐 수 있습니다. 전체 72개 피드 한 회는 네트워크 특성상 60초를 넘길 수 있어, 그럴 땐 다음 경계에서 다시 시작합니다.
 
 쓰기 동시성은 Supabase PostgreSQL 서버가 트랜잭션으로 직렬화하므로, 여러 서버나 컨테이너가 동시에 같은 데이터베이스를 안전하게 사용할 수 있습니다. 연결은 `update-symbols`/`replace_article_entities`처럼 원자성이 필요한 연산만 명시적 트랜잭션으로 감싸고, 나머지는 statement 단위로 자동 커밋합니다.
 

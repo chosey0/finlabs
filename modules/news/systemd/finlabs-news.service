@@ -7,12 +7,12 @@ Wants=network-online.target
 Type=oneshot
 User=finlabs
 WorkingDirectory=/opt/finlabs
-Environment=NEWS_DB_PATH=/var/lib/finlabs-news/news.duckdb
+# Supply INTELLIGENCE_DATABASE_URL (shared Supabase DSN) and any Naver credentials here.
 EnvironmentFile=-/etc/finlabs-news.env
-ExecStart=/usr/bin/env uv run python -m modules.news.main collect-rss
+ExecStart=/usr/bin/env uv run --group news python -m modules.news.main collect-rss
 # collect-articles는 언론사 이용약관(자동화 수집 금지)에 따라 비활성화됨.
 # 본문 확보는 네이버 뉴스 검색 API 연동으로 대체 예정 (PLAN.md 4.4절).
-ExecStart=/usr/bin/env uv run python -m modules.news.main analyze --limit 100
+ExecStart=/usr/bin/env uv run --group news python -m modules.news.main analyze --limit 100
 
 # Keep each scheduled run bounded so a stalled request cannot overlap indefinitely.
 TimeoutStartSec=45min
