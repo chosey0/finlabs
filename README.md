@@ -11,7 +11,7 @@
 
 한국투자증권 해외주식 데이터와 RSS 뉴스를 **수집·정규화·저장·조회·분석**하는 Python 프로젝트입니다.
 
-[통합 계획서](./PLAN.md) · [FinLabs CLI](./finlabs_cli/README.md) · [KIS SDK](./modules/brokers/kis/README.md) · [Toss SDK](./modules/brokers/toss/README.md) · [News Pipeline](./modules/news/README.md) · [News Intelligence 설계](./finlabs_intelligence/README.md) · [Research](./research/README.md)
+[통합 계획서](./PLAN.md) · [FinLabs CLI](./finlabs_cli/README.md) · [KIS SDK](./modules/brokers/kis/README.md) · [Toss SDK](./modules/brokers/toss/README.md) · [News Pipeline](./modules/news/README.md) · [News Intelligence 설계](./finlabs_intelligence/README.md) · [Research](./research/README.md) · [Scripts](./scripts/README.md)
 
 </div>
 
@@ -171,6 +171,7 @@ finlabs/
 ├── research/                   시장 표현 학습 연구
 ├── tests/                      공통 단위·통합·아키텍처 테스트
 ├── exports/                    CSV 샘플 출력물
+├── scripts/                    운영·데이터 적재·학습·검증 스크립트 (scripts/README.md)
 ├── PLAN.md                     통합 계획서 — 전체 방향과 구현 순서
 ├── pyproject.toml              프로젝트 의존성
 └── README.md                   프로젝트 개요
