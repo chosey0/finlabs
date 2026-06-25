@@ -54,10 +54,25 @@ h2 { margin: 0; }
 .bridge-label { color: var(--mint); font-size: 11px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; white-space: nowrap; }
 .bridge-track { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 220px; font-family: var(--mono); }
 .bridge-time { color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.bridge-line { flex: 1; min-width: 20px; height: 1px; background: linear-gradient(90deg, rgba(110, 231, 183, .55), rgba(110, 231, 183, .12)); }
+.bridge-time--t0 { color: var(--mint); }
+.bridge-seg { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 56px; }
+.bridge-rule { flex: 1; min-width: 14px; height: 1px; background: linear-gradient(90deg, rgba(110, 231, 183, .55), rgba(110, 231, 183, .15)); }
+.bridge-rule--reaction { background: repeating-linear-gradient(90deg, rgba(110, 231, 183, .6) 0 5px, transparent 5px 10px); }
+.bridge-seg-cap { color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; white-space: nowrap; }
+.bridge-seg-cap--reaction { color: var(--mint); }
+.bridge-node { flex: none; width: 11px; height: 11px; border-radius: 999px; background: var(--mint); box-shadow: 0 0 0 4px rgba(110, 231, 183, .16), 0 0 14px rgba(110, 231, 183, .5); }
+.bridge.active .bridge-node { animation: bridgePulse 2.4s ease-in-out infinite; }
 .bridge-anchor { padding: 2px 10px; color: #07110d; background: var(--mint); border-radius: 999px; font-size: 11px; font-weight: 800; }
-.bridge-reaction { color: var(--mint); font-size: 12px; font-weight: 700; white-space: nowrap; }
+.bridge-arrow { color: var(--mint); font-weight: 800; }
 .bridge-empty { color: var(--dim); font-size: 13px; }
+
+@keyframes bridgePulse {
+  0%, 100% { box-shadow: 0 0 0 4px rgba(110, 231, 183, .16), 0 0 14px rgba(110, 231, 183, .5); }
+  50% { box-shadow: 0 0 0 6px rgba(110, 231, 183, .08), 0 0 22px rgba(110, 231, 183, .72); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bridge.active .bridge-node { animation: none; }
+}
 
 /* ── Workbench: chart | news ───────────────────────────────── */
 .workbench { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 16px; flex: 1; min-height: 0; }
