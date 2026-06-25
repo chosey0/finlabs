@@ -555,7 +555,7 @@ market_return_5d, market_volatility, adr, limit_up_count
 | 종목 Entity 추출 | **부분 구현** | `pipeline.py:714`의 종목명·소규모 별칭 매칭. 기업·산업·키워드 추출과 전면 별칭 사전은 아직 없음 |
 | 이벤트 taxonomy | **계약만 구현** | `schema/event.py:12`의 16종 taxonomy와 DTO는 있으나 `article_events` 테이블, LLM 호출, 재시도·버전별 재분류는 없음 |
 | 기사 본문 직접 수집 금지 | **정책 회귀 발견** | PLAN 4.4절은 CLI 차단을 요구하지만 현재 `main.py:279`가 언론사 페이지 직접 수집 흐름을 다시 실행함 |
-| PostgreSQL `news` 스키마 | **미구현** | 현재 영속 테이블은 `db/init.py:77` 이하 DuckDB 스키마이며 루트 PLAN 단계 4의 PostgreSQL 전환 전 상태 |
+| PostgreSQL 저장 | **구현됨** | `db/init.py`·`db/sql.py`의 영속 테이블이 finlabs_intelligence와 공유하는 Supabase PostgreSQL로 이전됨(psycopg, `INTELLIGENCE_DATABASE_URL`). 별도 `news` 스키마 분리와 repository Protocol 경계는 후속 과제 |
 | 네이버 뉴스 검색 API와 과거 백필 | **부분 구현** | `naver/`에 키워드·날짜 검색 client, 원본 offset 날짜 필터, 페이지 완전성 검증, 제한 재시도와 타입 오류를 구현. 저장 repository, 호출량 예산, 체크포인트와 백필 실행기는 아직 없음 |
 | 급등 이벤트 추출과 사례 라이브러리 | **부분 구현** | 공통 `domain/adapters/orchestration/storage` 계층에 KIS/Toss 정규화, 거래대금 100억·1일/3거래일 +10% 판정, `surge_events` 저장 구현. 뉴스 연결과 positive/negative library는 미구현 |
 | Streamlit 기본 조회 | **미구현** | 뉴스 수집 상태·기사·Entity를 조회하는 화면이 없음 |
@@ -578,9 +578,10 @@ market_return_5d, market_volatility, adr, limit_up_count
 
 #### P1. PostgreSQL `news` 저장 경계 구축
 
-- 루트 PLAN 단계 4에 맞춰 `rss_sources`, `rss_items`, `articles`, `pipeline_runs`의 PostgreSQL 스키마와 저장 repository를 만든다.
-- 수집·분석 로직이 DuckDB 연결을 직접 요구하지 않도록 repository Protocol을 경계로 둔다.
-- 기존 DuckDB는 읽기 전용 레거시 보관소로 유지하고 이중 쓰기나 자동 데이터 이관은 하지 않는다.
+> **진행 상태**: 저장소 이전은 완료됨 — `rss_items`/`articles`/`article_analyses`/`article_entities`/`article_entity_extractions`/`pipeline_runs`/`domestic_symbols`/`overseas_symbols`가 finlabs_intelligence와 공유하는 Supabase PostgreSQL에 생성되고, 모든 명령이 `INTELLIGENCE_DATABASE_URL`로 그 인스턴스에 직접 쓴다(DuckDB 제거). 아래 repository Protocol 추상화와 별도 `news` 스키마 분리는 남은 후속 과제다.
+
+- 수집·분석 로직이 psycopg 연결을 직접 요구하지 않도록 repository Protocol을 경계로 둔다.
+- 필요 시 `rss_sources` 등 추가 테이블과 `intelligence_*`와의 스키마 분리를 도입한다.
 
 **완료 기준**:
 - 동일 RSS 항목을 반복 저장해도 PostgreSQL에 중복 행이 생기지 않는다.

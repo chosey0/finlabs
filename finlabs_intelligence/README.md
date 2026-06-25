@@ -208,7 +208,7 @@ MVP는 다음 조건을 모두 만족할 때 완료로 판정한다.
 
 ## 11. 학습 데이터 수집 웹 도구
 
-현재 구현된 로컬 MVP는 KIS `domestic_symbols` 스냅샷 검색, Kiwoom 주식 1분봉과 `ka20005` KOSPI/KOSDAQ 벤치마크 조회, 캔들 선택, Naver의 정확한 직전 1시간 검색, 직접 언급 제안, 사람의 append-only 라벨 수정, 30거래분 반응 preview, 버전 스냅샷과 PostgreSQL(DB)·JSON·CSV 출력을 제공한다. 검색 결과는 서버가 발급한 안정적인 `sample_id`로 저장되며 라벨은 종목-기사-유효 라벨 anchor 단위로 귀속된다. 데이터셋 고정 API는 저장된 최신 annotation revision ID만 받아 label·anchor·cohort·검색 계획·annotation provenance를 서버에서 다시 해석하므로 클라이언트가 학습 정답을 주입할 수 없다.
+현재 구현된 로컬 MVP는 KIS `domestic_symbols` 스냅샷 검색, Kiwoom 주식 1분봉과 `ka20005` KOSPI/KOSDAQ 벤치마크 조회, 캔들 선택 또는 뉴스 검색 구간(시작·끝=t0) 직접 입력, Naver의 정확한 뉴스 구간 검색(기본 직전 1시간, 시작 시각은 직접 조정 가능), 차트의 t0 기준 30거래분 반응 윈도 음영과 거래량·거래대금 보조지표(토스 레퍼런스), 직접 언급 제안, 사람의 append-only 라벨 수정, 30거래분 반응 preview, 버전 스냅샷과 PostgreSQL(DB)·JSON·CSV 출력을 제공한다. 검색 결과는 서버가 발급한 안정적인 `sample_id`로 저장되며 라벨은 종목-기사-유효 라벨 anchor 단위로 귀속된다. 데이터셋 고정 API는 저장된 최신 annotation revision ID만 받아 label·anchor·cohort·검색 계획·annotation provenance를 서버에서 다시 해석하므로 클라이언트가 학습 정답을 주입할 수 없다.
 
 필수 환경변수는 `INTELLIGENCE_DATABASE_URL`(PostgreSQL libpq 연결 문자열), `KIWOOM_APP_KEY`, `KIWOOM_SECRET_KEY`, `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`이다. KIS 종목 master는 `scripts/load_kis_symbols_to_supabase.py`로 `domestic_symbols`에 먼저 적재돼 있어야 한다(자격증명 불필요, DB 연결 문자열만 필요). 세션 레벨 설정을 쓰므로 transaction-mode 풀러가 아닌 직접 연결 또는 session-mode 풀러를 사용한다. 전체 검증의 Playwright E2E는 로컬 Google Chrome을 headless로 사용한다. 자격증명과 export 파일은 저장소에 커밋하지 않는다.
 

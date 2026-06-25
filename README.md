@@ -57,7 +57,7 @@ FinLabs는 증권사 Open API를 독립적인 Python SDK로 구현하고, 그 �
 | **[중복 방지]** | 멱등 적재 | 데이터베이스 고유 제약과 conflict 처리로 재실행 안전성 확보 |
 | **[조회]** | 공통 warehouse query | CLI·대시보드·연구가 `modules.orchestration.query`를 통해 동일 SQL 사용 |
 | **[뉴스]** | 수집·검색·기초 분석 | RSS 메타데이터 적재, 네이버 제목·요약 검색, 저장된 합법적 본문의 기초 통계·Entity 추출 |
-| **[운영]** | 실행 이력과 직렬화 | 뉴스 단계별 성공·실패 기록과 DuckDB 단일 writer 잠금 |
+| **[운영]** | 실행 이력과 동시성 | 뉴스 단계별 성공·실패 기록과 PostgreSQL 트랜잭션 기반 동시 쓰기 직렬화 |
 
 ---
 
@@ -114,7 +114,7 @@ modules.domain                        pure shared contracts
 | Domain | `modules/domain/` | I/O가 없는 canonical dataclass와 Protocol |
 | Storage | `modules/storage/` | warehouse read SQL의 단일 출처 |
 
-`modules/news`는 이 broker 계층과 별도로 실행되는 독립 뉴스 파이프라인입니다. 자체 표준 뉴스 모델과 전용 DuckDB를 사용하며, 현재 시장 데이터용 `modules.domain` 또는 `modules.storage`에는 의존하지 않습니다. [News Intelligence 설계](./finlabs_intelligence/README.md)는 향후 canonical domain·storage·orchestration 경계를 재사용하는 목표 구조이며 현재 구현으로 오해하면 안 됩니다.
+`modules/news`는 이 broker 계층과 별도로 실행되는 독립 뉴스 파이프라인입니다. 자체 표준 뉴스 모델을 사용하고, 저장은 finlabs_intelligence와 공유하는 Supabase PostgreSQL을 씁니다(연결은 `modules.storage.news_intelligence.database`의 DSN 해석만 재사용). 시장 데이터용 `modules.domain`에는 의존하지 않습니다. [News Intelligence 설계](./finlabs_intelligence/README.md)는 향후 canonical domain·orchestration 경계를 재사용하는 목표 구조이며 현재 구현으로 오해하면 안 됩니다.
 
 ### 장기 데이터 플랫폼 제안
 
@@ -231,7 +231,7 @@ uv run --group news python -m modules.news.main collect-rss
 uv run --group news python -m modules.news.main analyze --limit 100
 ```
 
-지원 언론사, DuckDB 스키마와 systemd 운영 방법은 [News Pipeline README](./modules/news/README.md)를 참고하세요.
+지원 언론사, PostgreSQL 스키마와 systemd 운영 방법은 [News Pipeline README](./modules/news/README.md)를 참고하세요.
 
 ---
 
@@ -239,7 +239,8 @@ uv run --group news python -m modules.news.main analyze --limit 100
 
 | 저장소 | 용도 | 상태 |
 |--------|------|------|
-| DuckDB | 시장 데이터와 뉴스 파이프라인 데이터 | 현재 primary, 운영 중 |
+| DuckDB | 시장 데이터 warehouse | 현재 primary, 운영 중 |
+| PostgreSQL (Supabase) | News Intelligence 라벨링 + 뉴스 RSS 파이프라인 | 현재 primary, 운영 중 |
 | SQLite | 운영 로그 | 현재 사용 |
 | PostgreSQL (TimescaleDB) | 선택적 mirror 또는 장기 플랫폼의 `control`·`market`·`news` 스키마 | 구현 전 |
 | Redis (Streams·Pub/Sub) | 실시간 이벤트 전달 계층 | 장기 제안, 구현 전 |
@@ -249,9 +250,9 @@ uv run --group news python -m modules.news.main analyze --limit 100
 
 [통합 계획서](./PLAN.md)의 TimescaleDB·Redis·Parquet 구조는 구현 전 장기 제안입니다. 현재 코드는 다음 계약을 따릅니다.
 
-- 시장 데이터와 레거시 뉴스 수집 pipeline은 DuckDB를 primary warehouse로 사용하고 SQLite는 append-only 운영 로그로 제한합니다.
-- **News Intelligence 라벨링 도구는 PostgreSQL(예: Supabase)을 primary 저장소로 사용**하며 libpq 연결 문자열 `INTELLIGENCE_DATABASE_URL`로 접근합니다. catalog(`domestic_symbols`)도 같은 DB에서 읽습니다. 설정은 [News Intelligence README](./finlabs_intelligence/README.md)를 참고하세요.
-- 기존 `warehouse.duckdb`와 `modules/news/db/news.db`는 현재 활성 저장소이므로 구현 전 계획만으로 read-only 처리하지 않습니다.
+- 시장 데이터 수집 pipeline은 DuckDB를 primary warehouse로 사용하고 SQLite는 append-only 운영 로그로 제한합니다.
+- **News Intelligence 라벨링 도구와 뉴스 RSS 파이프라인(`modules/news`)은 PostgreSQL(예: Supabase)을 primary 저장소로 사용**하며 libpq 연결 문자열 `INTELLIGENCE_DATABASE_URL`로 접근합니다. 두 도구는 같은 인스턴스를 공유하고 catalog(`domestic_symbols`)도 함께 씁니다(파이프라인의 `update-symbols`가 채우고 라벨링 카탈로그가 읽습니다). 설정은 [News Intelligence README](./finlabs_intelligence/README.md)를 참고하세요.
+- 기존 `warehouse.duckdb`는 현재 활성 시장 데이터 저장소이므로 구현 전 계획만으로 read-only 처리하지 않습니다.
 - MongoDB는 도입하지 않습니다.
 - 언론사 원문 HTML을 scraping하지 않습니다. 네이버 연동은 제목·`description`·링크·발행시각만 사용합니다.
 
@@ -287,11 +288,11 @@ uv run --group news python -m modules.news.main --help
 | 1 | 기반 인프라 — TimescaleDB·Redis Docker Compose, 공통 환경설정, Alembic 3-스키마 | 구현 전 |
 | 2 | 이벤트 전송과 구독 제어 — Redis Streams·DLQ·멱등성, KIS WebSocket 수집기, 동적 구독 CLI | 구현 전 |
 | 3 | 시장 데이터 영구화 — 틱·호가·canonical 1분봉, Parquet 아카이브, Toss 장 운영 정보 저장 | 구현 전 |
-| 4 | 뉴스 저장 개편 — RSS 상태·중복 관리 PostgreSQL 이전, parser registry 재처리 | 구현 전 |
+| 4 | 뉴스 저장 개편 — RSS 상태·중복 관리 Supabase PostgreSQL 이전, parser registry 재처리 | ✅ 이전 완료 |
 | 5 | 관측성과 알림 — 공통 상태 DTO, Rich 실시간 모니터, Discord | 구현 전 |
 | 6 | 백업과 복구 — 암호화 백업, 체크섬 검증, 격리 복구 훈련 | 구현 전 |
 
-단계에 선행하는 기반은 구현되어 있습니다: KIS 해외주식 REST·실시간 SDK, Toss 시세·장 운영 정보 SDK와 calendar adapter, 뉴스 RSS 파이프라인(현 DuckDB), 국내·해외 종목 마스터 갱신 CLI. Kiwoom SDK와 Candlestick VQ-VAE 연구는 별도 트랙으로 진행합니다.
+단계에 선행하는 기반은 구현되어 있습니다: KIS 해외주식 REST·실시간 SDK, Toss 시세·장 운영 정보 SDK와 calendar adapter, 뉴스 RSS 파이프라인(현 Supabase PostgreSQL), 국내·해외 종목 마스터 갱신 CLI. Kiwoom SDK와 Candlestick VQ-VAE 연구는 별도 트랙으로 진행합니다.
 
 ---
 

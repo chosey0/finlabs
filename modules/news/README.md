@@ -5,7 +5,7 @@
 **과거 급등 직전 뉴스 패턴과의 유사도로 급등 후보 종목을 조기 탐지하는 시스템 — 현재는 그 기반인 뉴스 수집 파이프라인 단계**
 
 [![Python](https://img.shields.io/badge/Python_3.12+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
-[![DuckDB](https://img.shields.io/badge/DuckDB-FFF000?style=for-the-badge&logo=duckdb&logoColor=black)](https://duckdb.org/)
+[![PostgreSQL](https://img.shields.io/badge/Supabase_PostgreSQL-3FCF8E?style=for-the-badge&logo=supabase&logoColor=white)](https://supabase.com/)
 [![Typer](https://img.shields.io/badge/Typer-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://typer.tiangolo.com/)
 [![Tests](https://img.shields.io/badge/Tests-Passing-00C853?style=for-the-badge&logo=pytest&logoColor=white)](./tests/)
 
@@ -23,7 +23,7 @@ Investing.com, 이데일리, 이투데이, 한국경제, 서울경제, 뉴스핌
 
 핵심 아이디어는 단순 감성 분석이 아니라 **과거 급등 직전 뉴스 패턴과의 유사도(Contrastive Vector Similarity)**입니다. "좋은 뉴스인가?"가 아니라 "과거 급등 직전 뉴스와 얼마나 비슷한가? 급등하지 않은 유사 뉴스와는 얼마나 다른가?"를 판단하고, 여기에 거래대금·변동성·테마 확산·시장 국면 등 **Market Context features**를 결합해 학습 모델(LightGBM)로 점수화합니다. 뉴스 설계는 [뉴스 모듈 PLAN](./PLAN.md), 전체 데이터 플랫폼과 구현 순서는 [통합 PLAN](../../PLAN.md)에 정리되어 있습니다.
 
-현재 구현된 범위는 그 기반이 되는 데이터 수집 파이프라인과 재사용 가능한 네이버 뉴스 검색 클라이언트입니다. 언론사마다 다른 RSS 필드를 표준 스키마로 변환하고, 기사 URL 기반의 결정적 ID와 DuckDB 제약 조건으로 중복 저장을 방지합니다. **본문 직접 수집은 언론사 이용약관에 따라 비활성화**되어 있습니다. 네이버 연동은 현재 키워드와 날짜로 제목·요약·링크·발행시각을 조회하는 독립 모듈까지 구현됐으며, 파이프라인 저장과 과거 백필 실행기는 아직 연결되지 않았습니다.
+현재 구현된 범위는 그 기반이 되는 데이터 수집 파이프라인과 재사용 가능한 네이버 뉴스 검색 클라이언트입니다. 언론사마다 다른 RSS 필드를 표준 스키마로 변환하고, 기사 URL 기반의 결정적 ID와 PostgreSQL 제약 조건으로 중복 저장을 방지합니다. 저장소는 finlabs_intelligence와 동일한 Supabase PostgreSQL 인스턴스를 공유합니다. **본문 직접 수집은 언론사 이용약관에 따라 비활성화**되어 있습니다. 네이버 연동은 현재 키워드와 날짜로 제목·요약·링크·발행시각을 조회하는 독립 모듈까지 구현됐으며, 파이프라인 저장과 과거 백필 실행기는 아직 연결되지 않았습니다.
 
 ---
 
@@ -45,7 +45,7 @@ Investing.com, 이데일리, 이투데이, 한국경제, 서울경제, 뉴스핌
 | **[급등 이벤트 연계]** | 공통 시장 이벤트 활용 | 공통 orchestration이 생성한 `(종목, 급등일)` 데이터셋을 과거 뉴스 검색·사례 구축에 사용 |
 | **[멱등 실행]** | 단계별 재실행 | 이미 저장되거나 현재 버전으로 분석된 항목은 다시 처리하지 않음 |
 | **[실행 이력]** | 성공·실패 기록 | 명령, 매개변수, 상태, 처리 건수, 제한된 오류 메시지를 저장 |
-| **[동시성 보호]** | 단일 writer 잠금 | 파일 잠금으로 동일 DuckDB에 대한 중복 파이프라인 실행을 즉시 차단 |
+| **[동시성 보호]** | DB 서버 동시성 | PostgreSQL 서버가 트랜잭션으로 동시 쓰기를 직렬화 (별도 파일 잠금 불필요) |
 | **[정기 실행]** | systemd timer | RSS 수집·분석을 30분마다 순차 실행하는 Linux 서비스 예시 제공 |
 | **[종목 마스터]** | KIS 국내·해외 마스터 동기화 | 국내 2개·미국 3개 시장을 분리 테이블에 원자적으로 교체 |
 
@@ -90,7 +90,8 @@ article_analyses
 
 ### Storage & Quality
 
-![DuckDB](https://img.shields.io/badge/DuckDB-1.1+-FFF000?style=flat-square&logo=duckdb&logoColor=black)
+![PostgreSQL](https://img.shields.io/badge/Supabase_PostgreSQL-3FCF8E?style=flat-square&logo=supabase&logoColor=white)
+![psycopg](https://img.shields.io/badge/psycopg-3.2+-336791?style=flat-square&logo=postgresql&logoColor=white)
 ![pytest](https://img.shields.io/badge/pytest-9.0+-0A9EDC?style=flat-square&logo=pytest&logoColor=white)
 ![Ruff](https://img.shields.io/badge/Ruff-0.15+-D7FF64?style=flat-square&logo=ruff&logoColor=black)
 
@@ -138,7 +139,7 @@ article_analyses
 - `feed_categories`: 카테고리별 RSS URL에 지정된 분류 목록입니다.
 - `source_categories`: RSS XML의 `category` 값을 표준화하지 않고 보존한 목록입니다.
 
-`feed_categories`와 `source_categories`의 빈 배열 `[]`은 수집은 정상적으로 완료됐지만 해당 카테고리가 없다는 뜻입니다. `NULL`은 기존 데이터 마이그레이션 과정에서 빈 배열로 보정합니다.
+`feed_categories`와 `source_categories`의 빈 배열 `{}`은 수집은 정상적으로 완료됐지만 해당 카테고리가 없다는 뜻입니다. 두 컬럼은 기본값이 빈 배열(`'{}'`)이라 새 행에서 `NULL`이 발생하지 않습니다.
 
 같은 기사 URL이 여러 카테고리 피드에 포함되면 기사 행은 하나만 유지하고 카테고리 목록을 합칩니다.
 
@@ -152,7 +153,7 @@ Investing.com의 `news_462.rss`(뉴스 속보 헤드라인)와 `news_477.rss`(�
 
 - Python 3.12+
 - `uv`
-- Linux 또는 macOS처럼 `fcntl` 파일 잠금을 지원하는 환경
+- finlabs_intelligence와 공유하는 Supabase PostgreSQL 접속 문자열 (`INTELLIGENCE_DATABASE_URL`)
 
 ### 설치
 
@@ -184,7 +185,7 @@ uv run --group news python -m modules.news.main analyze --limit 100
 uv run --group news python -m modules.news.main extract-entities --limit 100
 ```
 
-명령은 필요한 스키마를 자동으로 생성합니다. 기본 데이터베이스는 `modules/news/db/news.db`이며 Git에서 제외됩니다.
+명령은 `INTELLIGENCE_DATABASE_URL`(finlabs_intelligence와 공유하는 Supabase PostgreSQL)에 연결하고 필요한 스키마를 자동으로 생성합니다. DSN은 저장소 루트의 `.env`에 두거나 환경 변수로 export 하면 됩니다.
 
 ### 네이버 뉴스 검색 API
 
@@ -225,17 +226,17 @@ for article in articles:
 
 테스트에서는 `HttpTransport` Protocol을 구현한 가짜 transport를 주입할 수 있습니다. 주입한 transport의 생명주기는 호출자가 관리합니다.
 
-### 데이터베이스 경로 지정
+### 데이터베이스 연결 지정
 
-모든 명령은 `--db-path` 또는 `NEWS_DB_PATH`를 지원합니다.
+모든 명령은 `--dsn` 또는 `INTELLIGENCE_DATABASE_URL`로 Supabase PostgreSQL 접속 문자열을 받습니다. finlabs_intelligence와 같은 인스턴스를 공유하므로 동일한 DSN을 사용합니다.
 
 ```bash
-export NEWS_DB_PATH="$HOME/.local/share/finlabs/news.duckdb"
+export INTELLIGENCE_DATABASE_URL="postgresql://...@aws-...pooler.supabase.com:5432/postgres"
 uv run --group news python -m modules.news.main collect-rss
 
-# 또는 명령별 경로 지정
+# 또는 명령별 DSN 지정
 uv run --group news python -m modules.news.main analyze \
-  --db-path /var/lib/finlabs-news/news.duckdb \
+  --dsn "postgresql://...@.../postgres" \
   --limit 200
 ```
 
@@ -264,21 +265,20 @@ uv run --group news python -m modules.news.main collect-rss \
 | `article_entities` | 기사별 종목 entity와 티커·신뢰도 | `(rss_item_id, entity_type, entity_name)` 기본키 |
 | `article_entity_extractions` | 추출기 버전·본문 해시 기준 추출 이력 | `rss_item_id` 기본키 |
 | `pipeline_runs` | 명령 실행 상태와 처리 결과 | 실행별 UUID |
-| `domestic_symbols` | KIS KOSPI·KOSDAQ 종목 마스터 현재 스냅샷 | `(market, symbol)` 고유 제약 |
+| `domestic_symbols` | KIS KOSPI·KOSDAQ 종목 마스터 현재 스냅샷 (finlabs_intelligence 카탈로그와 공유) | `(market, symbol)` 고유 제약 |
 | `overseas_symbols` | KIS NASDAQ·NYSE·AMEX 종목 마스터 현재 스냅샷 | `(market, symbol)` 고유 제약 |
-| `schema_migrations` | 스키마·데이터 마이그레이션 이력 | 마이그레이션 ID |
 
-발행 시각은 입력 형식을 검증한 뒤 `Asia/Seoul` 기준으로 정규화합니다. 기존 UTC-naive 데이터의 서울 시각 변환은 마이그레이션 이력으로 한 번만 수행됩니다.
+발행 시각은 입력 형식을 검증한 뒤 `Asia/Seoul` 기준으로 저장하고, 조회 시 같은 시각대로 복원합니다.
 
-[통합 PLAN](../../PLAN.md) 단계 4에 따라 RSS 상태·중복 관리와 정제 본문 저장은 PostgreSQL `news` 스키마로 이전할 예정입니다. 기존 DuckDB는 마이그레이션 없이 읽기 전용 레거시 보관소로 유지되며, 신규 인프라는 빈 상태에서 시작해 이중 쓰기를 하지 않습니다.
+저장소는 finlabs_intelligence와 동일한 Supabase PostgreSQL 인스턴스입니다. 뉴스 테이블은 `intelligence_*` 테이블과 같은 데이터베이스에 공존하며, `domestic_symbols`는 두 도구가 공유합니다(`update-symbols`가 채우고 finlabs_intelligence 카탈로그가 읽습니다). 스키마는 명령 실행 시 `CREATE TABLE IF NOT EXISTS`로 멱등하게 생성됩니다.
 
 `rss_items`의 주요 카테고리 컬럼은 다음과 같습니다.
 
 | 컬럼 | 타입 | 의미 |
 |------|------|------|
-| `domain_category` | `VARCHAR` | 매체 전체에 부여한 상위 도메인. 현재 Investing.com의 `금융`만 사용 |
-| `feed_categories` | `VARCHAR[]` | 카테고리별 피드 URL에서 결정된 분류. 중복 기사에서는 목록 병합 |
-| `source_categories` | `VARCHAR[]` | RSS XML이 제공한 원문 분류. 표준화하지 않음 |
+| `domain_category` | `text` | 매체 전체에 부여한 상위 도메인. 현재 Investing.com의 `금융`만 사용 |
+| `feed_categories` | `text[]` | 카테고리별 피드 URL에서 결정된 분류. 중복 기사에서는 목록 병합 |
+| `source_categories` | `text[]` | RSS XML이 제공한 원문 분류. 표준화하지 않음 |
 
 ---
 
@@ -286,7 +286,7 @@ uv run --group news python -m modules.news.main collect-rss \
 
 ```text
 modules/news/
-├── main.py                    Typer CLI와 DB별 단일 writer 실행 경계
+├── main.py                    Typer CLI와 Supabase PostgreSQL 실행 경계 (--dsn)
 ├── naver/
 │   ├── client.py              키워드·날짜 검색, 페이지네이션, 재시도와 HTTP 경계
 │   ├── errors.py              공개 타입 오류 계층
@@ -295,9 +295,8 @@ modules/news/
 ├── articles/
 │   └── parsers.py             언론사별 본문 선택자와 parser 버전 registry
 ├── db/
-│   ├── init.py                DuckDB 스키마 생성과 안전한 마이그레이션
-│   ├── locking.py             DB 파일 단일 writer 잠금
-│   └── sql.py                 RSS·본문·분석·entity·실행 이력 저장 연산
+│   ├── init.py                PostgreSQL 스키마 생성과 연결 팩토리 (resolve_dsn)
+│   └── sql.py                 RSS·본문·분석·entity·실행 이력 저장 연산 (psycopg)
 ├── entities.py                종목 마스터·별칭 사전 기반 entity 추출기
 ├── schema/
 │   ├── article.py             기사 및 분석 모델
@@ -326,7 +325,7 @@ modules/news/
 
 ## Operations
 
-`systemd/` 예시는 `/opt/finlabs` 체크아웃과 `/var/lib/finlabs-news/news.duckdb`를 기준으로 작성되어 있습니다. 배포 환경에 맞게 `User`, `WorkingDirectory`, `NEWS_DB_PATH`를 조정해야 합니다.
+`systemd/` 예시는 `/opt/finlabs` 체크아웃을 기준으로 작성되어 있습니다. 배포 환경에 맞게 `User`, `WorkingDirectory`, 그리고 Supabase 접속 문자열(`INTELLIGENCE_DATABASE_URL`)을 조정해야 합니다.
 
 ```bash
 sudo cp modules/news/systemd/finlabs-news.service /etc/systemd/system/
@@ -342,15 +341,16 @@ sudo systemctl status finlabs-news-symbols.timer
 
 `finlabs-news-symbols.timer`는 매일 오전 9시(Asia/Seoul)에 KOSPI·KOSDAQ·NASDAQ·NYSE·AMEX 마스터를 갱신합니다. 다운로드가 비어 있거나 한 시장이라도 실패하면 두 테이블의 기존 스냅샷을 모두 유지합니다.
 
-DuckDB 쓰기는 파일 잠금으로 직렬화됩니다. `update-symbols`, `collect-rss`, `extract-entities`, `analyze` 실행 중에는 DuckDB CLI나 다른 프로세스가 같은 DB 파일을 쓰기 가능한 상태로 열고 있으면 안 됩니다. 여러 서버나 컨테이너가 동시에 동일 파일을 쓰는 구조도 지원하지 않습니다.
+쓰기 동시성은 Supabase PostgreSQL 서버가 트랜잭션으로 직렬화하므로, 여러 서버나 컨테이너가 동시에 같은 데이터베이스를 안전하게 사용할 수 있습니다. 연결은 `update-symbols`/`replace_article_entities`처럼 원자성이 필요한 연산만 명시적 트랜잭션으로 감싸고, 나머지는 statement 단위로 자동 커밋합니다.
 
 ---
 
 ## Testing
 
-테스트는 실제 RSS 서버를 호출하지 않고 고정된 feedparser 형식 데이터와 인메모리 DuckDB를 사용합니다.
+테스트는 실제 RSS 서버를 호출하지 않고 고정된 feedparser 데이터를 사용하며, DB 의존 테스트는 `INTELLIGENCE_TEST_DATABASE_URL`이 가리키는 PostgreSQL에 매 테스트마다 격리된 스키마를 만들어 실행합니다(미설정 시 자동 skip).
 
 ```bash
+export INTELLIGENCE_TEST_DATABASE_URL="postgresql://...@localhost:5432/test"
 uv run --group news python -m pytest modules/news/tests/test_rss_pipeline.py -q
 uv run --group news python -m pytest modules/news/tests/test_symbols.py -q
 uv run ruff check modules/news
@@ -362,11 +362,8 @@ uv run ruff check modules/news
 - 서울 시간대 정규화
 - RSS CRUD와 중복 삽입 방지
 - 카테고리 원문 보존과 중복 기사 카테고리 병합
-- 기존 RSS 행을 유지하는 카테고리 컬럼 마이그레이션
 - RSS → 본문 → 분석 단계의 멱등성
 - 성공·실패 실행 이력
-- 빈 구버전 스키마 교체와 시간대 마이그레이션
-- 동일 DB에 대한 중복 writer 차단
 - 국내·해외 종목 마스터 분리 저장과 5개 시장의 원자적 스냅샷 교체
 - 빈 다운로드 결과에서 기존 종목 마스터 보존
 
@@ -374,7 +371,7 @@ uv run ruff check modules/news
 
 ## Current Scope
 
-`collect-articles`(언론사 페이지 본문 직접 수집)는 언론사 이용약관 위배로 **비활성화**되어 실행 시 안내 메시지와 함께 종료됩니다. 네이버 검색 클라이언트는 독립 공개 API로 구현됐지만 CLI, DuckDB 저장, 백필 체크포인트에는 아직 연결되지 않았습니다. 네이버 API는 기사 전문을 제공하지 않으므로 이후 분석 입력은 제목과 요약을 기준으로 구성합니다.
+`collect-articles`(언론사 페이지 본문 직접 수집)는 언론사 이용약관 위배로 **비활성화**되어 실행 시 안내 메시지와 함께 종료됩니다. 네이버 검색 클라이언트는 독립 공개 API로 구현됐지만 CLI, PostgreSQL 저장, 백필 체크포인트에는 아직 연결되지 않았습니다. 네이버 API는 기사 전문을 제공하지 않으므로 이후 분석 입력은 제목과 요약을 기준으로 구성합니다.
 
 `analyze` 단계는 `basic-stats-v1` 분석기로 문자 수와 공백 기준 단어 수만 계산합니다. `extract-entities` 단계는 종목 마스터와 소규모 별칭 시드(삼전, 하이닉스, 네이버)로 종목 entity만 추출하며, 기업·산업·키워드 entity는 아직 추출하지 않습니다. 급등 이벤트의 계약·KIS/Toss 정규화·판정·저장은 각각 `modules.domain`, `modules.adapters`, `modules.orchestration`, `modules.storage`가 소유하며, 이 모듈은 해당 `(종목, 급등일)`을 뉴스 검색과 사례 라이브러리에 연결합니다. 이벤트 분류는 16종 taxonomy와 `ArticleEvent` DTO까지 구현되어 있고 LLM 호출 파이프라인은 미구현입니다. 전면적인 별칭 사전 구축, 과거 뉴스 백필, 임베딩·Vector Store, 점수화, 백테스트, 대시보드는 아래 로드맵의 대상입니다.
 
@@ -386,7 +383,7 @@ uv run ruff check modules/news
 
 | 단계 | 범위 | 상태 |
 |------|------|:----:|
-| **초기** (2~4주) | RSS 수집·본문 수집·DuckDB 저장 | ✅ 구현됨 |
+| **초기** (2~4주) | RSS 수집·본문 수집·Supabase PostgreSQL 저장 | ✅ 구현됨 |
 | | KIS 종목 마스터 자동 갱신 | ✅ 구현됨 |
 | | 종목 마스터 기반 entity 추출, 이벤트 taxonomy·분류 DTO | ✅ 구현됨 |
 | | 공통 시장 계층의 KIS/Toss 일봉 기반 과거 급등 이벤트 추출 | ✅ 구현됨 |

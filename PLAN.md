@@ -97,9 +97,11 @@ Monitoring Core
 
 ### 단계 4: 뉴스 저장 개편
 
-- RSS 상태·중복 관리를 PostgreSQL로 이전
-- 언론사별 parser registry와 정제 본문 저장
-- 재시도, 영구 실패와 parser version 기반 재처리
+> **상태: 이전 완료** — `rss_items`·`articles`·`article_analyses`·`article_entities`·`article_entity_extractions`·`pipeline_runs`·`domestic_symbols`·`overseas_symbols`가 finlabs_intelligence와 공유하는 Supabase PostgreSQL로 이전됨(`INTELLIGENCE_DATABASE_URL`, psycopg). DuckDB와 파일 잠금은 제거. repository Protocol 추상화와 별도 `news` 스키마 분리는 후속 과제.
+
+- RSS 상태·중복 관리를 PostgreSQL로 이전 ✅
+- 언론사별 parser registry와 정제 본문 저장 ✅
+- 재시도, 영구 실패와 parser version 기반 재처리 ✅
 
 완료 기준:
 
