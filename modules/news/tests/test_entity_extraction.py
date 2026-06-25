@@ -5,10 +5,9 @@ from __future__ import annotations
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-import duckdb
+import psycopg
 import pytest
 
-from modules.news.db.init import create_schema
 from modules.news.db.sql import (
     create_rss_item,
     insert_article,
@@ -47,13 +46,7 @@ SYMBOLS = (
 )
 
 
-def _connection() -> duckdb.DuckDBPyConnection:
-    connection = duckdb.connect(":memory:")
-    create_schema(connection)
-    return connection
-
-
-def _store_symbol_master(connection: duckdb.DuckDBPyConnection) -> None:
+def _store_symbol_master(connection: psycopg.Connection) -> None:
     replace_symbol_snapshots(
         connection,
         [
@@ -69,7 +62,7 @@ def _store_symbol_master(connection: duckdb.DuckDBPyConnection) -> None:
 
 
 def _store_article(
-    connection: duckdb.DuckDBPyConnection,
+    connection: psycopg.Connection,
     *,
     url: str,
     title: str,
@@ -146,8 +139,8 @@ def test_alias_match_reports_canonical_name_with_lower_confidence():
     assert mixed[0].confidence == NAME_MATCH_CONFIDENCE
 
 
-def test_extract_entities_persists_and_reruns_idempotently():
-    connection = _connection()
+def test_extract_entities_persists_and_reruns_idempotently(news_connection):
+    connection = news_connection
     _store_symbol_master(connection)
     item_id = _store_article(
         connection,
@@ -180,8 +173,8 @@ def test_extract_entities_persists_and_reruns_idempotently():
     }
 
 
-def test_extract_entities_records_zero_entity_articles_as_processed():
-    connection = _connection()
+def test_extract_entities_records_zero_entity_articles_as_processed(news_connection):
+    connection = news_connection
     _store_symbol_master(connection)
     _store_article(
         connection,
@@ -197,8 +190,8 @@ def test_extract_entities_records_zero_entity_articles_as_processed():
     assert second == OperationResult(processed=0, created=0, skipped=0)
 
 
-def test_extract_entities_reprocesses_on_content_or_version_change():
-    connection = _connection()
+def test_extract_entities_reprocesses_on_content_or_version_change(news_connection):
+    connection = news_connection
     _store_symbol_master(connection)
     item_id = _store_article(
         connection,
@@ -231,8 +224,8 @@ def test_extract_entities_reprocesses_on_content_or_version_change():
     assert after_version_bump.processed == 1
 
 
-def test_extract_entities_requires_symbol_master():
-    connection = _connection()
+def test_extract_entities_requires_symbol_master(news_connection):
+    connection = news_connection
     _store_article(
         connection,
         url="https://kr.investing.com/news/entity-4",
@@ -244,8 +237,8 @@ def test_extract_entities_requires_symbol_master():
         extract_entities(connection)
 
 
-def test_extract_entities_reports_pending_and_item_progress():
-    connection = _connection()
+def test_extract_entities_reports_pending_and_item_progress(news_connection):
+    connection = news_connection
     _store_symbol_master(connection)
     _store_article(
         connection,
@@ -279,8 +272,8 @@ def test_extract_entities_reports_pending_and_item_progress():
     }
 
 
-def test_extract_entities_all_processes_every_pending_article():
-    connection = _connection()
+def test_extract_entities_all_processes_every_pending_article(news_connection):
+    connection = news_connection
     _store_symbol_master(connection)
     for index in range(105):
         _store_article(
@@ -299,9 +292,8 @@ def test_extract_entities_all_processes_every_pending_article():
     ("extra_args", "expected_limit"),
     [([], 100), (["--limit", "7"], 7), (["--all"], None)],
 )
-def test_extract_entities_cli_passes_limit_to_progress_flow(
+def test_extract_entities_cli_passes_dsn_and_limit_to_progress_flow(
     monkeypatch,
-    tmp_path,
     extra_args,
     expected_limit,
 ):
@@ -313,17 +305,17 @@ def test_extract_entities_cli_passes_limit_to_progress_flow(
     monkeypatch.setattr(
         news_main,
         "_extract_entities_with_progress",
-        lambda db_path, limit: calls.append((db_path, limit)),
+        lambda dsn, limit: calls.append((dsn, limit)),
     )
-    db_path = tmp_path / "news.db"
+    dsn = "postgresql://example/news"
 
     result = CliRunner().invoke(
         news_main.app,
-        ["extract-entities", "--db-path", str(db_path), *extra_args],
+        ["extract-entities", "--dsn", dsn, *extra_args],
     )
 
     assert result.exit_code == 0
-    assert calls == [(db_path, expected_limit)]
+    assert calls == [(dsn, expected_limit)]
 
 
 def test_event_taxonomy_is_closed_and_versioned():

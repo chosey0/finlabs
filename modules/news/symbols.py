@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 from datetime import datetime
 
-import duckdb
+import psycopg
 from modules.brokers.kis import SymbolRecord, download_symbol_master, normalize_market
 
 from .db.sql import replace_symbol_snapshots
@@ -21,7 +21,7 @@ OnMarketDownloaded = Callable[[str, int], None]
 
 
 def update_symbol_masters(
-    connection: duckdb.DuckDBPyConnection,
+    connection: psycopg.Connection,
     *,
     markets: Iterable[str] = NEWS_SYMBOL_MARKETS,
     downloader: SymbolMasterDownloader = download_symbol_master,

@@ -9,13 +9,10 @@ from datetime import datetime
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
-import duckdb
 import httpx
 import pytest
 
 from modules.news.articles.parsers import ARTICLE_PARSERS, SelectorArticleParser
-from modules.news.db.init import create_schema
-from modules.news.db.locking import single_writer_lock
 from modules.news.db.sql import (
     create_rss_item,
     delete_rss_item,
@@ -137,7 +134,7 @@ def test_provider_parser_returns_canonical_entry(parser, raw, publisher, summary
     assert entry.published_at.tzinfo == SEOUL
 
 
-def test_parser_preserves_source_categories_without_normalizing():
+def test_parser_preserves_source_categories_without_normalizing(news_connection):
     """XML category 값은 매체 원문 그대로 중복 없이 보존한다."""
 
     entry = PARSERS["edaily"].parse(
@@ -211,11 +208,10 @@ def test_default_feed_sources_include_configured_categories():
     assert uncategorized["sedaily"] == "https://www.sedaily.com/rss/newsall"
 
 
-def test_crud_uses_one_canonical_contract():
+def test_crud_uses_one_canonical_contract(news_connection):
     """CRUD 연산이 하나의 표준 RSS 항목 계약을 유지하는지 검증한다."""
 
-    connection = duckdb.connect(":memory:")
-    create_schema(connection)
+    connection = news_connection
     item = PARSERS["investing.com"].parse(
         {
             "author": "Investing.com",
@@ -246,7 +242,7 @@ def test_crud_uses_one_canonical_contract():
     assert read_rss_item(connection, item.id) is None
 
 
-def test_naive_korean_feed_time_is_interpreted_as_seoul_time():
+def test_naive_korean_feed_time_is_interpreted_as_seoul_time(news_connection):
     """시간대가 없는 한국 RSS 발행 시각을 서울 현지 시각으로 해석한다."""
 
     entry = PARSERS["investing.com"].parse(
@@ -286,11 +282,10 @@ def _edaily_entry(link: str, title: str) -> dict:
     }
 
 
-def test_three_pipeline_stages_are_idempotent():
+def test_three_pipeline_stages_are_idempotent(news_connection):
     """RSS 수집, 본문 수집, 분석을 재실행해도 중복 행이 생기지 않는다."""
 
-    connection = duckdb.connect(":memory:")
-    create_schema(connection)
+    connection = news_connection
     raw_entry = _edaily_entry(
         "https://www.edaily.co.kr/news/article-1", "Pipeline title"
     )
@@ -330,9 +325,8 @@ def test_three_pipeline_stages_are_idempotent():
     ).fetchone() == (18, 3)
 
 
-def test_analyze_reports_pending_and_item_progress():
-    connection = duckdb.connect(":memory:")
-    create_schema(connection)
+def test_analyze_reports_pending_and_item_progress(news_connection):
+    connection = news_connection
     entries = [
         _edaily_entry(
             f"https://www.edaily.co.kr/news/analyze-progress-{index}",
@@ -369,9 +363,8 @@ def test_analyze_reports_pending_and_item_progress():
     }
 
 
-def test_analyze_all_processes_every_pending_article():
-    connection = duckdb.connect(":memory:")
-    create_schema(connection)
+def test_analyze_all_processes_every_pending_article(news_connection):
+    connection = news_connection
     entries = [
         _edaily_entry(
             f"https://www.edaily.co.kr/news/analyze-all-{index}",
@@ -402,9 +395,8 @@ def test_analyze_all_processes_every_pending_article():
     ("extra_args", "expected_limit"),
     [([], 100), (["--limit", "7"], 7), (["--all"], None)],
 )
-def test_analyze_cli_passes_limit_to_progress_flow(
+def test_analyze_cli_passes_dsn_and_limit_to_progress_flow(
     monkeypatch,
-    tmp_path,
     extra_args,
     expected_limit,
 ):
@@ -416,24 +408,23 @@ def test_analyze_cli_passes_limit_to_progress_flow(
     monkeypatch.setattr(
         news_main,
         "_analyze_with_progress",
-        lambda db_path, limit: calls.append((db_path, limit)),
+        lambda dsn, limit: calls.append((dsn, limit)),
     )
-    db_path = tmp_path / "news.db"
+    dsn = "postgresql://example/news"
 
     result = CliRunner().invoke(
         news_main.app,
-        ["analyze", "--db-path", str(db_path), *extra_args],
+        ["analyze", "--dsn", dsn, *extra_args],
     )
 
     assert result.exit_code == 0
-    assert calls == [(db_path, expected_limit)]
+    assert calls == [(dsn, expected_limit)]
 
 
-def test_collect_articles_reprocesses_when_parser_version_changes():
+def test_collect_articles_reprocesses_when_parser_version_changes(news_connection):
     """파서 버전이 바뀌면 기존 본문을 다시 가져와 같은 행을 갱신한다."""
 
-    connection = duckdb.connect(":memory:")
-    create_schema(connection)
+    connection = news_connection
     raw_entry = _edaily_entry(
         "https://www.edaily.co.kr/news/reparse-version", "Reparse title"
     )
@@ -463,11 +454,10 @@ def test_collect_articles_reprocesses_when_parser_version_changes():
     ).fetchone() == (1, "edaily-news-body-v2")
 
 
-def test_collect_articles_isolates_per_article_failures_and_retries():
+def test_collect_articles_isolates_per_article_failures_and_retries(news_connection):
     """기사 한 건의 수집 실패가 배치를 중단시키지 않고 다음 실행에서 재시도된다."""
 
-    connection = duckdb.connect(":memory:")
-    create_schema(connection)
+    connection = news_connection
     failing_url = "https://www.edaily.co.kr/news/blocked"
     entries = [
         _edaily_entry(failing_url, "Blocked title"),
@@ -498,11 +488,10 @@ def test_collect_articles_isolates_per_article_failures_and_retries():
     assert connection.execute("SELECT count(*) FROM articles").fetchone() == (2,)
 
 
-def test_collect_articles_reports_pending_and_per_item_results():
+def test_collect_articles_reports_pending_and_per_item_results(news_connection):
     """진행 표시용 콜백이 수집 대상과 기사별 결과를 순서대로 전달한다."""
 
-    connection = duckdb.connect(":memory:")
-    create_schema(connection)
+    connection = news_connection
     failing_url = "https://www.edaily.co.kr/news/progress-fail"
     entries = [
         _edaily_entry(failing_url, "Progress fail title"),
@@ -540,11 +529,10 @@ def test_collect_articles_reports_pending_and_per_item_results():
     assert ("Progress ok title", 1, 0) in item_results
 
 
-def test_collect_articles_fetches_different_publishers_in_parallel():
+def test_collect_articles_fetches_different_publishers_in_parallel(news_connection):
     """서로 다른 언론사의 본문 요청은 동시에 진행하고 DB 저장은 완료한다."""
 
-    connection = duckdb.connect(":memory:")
-    create_schema(connection)
+    connection = news_connection
     items = (
         CanonicalRssEntry(
             id=hashlib.sha256(b"https://example.com/edaily-parallel").hexdigest(),
@@ -595,7 +583,6 @@ def test_collect_articles_fetches_different_publishers_in_parallel():
 )
 def test_collect_articles_cli_runs_preserved_collection_flow(
     monkeypatch,
-    tmp_path,
     extra_args,
     expected_limit,
 ):
@@ -607,30 +594,29 @@ def test_collect_articles_cli_runs_preserved_collection_flow(
 
     calls = []
 
-    def collect_with_progress(db_path, limit):
-        calls.append((db_path, limit))
+    def collect_with_progress(dsn, limit):
+        calls.append((dsn, limit))
 
     monkeypatch.setattr(
         news_main,
         "_collect_articles_with_progress",
         collect_with_progress,
     )
-    db_path = tmp_path / "news.db"
+    dsn = "postgresql://example/news"
 
     result = CliRunner().invoke(
         news_main.app,
-        ["collect-articles", "--db-path", str(db_path), *extra_args],
+        ["collect-articles", "--dsn", dsn, *extra_args],
     )
 
     assert result.exit_code == 0
-    assert calls == [(db_path, expected_limit)]
+    assert calls == [(dsn, expected_limit)]
 
 
-def test_collect_articles_all_processes_every_pending_item():
+def test_collect_articles_all_processes_every_pending_item(news_connection):
     """limit=None이면 기본 100개 제한 없이 모든 미수집 항목을 처리한다."""
 
-    connection = duckdb.connect(":memory:")
-    create_schema(connection)
+    connection = news_connection
     entries = [
         _edaily_entry(
             f"https://www.edaily.co.kr/news/all-{index}",
@@ -654,11 +640,10 @@ def test_collect_articles_all_processes_every_pending_item():
     assert connection.execute("SELECT count(*) FROM articles").fetchone() == (105,)
 
 
-def test_collect_articles_excludes_metadata_only_investing_source():
+def test_collect_articles_excludes_metadata_only_investing_source(news_connection):
     """본문 parser가 없는 investing.com 항목은 수집 대상에서 제외된다."""
 
-    connection = duckdb.connect(":memory:")
-    create_schema(connection)
+    connection = news_connection
     raw_entry = {
         "author": "Investing.com",
         "link": "https://kr.investing.com/news/login-walled",
@@ -682,11 +667,10 @@ def test_collect_articles_excludes_metadata_only_investing_source():
     assert connection.execute("SELECT count(*) FROM articles").fetchone() == (0,)
 
 
-def test_collect_rss_merges_categories_for_duplicate_article_urls():
+def test_collect_rss_merges_categories_for_duplicate_article_urls(news_connection):
     """같은 기사가 여러 피드에 있으면 행은 하나만 두고 카테고리를 합친다."""
 
-    connection = duckdb.connect(":memory:")
-    create_schema(connection)
+    connection = news_connection
     parser = PARSERS["etoday"]
     sources = (
         FeedSource(
@@ -731,11 +715,10 @@ def test_collect_rss_merges_categories_for_duplicate_article_urls():
     assert item.source_categories == ("거시경제", "증권")
 
 
-def test_collect_rss_skips_entries_missing_required_fields():
+def test_collect_rss_skips_entries_missing_required_fields(news_connection):
     """link 등 필수 필드가 없는 항목은 건너뛰고 나머지 항목과 소스는 계속 수집한다."""
 
-    connection = duckdb.connect(":memory:")
-    create_schema(connection)
+    connection = news_connection
     parser = PARSERS["etoday"]
     source = FeedSource("etoday", "https://example.com/feed.xml", parser)
 
@@ -767,11 +750,10 @@ def test_collect_rss_skips_entries_missing_required_fields():
     assert "etoday" in result.errors[0]
 
 
-def test_collect_rss_reports_each_source_result_in_order():
+def test_collect_rss_reports_each_source_result_in_order(news_connection):
     """소스 하나의 수집이 끝날 때마다 소스별 결과가 순서대로 콜백에 전달된다."""
 
-    connection = duckdb.connect(":memory:")
-    create_schema(connection)
+    connection = news_connection
     parser = PARSERS["etoday"]
     sources = (
         FeedSource(
@@ -819,11 +801,10 @@ def test_collect_rss_reports_each_source_result_in_order():
     ]
 
 
-def test_collect_rss_fetches_different_publishers_in_parallel():
+def test_collect_rss_fetches_different_publishers_in_parallel(news_connection):
     """서로 다른 언론사의 RSS 요청은 동시에 진행하고 결과는 정상 저장한다."""
 
-    connection = duckdb.connect(":memory:")
-    create_schema(connection)
+    connection = news_connection
     sources = (
         FeedSource("edaily", "https://example.com/edaily.xml", PARSERS["edaily"]),
         FeedSource("etoday", "https://example.com/etoday.xml", PARSERS["etoday"]),
@@ -852,11 +833,10 @@ def test_collect_rss_fetches_different_publishers_in_parallel():
     assert connection.execute("SELECT count(*) FROM rss_items").fetchone() == (2,)
 
 
-def test_recorded_operation_persists_success_and_failure():
+def test_recorded_operation_persists_success_and_failure(news_connection):
     """각 단계의 성공·실패 상태와 오류 메시지가 실행 이력에 남는다."""
 
-    connection = duckdb.connect(":memory:")
-    create_schema(connection)
+    connection = news_connection
 
     result = run_recorded_operation(
         connection,
@@ -889,163 +869,3 @@ def test_recorded_operation_persists_success_and_failure():
         ("analyze", "succeeded", 2, 1, 1, None),
         ("collect-rss", "failed", 0, 0, 0, "RuntimeError: collector failed"),
     ]
-
-
-def test_create_schema_replaces_only_empty_legacy_articles_table():
-    """초기 빈 articles 스텁은 확장하되 기존 데이터는 암묵적으로 삭제하지 않는다."""
-
-    connection = duckdb.connect(":memory:")
-    connection.execute(
-        """
-        CREATE TABLE rss_items (
-            id VARCHAR PRIMARY KEY,
-            publisher VARCHAR NOT NULL,
-            url VARCHAR NOT NULL UNIQUE,
-            title VARCHAR NOT NULL,
-            author VARCHAR,
-            summary VARCHAR,
-            published_at TIMESTAMP NOT NULL,
-            created_at TIMESTAMP NOT NULL DEFAULT current_timestamp
-        )
-        """
-    )
-    connection.execute(
-        "CREATE TABLE articles (rss_item_id VARCHAR PRIMARY KEY REFERENCES rss_items(id))"
-    )
-
-    create_schema(connection)
-
-    columns = {row[0] for row in connection.execute("DESCRIBE articles").fetchall()}
-    assert columns == {
-        "rss_item_id",
-        "content",
-        "content_hash",
-        "parser_version",
-        "fetched_at",
-    }
-
-
-def test_create_schema_marks_existing_articles_for_parser_reprocessing():
-    """기존 전체 페이지 본문은 legacy 버전으로 표시해 재처리 대상으로 만든다."""
-
-    connection = duckdb.connect(":memory:")
-    connection.execute(
-        """
-        CREATE TABLE rss_items (
-            id VARCHAR PRIMARY KEY,
-            publisher VARCHAR NOT NULL,
-            url VARCHAR NOT NULL UNIQUE,
-            title VARCHAR NOT NULL,
-            author VARCHAR,
-            summary VARCHAR,
-            domain_category VARCHAR,
-            feed_categories VARCHAR[] NOT NULL DEFAULT [],
-            source_categories VARCHAR[] NOT NULL DEFAULT [],
-            published_at TIMESTAMP NOT NULL,
-            created_at TIMESTAMP NOT NULL DEFAULT current_timestamp
-        )
-        """
-    )
-    connection.execute(
-        """
-        CREATE TABLE articles (
-            rss_item_id VARCHAR PRIMARY KEY REFERENCES rss_items(id),
-            content TEXT NOT NULL,
-            content_hash VARCHAR NOT NULL,
-            fetched_at TIMESTAMP NOT NULL DEFAULT current_timestamp
-        )
-        """
-    )
-    connection.execute(
-        """
-        INSERT INTO rss_items (
-            id, publisher, url, title, published_at
-        ) VALUES ('legacy', 'sedaily', 'https://example.com/legacy',
-                  'Legacy article', TIMESTAMP '2026-06-10 12:00:00')
-        """
-    )
-    connection.execute(
-        """
-        INSERT INTO articles (rss_item_id, content, content_hash)
-        VALUES ('legacy', 'full page text', ?)
-        """,
-        [hashlib.sha256(b"full page text").hexdigest()],
-    )
-
-    create_schema(connection)
-
-    assert connection.execute(
-        "SELECT parser_version FROM articles WHERE rss_item_id = 'legacy'"
-    ).fetchone() == ("legacy-full-page-v1",)
-
-
-def test_create_schema_migrates_existing_utc_published_at_to_seoul_once():
-    """구버전 UTC-naive 발행 시각을 한 번만 서울 시각으로 변환한다."""
-
-    connection = duckdb.connect(":memory:")
-    create_schema(connection)
-    connection.execute("DELETE FROM schema_migrations")
-    connection.execute(
-        """
-        INSERT INTO rss_items (
-            id, publisher, url, title, published_at
-        ) VALUES (?, 'investing.com', ?, 'Legacy', TIMESTAMP '2026-06-10 12:00:00')
-        """,
-        ["a" * 64, "https://example.com/legacy"],
-    )
-
-    create_schema(connection)
-    first_value = connection.execute("SELECT published_at FROM rss_items").fetchone()[0]
-    create_schema(connection)
-    second_value = connection.execute("SELECT published_at FROM rss_items").fetchone()[
-        0
-    ]
-
-    assert first_value == datetime(2026, 6, 10, 21, 0)
-    assert second_value == first_value
-
-
-def test_create_schema_adds_category_columns_without_deleting_existing_rows():
-    """기존 RSS 데이터는 유지하면서 카테고리 컬럼과 빈 기본값을 추가한다."""
-
-    connection = duckdb.connect(":memory:")
-    connection.execute(
-        """
-        CREATE TABLE rss_items (
-            id VARCHAR PRIMARY KEY,
-            publisher VARCHAR NOT NULL,
-            url VARCHAR NOT NULL UNIQUE,
-            title VARCHAR NOT NULL,
-            author VARCHAR,
-            summary VARCHAR,
-            published_at TIMESTAMP NOT NULL,
-            created_at TIMESTAMP NOT NULL DEFAULT current_timestamp
-        )
-        """
-    )
-    connection.execute(
-        """
-        INSERT INTO rss_items (id, publisher, url, title, published_at)
-        VALUES (?, 'etoday', ?, 'Existing', TIMESTAMP '2026-06-10 12:00:00')
-        """,
-        ["b" * 64, "https://example.com/existing"],
-    )
-
-    create_schema(connection)
-
-    assert connection.execute(
-        """SELECT domain_category, feed_categories, source_categories
-        FROM rss_items WHERE id = ?""",
-        ["b" * 64],
-    ).fetchone() == (None, [], [])
-
-
-def test_single_writer_lock_rejects_overlapping_pipeline(tmp_path):
-    """같은 DuckDB를 대상으로 겹치는 파이프라인 실행을 즉시 거부한다."""
-
-    database_path = tmp_path / "news.duckdb"
-
-    with single_writer_lock(database_path):
-        with pytest.raises(RuntimeError, match="another news pipeline process"):
-            with single_writer_lock(database_path):
-                pytest.fail("overlapping writer lock was acquired")

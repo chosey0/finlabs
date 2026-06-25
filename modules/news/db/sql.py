@@ -1,4 +1,4 @@
-"""DuckDB에 저장된 표준 RSS 항목의 CRUD 연산을 제공한다."""
+"""Supabase PostgreSQL에 저장된 표준 RSS 항목의 CRUD 연산을 제공한다."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import json
 from collections.abc import Sequence
 from uuid import uuid4
 
-import duckdb
+import psycopg
 
 from ..schema.article import ArticleAnalysis, CanonicalArticle
 from ..schema.entity import ArticleEntity
@@ -15,7 +15,7 @@ from ..rss.models import CanonicalRssEntry, SEOUL_TIMEZONE
 
 
 def create_rss_item(
-    connection: duckdb.DuckDBPyConnection,
+    connection: psycopg.Connection,
     item: CanonicalRssEntry,
 ) -> str:
     """RSS 항목을 중복 없이 삽입하고 결정적 ID를 반환한다."""
@@ -25,7 +25,7 @@ def create_rss_item(
 
 
 def insert_rss_item(
-    connection: duckdb.DuckDBPyConnection,
+    connection: psycopg.Connection,
     item: CanonicalRssEntry,
 ) -> bool:
     """RSS 항목을 삽입하고 새 행이 생성되었는지 반환한다."""
@@ -35,7 +35,7 @@ def insert_rss_item(
         INSERT INTO rss_items (
             id, publisher, url, title, author, summary, domain_category,
             feed_categories, source_categories, published_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (id) DO NOTHING
         RETURNING id
         """,
@@ -64,7 +64,7 @@ def insert_rss_item(
 
 
 def read_rss_item(
-    connection: duckdb.DuckDBPyConnection,
+    connection: psycopg.Connection,
     item_id: str,
 ) -> CanonicalRssEntry | None:
     """ID로 RSS 항목을 조회하고 존재하지 않으면 ``None``을 반환한다."""
@@ -74,7 +74,7 @@ def read_rss_item(
         SELECT id, publisher, url, title, author, summary, domain_category,
                feed_categories, source_categories, published_at
         FROM rss_items
-        WHERE id = ?
+        WHERE id = %s
         """,
         [item_id],
     ).fetchone()
@@ -82,7 +82,7 @@ def read_rss_item(
 
 
 def update_rss_item(
-    connection: duckdb.DuckDBPyConnection,
+    connection: psycopg.Connection,
     item: CanonicalRssEntry,
 ) -> bool:
     """RSS 항목을 갱신하고 대상 행의 존재 여부를 반환한다."""
@@ -90,10 +90,10 @@ def update_rss_item(
     row = connection.execute(
         """
         UPDATE rss_items
-        SET publisher = ?, url = ?, title = ?, author = ?, summary = ?,
-            domain_category = ?, feed_categories = ?, source_categories = ?,
-            published_at = ?
-        WHERE id = ?
+        SET publisher = %s, url = %s, title = %s, author = %s, summary = %s,
+            domain_category = %s, feed_categories = %s, source_categories = %s,
+            published_at = %s
+        WHERE id = %s
         RETURNING id
         """,
         [
@@ -113,20 +113,20 @@ def update_rss_item(
 
 
 def delete_rss_item(
-    connection: duckdb.DuckDBPyConnection,
+    connection: psycopg.Connection,
     item_id: str,
 ) -> bool:
     """RSS 항목을 삭제하고 대상 행의 존재 여부를 반환한다."""
 
     row = connection.execute(
-        "DELETE FROM rss_items WHERE id = ? RETURNING id",
+        "DELETE FROM rss_items WHERE id = %s RETURNING id",
         [item_id],
     ).fetchone()
     return row is not None
 
 
 def list_rss_items(
-    connection: duckdb.DuckDBPyConnection,
+    connection: psycopg.Connection,
     *,
     publisher: str | None = None,
     limit: int = 100,
@@ -142,7 +142,7 @@ def list_rss_items(
                    feed_categories, source_categories, published_at
             FROM rss_items
             ORDER BY published_at DESC, id
-            LIMIT ?
+            LIMIT %s
             """,
             [limit],
         ).fetchall()
@@ -152,9 +152,9 @@ def list_rss_items(
             SELECT id, publisher, url, title, author, summary, domain_category,
                    feed_categories, source_categories, published_at
             FROM rss_items
-            WHERE publisher = ?
+            WHERE publisher = %s
             ORDER BY published_at DESC, id
-            LIMIT ?
+            LIMIT %s
             """,
             [publisher, limit],
         ).fetchall()
@@ -162,7 +162,7 @@ def list_rss_items(
 
 
 def list_rss_items_without_articles(
-    connection: duckdb.DuckDBPyConnection,
+    connection: psycopg.Connection,
     *,
     limit: int = 100,
 ) -> tuple[CanonicalRssEntry, ...]:
@@ -179,7 +179,7 @@ def list_rss_items_without_articles(
         LEFT JOIN articles AS a ON a.rss_item_id = r.id
         WHERE a.rss_item_id IS NULL
         ORDER BY r.published_at, r.id
-        LIMIT ?
+        LIMIT %s
         """,
         [limit],
     ).fetchall()
@@ -187,7 +187,7 @@ def list_rss_items_without_articles(
 
 
 def list_rss_items_requiring_article_parse(
-    connection: duckdb.DuckDBPyConnection,
+    connection: psycopg.Connection,
     *,
     parser_versions: dict[str, str],
     limit: int | None = 100,
@@ -203,11 +203,11 @@ def list_rss_items_requiring_article_parse(
     for publisher, version in sorted(parser_versions.items()):
         if not publisher.strip() or not version.strip():
             raise ValueError("parser publisher and version must not be empty")
-        conditions.append("(r.publisher = ? AND a.parser_version IS DISTINCT FROM ?)")
+        conditions.append("(r.publisher = %s AND a.parser_version IS DISTINCT FROM %s)")
         parameters.extend((publisher, version))
     limit_clause = ""
     if limit is not None:
-        limit_clause = "LIMIT ?"
+        limit_clause = "LIMIT %s"
         parameters.append(limit)
     rows = connection.execute(
         f"""
@@ -226,7 +226,7 @@ def list_rss_items_requiring_article_parse(
 
 
 def insert_article(
-    connection: duckdb.DuckDBPyConnection,
+    connection: psycopg.Connection,
     article: CanonicalArticle,
 ) -> bool:
     """기사 본문을 parser 버전에 따라 삽입·갱신하고 변경 여부를 반환한다."""
@@ -235,7 +235,7 @@ def insert_article(
         """
         SELECT content_hash, parser_version
         FROM articles
-        WHERE rss_item_id = ?
+        WHERE rss_item_id = %s
         """,
         [article.rss_item_id],
     ).fetchone()
@@ -246,7 +246,7 @@ def insert_article(
         """
         INSERT INTO articles (
             rss_item_id, content, content_hash, parser_version
-        ) VALUES (?, ?, ?, ?)
+        ) VALUES (%s, %s, %s, %s)
         ON CONFLICT (rss_item_id) DO UPDATE SET
             content = excluded.content,
             content_hash = excluded.content_hash,
@@ -264,7 +264,7 @@ def insert_article(
 
 
 def list_articles_without_current_analysis(
-    connection: duckdb.DuckDBPyConnection,
+    connection: psycopg.Connection,
     *,
     analyzer_version: str,
     limit: int | None = 100,
@@ -276,7 +276,7 @@ def list_articles_without_current_analysis(
     limit_clause = ""
     parameters: list[object] = [analyzer_version]
     if limit is not None:
-        limit_clause = "LIMIT ?"
+        limit_clause = "LIMIT %s"
         parameters.append(limit)
     rows = connection.execute(
         f"""
@@ -286,7 +286,7 @@ def list_articles_without_current_analysis(
         LEFT JOIN article_analyses AS x
           ON x.rss_item_id = a.rss_item_id
          AND x.content_hash = a.content_hash
-         AND x.analyzer_version = ?
+         AND x.analyzer_version = %s
         WHERE x.rss_item_id IS NULL
         ORDER BY a.fetched_at, a.rss_item_id
         {limit_clause}
@@ -308,7 +308,7 @@ def list_articles_without_current_analysis(
 
 
 def upsert_article_analysis(
-    connection: duckdb.DuckDBPyConnection,
+    connection: psycopg.Connection,
     analysis: ArticleAnalysis,
 ) -> None:
     """기사별 최신 기본 분석 결과를 멱등하게 저장한다."""
@@ -318,7 +318,7 @@ def upsert_article_analysis(
         INSERT INTO article_analyses (
             rss_item_id, analyzer_version, content_hash,
             character_count, word_count
-        ) VALUES (?, ?, ?, ?, ?)
+        ) VALUES (%s, %s, %s, %s, %s)
         ON CONFLICT (rss_item_id) DO UPDATE SET
             analyzer_version = excluded.analyzer_version,
             content_hash = excluded.content_hash,
@@ -337,7 +337,7 @@ def upsert_article_analysis(
 
 
 def list_domestic_symbol_names(
-    connection: duckdb.DuckDBPyConnection,
+    connection: psycopg.Connection,
 ) -> tuple[tuple[str, str], ...]:
     """국내 종목 마스터의 (한글명, 종목코드) 목록을 반환한다."""
 
@@ -353,7 +353,7 @@ def list_domestic_symbol_names(
 
 
 def list_articles_requiring_entity_extraction(
-    connection: duckdb.DuckDBPyConnection,
+    connection: psycopg.Connection,
     *,
     extractor_version: str,
     limit: int | None = 100,
@@ -367,7 +367,7 @@ def list_articles_requiring_entity_extraction(
     limit_clause = ""
     parameters: list[object] = [extractor_version]
     if limit is not None:
-        limit_clause = "LIMIT ?"
+        limit_clause = "LIMIT %s"
         parameters.append(limit)
     rows = connection.execute(
         f"""
@@ -377,7 +377,7 @@ def list_articles_requiring_entity_extraction(
         LEFT JOIN article_entity_extractions AS x
           ON x.rss_item_id = a.rss_item_id
          AND x.content_hash = a.content_hash
-         AND x.extractor_version = ?
+         AND x.extractor_version = %s
         WHERE x.rss_item_id IS NULL
         ORDER BY a.fetched_at, a.rss_item_id
         {limit_clause}
@@ -399,7 +399,7 @@ def list_articles_requiring_entity_extraction(
 
 
 def replace_article_entities(
-    connection: duckdb.DuckDBPyConnection,
+    connection: psycopg.Connection,
     *,
     rss_item_id: str,
     content_hash: str,
@@ -410,10 +410,9 @@ def replace_article_entities(
 
     if any(entity.rss_item_id != rss_item_id for entity in entities):
         raise ValueError("all entities must belong to the given rss_item_id")
-    connection.execute("BEGIN TRANSACTION")
-    try:
+    with connection.transaction():
         connection.execute(
-            "DELETE FROM article_entities WHERE rss_item_id = ?",
+            "DELETE FROM article_entities WHERE rss_item_id = %s",
             [rss_item_id],
         )
         for entity in entities:
@@ -421,7 +420,7 @@ def replace_article_entities(
                 """
                 INSERT INTO article_entities (
                     rss_item_id, entity_type, entity_name, ticker, confidence
-                ) VALUES (?, ?, ?, ?, ?)
+                ) VALUES (%s, %s, %s, %s, %s)
                 """,
                 [
                     entity.rss_item_id,
@@ -435,7 +434,7 @@ def replace_article_entities(
             """
             INSERT INTO article_entity_extractions (
                 rss_item_id, extractor_version, content_hash, entity_count
-            ) VALUES (?, ?, ?, ?)
+            ) VALUES (%s, %s, %s, %s)
             ON CONFLICT (rss_item_id) DO UPDATE SET
                 extractor_version = excluded.extractor_version,
                 content_hash = excluded.content_hash,
@@ -444,14 +443,10 @@ def replace_article_entities(
             """,
             [rss_item_id, extractor_version, content_hash, len(entities)],
         )
-        connection.execute("COMMIT")
-    except Exception:
-        connection.execute("ROLLBACK")
-        raise
 
 
 def list_article_entities(
-    connection: duckdb.DuckDBPyConnection,
+    connection: psycopg.Connection,
     rss_item_id: str,
 ) -> tuple[ArticleEntity, ...]:
     """기사 하나의 entity 목록을 신뢰도 내림차순으로 조회한다."""
@@ -460,7 +455,7 @@ def list_article_entities(
         """
         SELECT rss_item_id, entity_type, entity_name, ticker, confidence
         FROM article_entities
-        WHERE rss_item_id = ?
+        WHERE rss_item_id = %s
         ORDER BY confidence DESC, entity_name
         """,
         [rss_item_id],
@@ -478,7 +473,7 @@ def list_article_entities(
 
 
 def start_pipeline_run(
-    connection: duckdb.DuckDBPyConnection,
+    connection: psycopg.Connection,
     *,
     command: str,
     parameters: dict[str, object],
@@ -489,7 +484,7 @@ def start_pipeline_run(
     connection.execute(
         """
         INSERT INTO pipeline_runs (id, command, status, parameters)
-        VALUES (?, ?, 'running', ?)
+        VALUES (%s, %s, 'running', %s)
         """,
         [run_id, command, json.dumps(parameters, ensure_ascii=False, sort_keys=True)],
     )
@@ -497,7 +492,7 @@ def start_pipeline_run(
 
 
 def finish_pipeline_run(
-    connection: duckdb.DuckDBPyConnection,
+    connection: psycopg.Connection,
     run_id: str,
     *,
     status: str,
@@ -513,10 +508,10 @@ def finish_pipeline_run(
     connection.execute(
         """
         UPDATE pipeline_runs
-        SET status = ?, finished_at = current_timestamp,
-            processed_count = ?, created_count = ?, skipped_count = ?,
-            error_message = ?
-        WHERE id = ?
+        SET status = %s, finished_at = current_timestamp,
+            processed_count = %s, created_count = %s, skipped_count = %s,
+            error_message = %s
+        WHERE id = %s
         """,
         [
             status,
@@ -530,7 +525,7 @@ def finish_pipeline_run(
 
 
 def replace_symbol_snapshots(
-    connection: duckdb.DuckDBPyConnection,
+    connection: psycopg.Connection,
     symbols: Sequence[NewsSymbol],
 ) -> int:
     """국내·해외 종목 스냅샷을 구분된 테이블에 원자적으로 교체한다."""
@@ -565,26 +560,22 @@ def replace_symbol_snapshots(
 
     rows_by_table = {"domestic_symbols": domestic, "overseas_symbols": overseas}
 
-    connection.execute("BEGIN TRANSACTION")
-    try:
+    with connection.transaction():
         for table_name, table_rows in rows_by_table.items():
             table_markets = tuple(dict.fromkeys(symbol.market for symbol in table_rows))
             if not table_markets:
                 continue
-            connection.executemany(
-                f"DELETE FROM {table_name} WHERE market = ?",
-                [(market,) for market in table_markets],
-            )
+            for market in table_markets:
+                connection.execute(
+                    f"DELETE FROM {table_name} WHERE market = %s",
+                    [market],
+                )
             _bulk_insert_symbols(connection, table_name, table_rows)
-        connection.execute("COMMIT")
-    except Exception:
-        connection.execute("ROLLBACK")
-        raise
     return len(deduped)
 
 
 def _item_values(item: CanonicalRssEntry) -> list[object]:
-    """표준 RSS 항목을 DuckDB 쿼리의 순서가 있는 매개변수로 변환한다."""
+    """표준 RSS 항목을 쿼리의 순서가 있는 매개변수로 변환한다."""
 
     return [
         item.id,
@@ -620,25 +611,46 @@ _SYMBOL_COLS = (
     "raw",
     "downloaded_at",
 )
+_SYMBOL_COL_TYPES = (
+    "text",
+    "text",
+    "text",
+    "text",
+    "text",
+    "text",
+    "text",
+    "text",
+    "text",
+    "text",
+    "text",
+    "text",
+    "text",
+    "bigint",
+    "bigint",
+    "text",
+    "jsonb",
+    "text",
+)
 
 
 def _bulk_insert_symbols(
-    connection: duckdb.DuckDBPyConnection,
+    connection: psycopg.Connection,
     table_name: str,
     table_rows: Sequence[NewsSymbol],
 ) -> None:
     """종목 행을 컬럼 배열 + unnest 단일 쿼리로 벌크 삽입한다.
 
-    executemany는 행마다 Python→DuckDB 왕복과 ::JSON 파싱이 발생해
-    10K+ 행에서 수 초가 걸린다. unnest로 묶으면 한 번의 벡터 연산으로
-    처리되어 동일 데이터셋에서 ~75배 빠르다.
+    행마다 왕복하는 executemany는 10K+ 행에서 수 초가 걸린다. 컬럼별 배열을
+    ``unnest``로 묶으면 한 번의 집합 연산으로 처리되어 훨씬 빠르다.
     """
     if not table_rows:
         return
     cols = ", ".join(_SYMBOL_COLS)
-    placeholders = ", ".join(["unnest(?)"] * len(_SYMBOL_COLS))
+    placeholders = ", ".join(
+        f"%s::{col_type}[]" for col_type in _SYMBOL_COL_TYPES
+    )
     connection.execute(
-        f"INSERT INTO {table_name} ({cols}) SELECT {placeholders}",
+        f"INSERT INTO {table_name} ({cols}) SELECT * FROM unnest({placeholders})",
         [
             [s.market for s in table_rows],
             [s.symbol for s in table_rows],
@@ -663,7 +675,7 @@ def _bulk_insert_symbols(
 
 
 def _row_to_item(row: Sequence[object]) -> CanonicalRssEntry:
-    """DuckDB 조회 행을 검증된 표준 RSS 항목으로 변환한다."""
+    """조회 행을 검증된 표준 RSS 항목으로 변환한다."""
 
     return CanonicalRssEntry(
         id=str(row[0]),

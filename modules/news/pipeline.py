@@ -7,9 +7,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, replace
 from typing import Any, Protocol
 
-import duckdb
 import feedparser
 import httpx
+import psycopg
 
 from .articles.parsers import ARTICLE_PARSERS, BaseArticleParser
 from .db.sql import (
@@ -464,7 +464,7 @@ def _fetch_rss_publisher(
 
 
 def collect_rss(
-    connection: duckdb.DuckDBPyConnection,
+    connection: psycopg.Connection,
     *,
     sources: Iterable[FeedSource] = DEFAULT_FEED_SOURCES,
     feed_loader: FeedLoader = load_feed,
@@ -586,7 +586,7 @@ def _fetch_article_publisher(
 
 
 def collect_articles(
-    connection: duckdb.DuckDBPyConnection,
+    connection: psycopg.Connection,
     *,
     limit: int | None = 100,
     fetch_html: Callable[[str], str] | None = None,
@@ -667,7 +667,7 @@ def collect_articles(
 
 
 def analyze_articles(
-    connection: duckdb.DuckDBPyConnection,
+    connection: psycopg.Connection,
     *,
     limit: int | None = 100,
     analyzer_version: str = ANALYZER_VERSION,
@@ -712,7 +712,7 @@ def analyze_articles(
 
 
 def extract_entities(
-    connection: duckdb.DuckDBPyConnection,
+    connection: psycopg.Connection,
     *,
     limit: int | None = 100,
     extractor_version: str = ENTITY_EXTRACTOR_VERSION,
@@ -785,7 +785,7 @@ def extract_entities(
 
 
 def run_recorded_operation(
-    connection: duckdb.DuckDBPyConnection,
+    connection: psycopg.Connection,
     *,
     command: str,
     parameters: dict[str, object],

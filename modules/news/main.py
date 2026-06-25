@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import os
-from pathlib import Path
 from typing import Annotated, Callable, Sequence
 
-import duckdb
+import psycopg
 import typer
 from rich.console import Console
 from rich.progress import (
@@ -18,8 +16,9 @@ from rich.progress import (
 )
 from rich.table import Column, Table
 
-from .db.init import DEFAULT_DB_PATH, connect_database, create_schema
-from .db.locking import single_writer_lock
+from modules.storage.news_intelligence.database import load_env
+
+from .db.init import connect_database, create_schema
 from .pipeline import (
     DEFAULT_FEED_SOURCES,
     FeedSource,
@@ -35,36 +34,36 @@ from .symbols import NEWS_SYMBOL_MARKETS, update_symbol_masters
 
 
 app = typer.Typer(no_args_is_help=True, help=__doc__)
-DbPathOption = Annotated[
-    Path,
+DsnOption = Annotated[
+    str | None,
     typer.Option(
-        "--db-path",
-        envvar="NEWS_DB_PATH",
-        help="DuckDB path. NEWS_DB_PATH is also supported.",
+        "--dsn",
+        envvar="INTELLIGENCE_DATABASE_URL",
+        help=(
+            "Supabase PostgreSQL DSN shared with finlabs_intelligence. "
+            "INTELLIGENCE_DATABASE_URL is also supported."
+        ),
     ),
 ]
 
 
-def _default_db_path() -> Path:
-    return Path(os.environ.get("NEWS_DB_PATH", DEFAULT_DB_PATH))
-
-
 def _execute(
     *,
-    db_path: Path,
+    dsn: str | None,
     command: str,
     parameters: dict[str, object],
-    operation_factory: Callable[[duckdb.DuckDBPyConnection], OperationResult],
+    operation_factory: Callable[[psycopg.Connection], OperationResult],
 ) -> OperationResult:
-    with single_writer_lock(db_path):
-        with connect_database(db_path) as connection:
-            create_schema(connection)
-            return run_recorded_operation(
-                connection,
-                command=command,
-                parameters=parameters,
-                operation=lambda: operation_factory(connection),
-            )
+    # Concurrency is owned by the PostgreSQL server, so the old DuckDB file lock
+    # is gone; the connection autocommits each statement like DuckDB did.
+    with connect_database(dsn) as connection:
+        create_schema(connection)
+        return run_recorded_operation(
+            connection,
+            command=command,
+            parameters=parameters,
+            operation=lambda: operation_factory(connection),
+        )
 
 
 def _print_result(command: str, result: OperationResult) -> None:
@@ -132,7 +131,7 @@ def _print_rss_source_summary(
 
 @app.command("update-symbols")
 def update_symbols_command(
-    db_path: DbPathOption = _default_db_path(),
+    dsn: DsnOption = None,
     market: Annotated[
         list[str] | None,
         typer.Option(
@@ -166,7 +165,7 @@ def update_symbols_command(
                 )
                 progress.update(task, advance=1, description=next_desc)
 
-            def update(connection: duckdb.DuckDBPyConnection) -> OperationResult:
+            def update(connection: psycopg.Connection) -> OperationResult:
                 downloaded, stored = update_symbol_masters(
                     connection,
                     markets=markets,
@@ -180,7 +179,7 @@ def update_symbols_command(
                 )
 
             result = _execute(
-                db_path=db_path,
+                dsn=dsn,
                 command="update-symbols",
                 parameters={"markets": list(markets)},
                 operation_factory=update,
@@ -192,7 +191,7 @@ def update_symbols_command(
 
 @app.command("collect-rss")
 def collect_rss_command(
-    db_path: DbPathOption = _default_db_path(),
+    dsn: DsnOption = None,
     feed: Annotated[
         list[str] | None,
         typer.Option(
@@ -201,7 +200,7 @@ def collect_rss_command(
         ),
     ] = None,
 ) -> None:
-    """RSS 항목을 수집해 DuckDB에 멱등하게 저장한다."""
+    """RSS 항목을 수집해 Supabase PostgreSQL에 멱등하게 저장한다."""
 
     try:
         sources = (
@@ -240,7 +239,7 @@ def collect_rss_command(
                 )
 
             result = _execute(
-                db_path=db_path,
+                dsn=dsn,
                 command="collect-rss",
                 parameters={"feeds": [source.url for source in sources]},
                 operation_factory=lambda connection: collect_rss(
@@ -278,7 +277,7 @@ def _article_progress_description(
 
 @app.command("collect-articles")
 def collect_articles_command(
-    db_path: DbPathOption = _default_db_path(),
+    dsn: DsnOption = None,
     limit: Annotated[int, typer.Option(min=1)] = 100,
     all_items: Annotated[
         bool,
@@ -287,10 +286,10 @@ def collect_articles_command(
 ) -> None:
     """RSS 기사 링크에서 본문을 수집해 저장한다."""
 
-    _collect_articles_with_progress(db_path, None if all_items else limit)
+    _collect_articles_with_progress(dsn, None if all_items else limit)
 
 
-def _collect_articles_with_progress(db_path: Path, limit: int | None) -> None:
+def _collect_articles_with_progress(dsn: str | None, limit: int | None) -> None:
     """언론사 페이지 본문 수집 진행 상황과 결과를 출력한다."""
 
     with Progress(
@@ -329,7 +328,7 @@ def _collect_articles_with_progress(db_path: Path, limit: int | None) -> None:
             )
 
         result = _execute(
-            db_path=db_path,
+            dsn=dsn,
             command="collect-articles",
             parameters={"limit": limit, "all": limit is None},
             operation_factory=lambda connection: collect_articles(
@@ -348,7 +347,7 @@ def _collect_articles_with_progress(db_path: Path, limit: int | None) -> None:
 
 @app.command("analyze")
 def analyze_command(
-    db_path: DbPathOption = _default_db_path(),
+    dsn: DsnOption = None,
     limit: Annotated[int, typer.Option(min=1)] = 100,
     all_items: Annotated[
         bool,
@@ -357,10 +356,10 @@ def analyze_command(
 ) -> None:
     """아직 분석되지 않은 기사에 결정적 기본 통계를 계산한다."""
 
-    _analyze_with_progress(db_path, None if all_items else limit)
+    _analyze_with_progress(dsn, None if all_items else limit)
 
 
-def _analyze_with_progress(db_path: Path, limit: int | None) -> None:
+def _analyze_with_progress(dsn: str | None, limit: int | None) -> None:
     """기사 기본 통계 분석 진행 상황과 결과를 출력한다."""
 
     with Progress(
@@ -402,7 +401,7 @@ def _analyze_with_progress(db_path: Path, limit: int | None) -> None:
             )
 
         result = _execute(
-            db_path=db_path,
+            dsn=dsn,
             command="analyze",
             parameters={"limit": limit, "all": limit is None},
             operation_factory=lambda connection: analyze_articles(
@@ -417,7 +416,7 @@ def _analyze_with_progress(db_path: Path, limit: int | None) -> None:
 
 @app.command("extract-entities")
 def extract_entities_command(
-    db_path: DbPathOption = _default_db_path(),
+    dsn: DsnOption = None,
     limit: Annotated[int, typer.Option(min=1)] = 100,
     all_items: Annotated[
         bool,
@@ -426,10 +425,10 @@ def extract_entities_command(
 ) -> None:
     """종목 마스터 어휘집으로 기사별 종목 entity를 추출한다."""
 
-    _extract_entities_with_progress(db_path, None if all_items else limit)
+    _extract_entities_with_progress(dsn, None if all_items else limit)
 
 
-def _extract_entities_with_progress(db_path: Path, limit: int | None) -> None:
+def _extract_entities_with_progress(dsn: str | None, limit: int | None) -> None:
     """기사별 종목 entity 추출 진행 상황과 결과를 출력한다."""
 
     try:
@@ -474,7 +473,7 @@ def _extract_entities_with_progress(db_path: Path, limit: int | None) -> None:
                 )
 
             result = _execute(
-                db_path=db_path,
+                dsn=dsn,
                 command="extract-entities",
                 parameters={"limit": limit, "all": limit is None},
                 operation_factory=lambda connection: extract_entities(
@@ -490,6 +489,9 @@ def _extract_entities_with_progress(db_path: Path, limit: int | None) -> None:
 
 
 def main() -> None:
+    # Load .env before Typer resolves --dsn from INTELLIGENCE_DATABASE_URL so a
+    # developer DSN in the file is honored without exporting it to the shell.
+    load_env()
     app()
 
 
