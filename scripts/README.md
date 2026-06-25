@@ -41,7 +41,7 @@ scripts/collect_rss_loop.sh --feed donga=https://rss.donga.com/total.xml
 scripts/collect_rss_loop.sh >> /var/log/finlabs-collect-rss.log 2>&1 &
 ```
 
-전체 72개 피드 한 회는 네트워크 특성상 60초를 넘길 수 있으며, 그럴 땐 다음 경계에서 다시 시작합니다. 자세한 파이프라인·systemd 대안은 [News Pipeline README](../modules/news/README.md)를 참고하세요.
+전체 72개 피드 한 회는 보통 수 초 안에 끝나며, 네트워크가 느려 간격을 넘기면 다음 경계에서 다시 시작합니다. 자세한 파이프라인·systemd 대안은 [News Pipeline README](../modules/news/README.md)를 참고하세요.
 
 헤드리스 자동화에는 이 스크립트를, 현황을 눈으로 보며 돌릴 땐 같은 수집을 Rich 라이브 대시보드로 보여주는 `monitor` 명령(`uv run --group news python -m modules.news.main monitor --interval 60`)을 쓰세요.
 

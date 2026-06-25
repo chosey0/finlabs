@@ -5,9 +5,10 @@
 # newly published items and skip duplicates. Each run reads the Supabase DSN from
 # INTELLIGENCE_DATABASE_URL (or the repo-root .env, loaded by the CLI).
 #
-# Any extra arguments are forwarded to collect-rss, so you can narrow the feeds
-# (a full 72-feed run is network-bound and can exceed 60s; the loop never
-# overlaps itself, so longer runs simply start again at the next boundary).
+# Any extra arguments are forwarded to collect-rss, so you can narrow the feeds.
+# A full 72-feed run usually finishes within a few seconds; the loop never
+# overlaps itself, so if a slow network pushes a run past the interval it simply
+# starts again at the next boundary.
 #
 # Usage:
 #   scripts/collect_rss_loop.sh                              # every 60s, all feeds

@@ -353,7 +353,7 @@ sudo systemctl status finlabs-news-symbols.timer
 
 `finlabs-news-symbols.timer`는 매일 오전 9시(Asia/Seoul)에 KOSPI·KOSDAQ·NASDAQ·NYSE·AMEX 마스터를 갱신합니다. 다운로드가 비어 있거나 한 시장이라도 실패하면 두 테이블의 기존 스냅샷을 모두 유지합니다.
 
-systemd 없이 더 잦은 주기로 RSS만 수집하려면 `scripts/collect_rss_loop.sh`를 쓸 수 있습니다. 기본 60초 간격으로 `collect-rss`를 멱등 재실행하며(중첩 방지·단일 인스턴스 잠금), `INTERVAL_SECONDS`로 간격을, 추가 인자로 피드를 좁힐 수 있습니다. 전체 72개 피드 한 회는 네트워크 특성상 60초를 넘길 수 있어, 그럴 땐 다음 경계에서 다시 시작합니다.
+systemd 없이 더 잦은 주기로 RSS만 수집하려면 `scripts/collect_rss_loop.sh`를 쓸 수 있습니다. 기본 60초 간격으로 `collect-rss`를 멱등 재실행하며(중첩 방지·단일 인스턴스 잠금), `INTERVAL_SECONDS`로 간격을, 추가 인자로 피드를 좁힐 수 있습니다. 전체 72개 피드 한 회는 보통 수 초 안에 끝나지만(피드 fetch가 대부분), 네트워크가 느려 간격을 넘기면 루프가 다음 경계에서 다시 시작합니다.
 
 현황을 눈으로 보며 돌리려면 `monitor` 명령이 같은 수집을 Rich 라이브 대시보드(언론사별 수집·적재·중복·실패 + 세션 누적)로 보여줍니다. `--interval N`을 주면 N초마다 반복하며 다음 실행까지 카운트다운을 표시하고, `Ctrl-C`(SIGINT) 또는 `SIGTERM`에 "모니터를 종료합니다" 메시지와 함께 깨끗이 종료합니다. 헤드리스 자동화에는 루프 스크립트를, 사람이 지켜볼 땐 `monitor`를 쓰세요.
 

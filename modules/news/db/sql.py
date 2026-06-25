@@ -24,43 +24,84 @@ def create_rss_item(
     return item.id
 
 
+# 한 피드의 항목을 한 번의 multi-row INSERT로 적재한다. 충돌(같은 id) 시 서버측
+# 에서 카테고리를 순서 보존 합집합으로 병합하고, 새로 더할 카테고리가 없으면
+# WHERE 가드로 갱신을 건너뛴다(쓰기 증폭 방지). RETURNING의 ``xmax = 0``은 그 행이
+# 이번에 새로 삽입됐는지(충돌-갱신이 아니라)를 가린다.
+_RSS_UPSERT_TAIL = """
+        ON CONFLICT (id) DO UPDATE SET
+            domain_category = COALESCE(
+                rss_items.domain_category, excluded.domain_category
+            ),
+            feed_categories = (
+                SELECT COALESCE(array_agg(c ORDER BY ord), ARRAY[]::text[])
+                FROM (
+                    SELECT c, min(ord) AS ord
+                    FROM unnest(rss_items.feed_categories || excluded.feed_categories)
+                        WITH ORDINALITY AS u(c, ord)
+                    GROUP BY c
+                ) d
+            ),
+            source_categories = (
+                SELECT COALESCE(array_agg(c ORDER BY ord), ARRAY[]::text[])
+                FROM (
+                    SELECT c, min(ord) AS ord
+                    FROM unnest(
+                        rss_items.source_categories || excluded.source_categories
+                    ) WITH ORDINALITY AS u(c, ord)
+                    GROUP BY c
+                ) d
+            )
+        WHERE NOT (excluded.feed_categories <@ rss_items.feed_categories)
+           OR NOT (excluded.source_categories <@ rss_items.source_categories)
+           OR (rss_items.domain_category IS NULL
+               AND excluded.domain_category IS NOT NULL)
+        RETURNING (xmax = 0) AS inserted
+"""
+
+
+def insert_rss_items(
+    connection: psycopg.Connection,
+    items: Sequence[CanonicalRssEntry],
+) -> int:
+    """RSS 항목들을 한 번의 쿼리로 적재하고 새로 생성된 행 수를 반환한다.
+
+    원격 PostgreSQL에 항목마다 왕복하는 대신 한 피드 전체를 단일 multi-row
+    INSERT로 보낸다. 같은 id가 배치 안에 중복되면 ON CONFLICT가 한 행을 두 번
+    건드리지 못하므로 마지막 항목을 우선해 미리 제거한다.
+    """
+
+    deduped = {item.id: item for item in items}
+    rows = tuple(deduped.values())
+    if not rows:
+        return 0
+    row_placeholder = (
+        "(%s, %s, %s, %s, %s, %s, %s, %s::text[], %s::text[], %s)"
+    )
+    placeholders = ", ".join([row_placeholder] * len(rows))
+    parameters: list[object] = []
+    for item in rows:
+        parameters.extend(_item_values(item))
+    returned = connection.execute(
+        f"""
+        INSERT INTO rss_items (
+            id, publisher, url, title, author, summary, domain_category,
+            feed_categories, source_categories, published_at
+        ) VALUES {placeholders}
+        {_RSS_UPSERT_TAIL}
+        """,
+        parameters,
+    ).fetchall()
+    return sum(1 for row in returned if row[0])
+
+
 def insert_rss_item(
     connection: psycopg.Connection,
     item: CanonicalRssEntry,
 ) -> bool:
-    """RSS 항목을 삽입하고 새 행이 생성되었는지 반환한다."""
+    """RSS 항목 하나를 삽입하고 새 행이 생성되었는지 반환한다."""
 
-    row = connection.execute(
-        """
-        INSERT INTO rss_items (
-            id, publisher, url, title, author, summary, domain_category,
-            feed_categories, source_categories, published_at
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        ON CONFLICT (id) DO NOTHING
-        RETURNING id
-        """,
-        _item_values(item),
-    ).fetchone()
-    if row is not None:
-        return True
-    existing = read_rss_item(connection, item.id)
-    if existing is None:
-        return False
-    merged = CanonicalRssEntry(
-        id=existing.id,
-        publisher=existing.publisher,
-        url=existing.url,
-        title=existing.title,
-        author=existing.author,
-        summary=existing.summary,
-        published_at=existing.published_at,
-        domain_category=existing.domain_category or item.domain_category,
-        feed_categories=existing.feed_categories + item.feed_categories,
-        source_categories=existing.source_categories + item.source_categories,
-    )
-    if merged != existing:
-        update_rss_item(connection, merged)
-    return False
+    return insert_rss_items(connection, (item,)) == 1
 
 
 def read_rss_item(

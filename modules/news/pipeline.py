@@ -15,7 +15,7 @@ from .articles.parsers import ARTICLE_PARSERS, BaseArticleParser
 from .db.sql import (
     finish_pipeline_run,
     insert_article,
-    insert_rss_item,
+    insert_rss_items,
     list_articles_requiring_entity_extraction,
     list_articles_without_current_analysis,
     list_domestic_symbol_names,
@@ -511,9 +511,7 @@ def collect_rss(
         ]
         for future in as_completed(futures):
             for fetched in future.result():
-                source_created = sum(
-                    int(insert_rss_item(connection, item)) for item in fetched.items
-                )
+                source_created = insert_rss_items(connection, fetched.items)
                 source_errors: list[str] = []
                 if fetched.feed_error is not None:
                     source_errors.append(fetched.feed_error)
