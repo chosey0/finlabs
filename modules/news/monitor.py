@@ -19,13 +19,17 @@ from rich.text import Text
 
 from .pipeline import FeedSource, OperationResult
 
-# (기호, 스타일) — 소스 그룹 상태 표시.
+# 배경은 터미널 그대로 두고, 글씨만 흰 배경에서 대비가 분명한 진한 색으로 칠한다.
+# 색 없는(터미널 기본 전경색) 텍스트나 밝은 회색(`dim`)·`yellow`는 흰 배경에서
+# 묻히므로 쓰지 않는다.
+
+# (기호, 전경색) — 소스 그룹 상태 표시.
 _STATUS: dict[str, tuple[str, str]] = {
-    "pending": ("⏳ 대기", "dim"),
-    "running": ("… 수집", "yellow"),
-    "ok": ("✓ 완료", "green"),
-    "partial": ("⚠ 일부", "yellow"),
-    "error": ("✗ 실패", "red"),
+    "pending": ("⏳ 대기", "black"),
+    "running": ("… 수집", "magenta"),
+    "ok": ("✓ 완료", "bold green"),
+    "partial": ("⚠ 일부", "bold magenta"),
+    "error": ("✗ 실패", "bold red"),
 }
 
 
@@ -154,22 +158,25 @@ def render_dashboard(
     """현재 집계 상태를 Rich 대시보드(Group)로 렌더링한다."""
 
     header = Text()
-    header.append("FINLABS · collect-rss 라이브 모니터\n", style="bold cyan")
-    header.append(f"{status_line}   ", style="bold")
-    header.append(f"사이클 {monitor.cycles}   경과 {_fmt_seconds(elapsed_seconds)}\n")
-    header.append("세션 누적  ")
-    header.append(f"수집 {monitor.session_processed}", style="cyan")
+    header.append("FINLABS · collect-rss 라이브 모니터\n", style="bold black")
+    header.append(f"{status_line}   ", style="bold magenta")
+    header.append(
+        f"사이클 {monitor.cycles}   경과 {_fmt_seconds(elapsed_seconds)}\n",
+        style="black",
+    )
+    header.append("세션 누적  ", style="bold black")
+    header.append(f"수집 {monitor.session_processed}", style="black")
     header.append("  ")
-    header.append(f"적재 {monitor.session_created}", style="green")
+    header.append(f"적재 {monitor.session_created}", style="bold green")
     header.append("  ")
-    header.append(f"중복 {monitor.session_skipped}", style="dim")
+    header.append(f"중복 {monitor.session_skipped}", style="black")
     header.append("  ")
     header.append(
         f"실패 {monitor.session_errors}",
-        style="red" if monitor.session_errors else "dim",
+        style="bold red" if monitor.session_errors else "black",
     )
 
-    table = Table(expand=True, header_style="bold")
+    table = Table(expand=True, header_style="bold black", border_style="black")
     table.add_column("언론사")
     table.add_column("소스", justify="right")
     table.add_column("피드 항목", justify="right")
@@ -182,29 +189,34 @@ def render_dashboard(
         progress = monitor.publishers[publisher]
         symbol, style = _STATUS[progress.status]
         table.add_row(
-            publisher,
-            f"{progress.done_sources}/{progress.total_sources}",
-            str(progress.processed),
-            str(progress.created),
-            str(progress.skipped),
-            str(progress.errors) if progress.errors else "·",
+            Text(publisher, style="bold black"),
+            Text(f"{progress.done_sources}/{progress.total_sources}", style="black"),
+            Text(str(progress.processed), style="black"),
+            Text(str(progress.created), style="bold green"),
+            Text(str(progress.skipped), style="black"),
+            Text(str(progress.errors), style="bold red") if progress.errors else "·",
             Text(symbol, style=style),
         )
     if monitor.publishers:
         table.add_section()
         table.add_row(
-            Text("합계", style="bold"),
-            f"{monitor.sources_done}/{monitor.sources_total}",
-            str(monitor.cycle_processed),
+            Text("합계", style="bold black"),
+            Text(f"{monitor.sources_done}/{monitor.sources_total}", style="bold black"),
+            Text(str(monitor.cycle_processed), style="bold black"),
             Text(str(monitor.cycle_created), style="bold green"),
-            str(monitor.cycle_skipped),
-            Text(str(monitor.cycle_errors) if monitor.cycle_errors else "·", style="bold"),
+            Text(str(monitor.cycle_skipped), style="bold black"),
+            Text(str(monitor.cycle_errors), style="bold red")
+            if monitor.cycle_errors
+            else "·",
             "",
         )
 
-    renderables: list[object] = [Panel(header, border_style="cyan"), table]
+    renderables: list[object] = [Panel(header, border_style="black"), table]
     if monitor.recent_errors:
-        error_text = Text("\n".join(f"• {message}" for message in monitor.recent_errors))
+        error_text = Text(
+            "\n".join(f"• {message}" for message in monitor.recent_errors),
+            style="red",
+        )
         renderables.append(
             Panel(error_text, title="최근 실패", border_style="red", title_align="left")
         )

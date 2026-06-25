@@ -551,6 +551,7 @@ market_return_5d, market_volatility, adr, limit_up_count
 | PLAN 항목 | 상태 | 근거 |
 |---|---|---|
 | RSS 수집과 1단계 중복 방지 | **구현됨** | `pipeline.py:482`의 매체별 병렬 수집, `db/init.py:63`의 URL 고유 제약, `main.py:193`의 CLI |
+| collect-rss 라이브 모니터 | **구현됨** | `monitor.py`의 집계 상태와 Rich 대시보드, `main.py:265`의 `monitor` 명령. 단발 또는 `--interval` 주기 반복, 언론사별 수집·적재·중복·실패와 세션 누적 표시, SIGINT/SIGTERM 우아한 종료 |
 | 종목 마스터 동기화 | **부분 구현** | `main.py:133`의 KIS 국내·미국 5개 시장 갱신. 상장·폐지 이력과 시점별 마스터는 아직 없음 |
 | 종목 Entity 추출 | **부분 구현** | `pipeline.py:730`의 종목명·소규모 별칭 매칭. 기업·산업·키워드 추출과 전면 별칭 사전은 아직 없음 |
 | 이벤트 taxonomy | **계약만 구현** | `schema/event.py:14`의 16종 taxonomy와 DTO는 있으나 `article_events` 테이블, LLM 호출, 재시도·버전별 재분류는 없음 |
