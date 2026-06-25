@@ -233,13 +233,17 @@ class DiscoveredNewsArticle:
     description: str
     published_at: datetime
     original_url: str | None
-    naver_url: str
+    naver_url: str | None
     canonical_url: str
     matched_alias_ids: tuple[str, ...]
     matched_call_ordinals: tuple[int, ...]
+    # "naver" (Naver date search) or "rss" (shared rss_items pipeline).
+    source: str = "naver"
 
     def __post_init__(self) -> None:
         _require_aware(self.published_at, "published_at")
+        if self.source not in {"naver", "rss"}:
+            raise ValueError("source must be 'naver' or 'rss'")
 
 
 @dataclass(frozen=True, slots=True)

@@ -29,6 +29,7 @@ from modules.domain.news_intelligence import (
     candle_identity_checksum,
 )
 from modules.storage.news_intelligence.catalog import search_catalog
+from modules.storage.news_intelligence.rss_search import search_rss_items
 from modules.storage.news_intelligence.repositories import (
     AnnotationRevisionRecord,
     ClaimDisposition,
@@ -361,27 +362,68 @@ class NewsIntelligenceServices:
                         matched_calls,
                     )
 
+        by_url: dict[str, DiscoveredNewsArticle] = {}
+        for url, (article, alias_ids, call_ordinals) in candidates.items():
+            published = article.published_at.astimezone(KST)
+            by_url[url] = DiscoveredNewsArticle(
+                sample_id=_sample_id(_article_id(url), security_id, published),
+                article_id=_article_id(url),
+                title=article.title,
+                description=article.description,
+                published_at=published,
+                original_url=article.original_url,
+                naver_url=article.naver_url,
+                canonical_url=url,
+                matched_alias_ids=tuple(sorted(alias_ids)),
+                matched_call_ordinals=tuple(sorted(call_ordinals)),
+                source="naver",
+            )
+
+        # Pull matching items from the shared RSS pipeline store for the same window.
+        # Naver-discovered URLs win on dedup; RSS adds whatever Naver missed. Requires
+        # the writer's DB connection (the RSS table lives in the same database).
+        if self.annotation_writer is not None:
+            rss_terms = tuple(alias.term for alias in aliases)
+            rss_rows = await asyncio.to_thread(
+                self.annotation_writer.read,
+                lambda connection: search_rss_items(
+                    connection,
+                    window_start=window_start.replace(tzinfo=None),
+                    window_end=selected_kst.replace(tzinfo=None),
+                    terms=rss_terms,
+                ),
+            )
+            for row in rss_rows:
+                if row.url in by_url:
+                    continue
+                haystack = f"{row.title}\n{row.summary or ''}".casefold()
+                matched = tuple(
+                    sorted(
+                        alias.alias_id
+                        for alias in aliases
+                        if alias.term.casefold() in haystack
+                    )
+                )
+                if not matched:
+                    continue
+                published = row.published_at.replace(tzinfo=KST)
+                by_url[row.url] = DiscoveredNewsArticle(
+                    sample_id=_sample_id(_article_id(row.url), security_id, published),
+                    article_id=_article_id(row.url),
+                    title=row.title,
+                    description=row.summary or "",
+                    published_at=published,
+                    original_url=row.url,
+                    naver_url=None,
+                    canonical_url=row.url,
+                    matched_alias_ids=matched,
+                    matched_call_ordinals=(),
+                    source="rss",
+                )
+
         articles = tuple(
             sorted(
-                (
-                    DiscoveredNewsArticle(
-                        sample_id=_sample_id(
-                            _article_id(url),
-                            security_id,
-                            article.published_at.astimezone(KST),
-                        ),
-                        article_id=_article_id(url),
-                        title=article.title,
-                        description=article.description,
-                        published_at=article.published_at.astimezone(KST),
-                        original_url=article.original_url,
-                        naver_url=article.naver_url,
-                        canonical_url=url,
-                        matched_alias_ids=tuple(sorted(alias_ids)),
-                        matched_call_ordinals=tuple(sorted(call_ordinals)),
-                    )
-                    for url, (article, alias_ids, call_ordinals) in candidates.items()
-                ),
+                by_url.values(),
                 key=lambda article: (article.published_at, article.canonical_url),
             )
         )
@@ -449,6 +491,7 @@ class NewsIntelligenceServices:
                             provenance_json=json.dumps(
                                 {
                                     **security_provenance,
+                                    "source": article.source,
                                     "matched_call_ordinals": list(
                                         article.matched_call_ordinals
                                     ),

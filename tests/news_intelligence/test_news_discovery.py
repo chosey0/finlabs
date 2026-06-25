@@ -218,6 +218,70 @@ def test_discovery_rejects_a_window_start_at_or_after_the_anchor(
     )
 
 
+def test_discovery_merges_matching_rss_items_as_labelable_samples(
+    intelligence_dsn: str,
+) -> None:
+    writer = SingleWriter(intelligence_dsn)
+
+    def seed(connection):
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS rss_items (
+                id text PRIMARY KEY,
+                publisher text,
+                url text,
+                title text NOT NULL,
+                author text,
+                summary text,
+                domain_category text,
+                feed_categories text[],
+                source_categories text[],
+                published_at timestamp NOT NULL,
+                created_at timestamp DEFAULT now()
+            )
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO rss_items (id, publisher, url, title, summary, published_at)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            """,
+            [
+                "rss-1",
+                "donga",
+                "https://news.example/rss-article",
+                "테스트기업 신제품 공개",
+                "테스트기업이 신제품을 공개했다.",
+                datetime(2026, 6, 17, 9, 0),  # naive Seoul, inside the prior-hour window
+            ],
+        )
+
+    writer.execute(seed)
+    services = NewsIntelligenceServices(
+        catalog_snapshot=load_catalog_snapshot(_catalog_database(intelligence_dsn)),
+        market_data=_FakeMinuteMarketData(),
+        news_search=_FakeNewsSearch(),
+        annotation_writer=writer,
+    )
+
+    result = _run_discovery(services)
+
+    rss = [article for article in result.articles if article.source == "rss"]
+    assert len(rss) == 1
+    assert rss[0].title == "테스트기업 신제품 공개"
+    assert rss[0].naver_url is None
+    assert rss[0].canonical_url == "https://news.example/rss-article"
+    assert rss[0].matched_call_ordinals == ()
+    # Naver-discovered articles are still present alongside the RSS ones.
+    assert any(article.source == "naver" for article in result.articles)
+    # The RSS item is persisted as a labelable sample with its source recorded.
+    sample = writer.read(
+        lambda connection: load_sample(connection, sample_id=rss[0].sample_id)
+    )
+    assert sample is not None
+    assert json.loads(sample.provenance_json)["source"] == "rss"
+
+
 def _run_discovery(services: NewsIntelligenceServices):
     import asyncio
 

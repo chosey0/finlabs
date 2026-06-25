@@ -85,10 +85,11 @@ class DiscoveredArticleResponse(BaseModel):
     description: str
     published_at: datetime
     original_url: str | None
-    naver_url: str
+    naver_url: str | None
     canonical_url: str
     matched_alias_ids: list[str]
     matched_call_ordinals: list[int]
+    source: str
 
 
 class DiscoverNewsResponse(BaseModel):
@@ -388,6 +389,7 @@ async def discover_news(
                 canonical_url=article.canonical_url,
                 matched_alias_ids=list(article.matched_alias_ids),
                 matched_call_ordinals=list(article.matched_call_ordinals),
+                source=article.source,
             )
             for article in result.articles
         ],

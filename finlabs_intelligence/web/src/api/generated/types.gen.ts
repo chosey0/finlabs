@@ -321,7 +321,7 @@ export type DiscoveredArticleResponse = {
     /**
      * Naver Url
      */
-    naver_url: string;
+    naver_url: string | null;
     /**
      * Original Url
      */
@@ -334,6 +334,10 @@ export type DiscoveredArticleResponse = {
      * Sample Id
      */
     sample_id: string;
+    /**
+     * Source
+     */
+    source: string;
     /**
      * Title
      */

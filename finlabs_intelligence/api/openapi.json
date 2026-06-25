@@ -444,8 +444,15 @@
             "type": "array"
           },
           "naver_url": {
-            "title": "Naver Url",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Naver Url"
           },
           "original_url": {
             "anyOf": [
@@ -467,6 +474,10 @@
             "title": "Sample Id",
             "type": "string"
           },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
           "title": {
             "title": "Title",
             "type": "string"
@@ -482,7 +493,8 @@
           "naver_url",
           "canonical_url",
           "matched_alias_ids",
-          "matched_call_ordinals"
+          "matched_call_ordinals",
+          "source"
         ],
         "title": "DiscoveredArticleResponse",
         "type": "object"

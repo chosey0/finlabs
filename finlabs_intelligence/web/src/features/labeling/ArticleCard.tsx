@@ -24,7 +24,12 @@ export function ArticleCard({
 }: ArticleCardProps) {
   return (
     <article>
-      <time>{article.published_at}</time>
+      <div className="article-meta">
+        <time>{article.published_at}</time>
+        <span className={`source-badge source-${article.source}`}>
+          {article.source === "rss" ? "RSS" : "Naver"}
+        </span>
+      </div>
       <h3><a href={article.canonical_url} rel="noreferrer" target="_blank">{article.title}</a></h3>
       <p>{article.description}</p>
       <small>일치 별칭 {article.matched_alias_ids.length}개</small>

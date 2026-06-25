@@ -99,6 +99,10 @@ h2 { margin: 0; }
 .news-list article { padding: 18px; background: #0a101c; border: 1px solid #263249; border-radius: 11px; transition: border-color .15s ease, box-shadow .15s ease; }
 .news-list article:hover { border-color: #36486a; box-shadow: 0 10px 30px rgba(0, 0, 0, .28); }
 .news-list time, .news-list small { color: #748198; font-size: 12px; font-variant-numeric: tabular-nums; }
+.article-meta { display: flex; align-items: center; gap: 8px; }
+.source-badge { padding: 1px 8px; border: 1px solid; border-radius: 999px; font-size: 10px; font-weight: 800; letter-spacing: .04em; }
+.source-rss { color: var(--mint); background: rgba(110, 231, 183, .10); border-color: rgba(110, 231, 183, .35); }
+.source-naver { color: #93a4ba; background: #111a2a; border-color: #28364d; }
 .news-list h3 { margin: 7px 0; font-size: 16px; }
 .news-list a { color: var(--text); text-decoration: none; }
 .news-list a:hover { color: var(--mint); }
