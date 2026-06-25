@@ -176,6 +176,7 @@ class IntelligenceCandle:
     low: Decimal
     close: Decimal
     volume: int
+    turnover: Decimal
 
     def __post_init__(self) -> None:
         _require_aware(self.timestamp, "timestamp")
@@ -375,6 +376,7 @@ def candle_identity_checksum(candles: tuple[IntelligenceCandle, ...]) -> str:
             "high": str(candle.high),
             "low": str(candle.low),
             "close": str(candle.close),
+            "turnover": str(candle.turnover),
         }
         for candle in candles
     ]

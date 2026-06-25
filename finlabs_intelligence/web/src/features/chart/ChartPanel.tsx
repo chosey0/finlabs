@@ -28,6 +28,10 @@ export function ChartPanel({
     setChartType,
     intervalMinutes,
     setIntervalMinutes,
+    indicator,
+    setIndicator,
+    indicatorSeries,
+    reactionBand,
     chart: chartData,
     chartCandles,
     selection,
@@ -63,6 +67,17 @@ export function ChartPanel({
           ) : null}
           <label>시작 <input onChange={(event) => setStartAt(event.target.value)} type="datetime-local" value={startAt} /></label>
           <label>종료 <input onChange={(event) => setEndAt(event.target.value)} type="datetime-local" value={endAt} /></label>
+          <label>보조지표
+            <select
+              aria-label="보조지표"
+              onChange={(event) => setIndicator(event.target.value as typeof indicator)}
+              value={indicator}
+            >
+              <option value="volume">거래량</option>
+              <option value="turnover">거래대금</option>
+              <option value="none">끄기</option>
+            </select>
+          </label>
           <div className="chart-actions">
             <button disabled={!security || busy} onClick={onLoadChart} type="button">차트 불러오기</button>
             <button disabled={!selection || !security || busy} onClick={onDiscover} type="button">
@@ -75,6 +90,8 @@ export function ChartPanel({
         {chartData ? (
           <CandleChart
             candles={chartCandles}
+            indicator={indicatorSeries}
+            reaction={reactionBand}
             onSelect={handleSelection}
             selectedAt={selection?.selectedAt ?? null}
           />

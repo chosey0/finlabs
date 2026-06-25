@@ -55,6 +55,7 @@ class E2EMarketData:
                 low=Decimal("99") + minute,
                 close=Decimal("101") + minute,
                 volume=100 + minute,
+                turnover=(Decimal("101") + minute) * (100 + minute),
             )
             for minute in (30, 31)
         )

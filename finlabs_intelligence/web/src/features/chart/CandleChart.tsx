@@ -4,22 +4,54 @@ import {
   ColorType,
   createChart,
   createSeriesMarkers,
+  HistogramSeries,
   type CandlestickData,
+  type HistogramData,
   type MouseEventParams,
   type Time,
   type UTCTimestamp,
 } from "lightweight-charts";
 
+import { formatKrwCompact } from "./chartData";
+import { ReactionHighlight, type ReactionBand } from "./reactionHighlight";
 import type { ChartSelection } from "./chartSelection";
 import { selectCandle } from "./chartSelection";
 
+export type IndicatorKind = "volume" | "turnover";
+
+export interface IndicatorSeries {
+  readonly kind: IndicatorKind;
+  readonly data: readonly HistogramData<UTCTimestamp>[];
+}
+
 interface CandleChartProps {
   readonly candles: readonly CandlestickData<UTCTimestamp>[];
+  readonly indicator: IndicatorSeries | null;
+  readonly reaction: ReactionBand | null;
   readonly onSelect: (selection: ChartSelection) => void;
   readonly selectedAt: number | null;
 }
 
-export function CandleChart({ candles, onSelect, selectedAt }: CandleChartProps) {
+function timeFormatter(time: Time): string {
+  return typeof time === "number"
+    ? new Intl.DateTimeFormat("ko-KR", {
+        timeZone: "Asia/Seoul",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      }).format(new Date(time * 1_000))
+    : String(time);
+}
+
+export function CandleChart({
+  candles,
+  indicator,
+  reaction,
+  onSelect,
+  selectedAt,
+}: CandleChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -27,7 +59,7 @@ export function CandleChart({ candles, onSelect, selectedAt }: CandleChartProps)
     if (!container) return;
 
     const chart = createChart(container, {
-      height: 440,
+      height: 460,
       layout: {
         background: { type: ColorType.Solid, color: "#0c1220" },
         textColor: "#b7c2d7",
@@ -36,19 +68,7 @@ export function CandleChart({ candles, onSelect, selectedAt }: CandleChartProps)
         vertLines: { color: "#1b2638" },
         horzLines: { color: "#1b2638" },
       },
-      localization: {
-        timeFormatter: (time: Time) =>
-          typeof time === "number"
-            ? new Intl.DateTimeFormat("ko-KR", {
-                timeZone: "Asia/Seoul",
-                month: "2-digit",
-                day: "2-digit",
-                hour: "2-digit",
-                minute: "2-digit",
-                hour12: false,
-              }).format(new Date(time * 1_000))
-            : String(time),
-      },
+      localization: { timeFormatter },
       timeScale: { timeVisible: true, secondsVisible: false },
     });
     const series = chart.addSeries(CandlestickSeries, {
@@ -59,6 +79,12 @@ export function CandleChart({ candles, onSelect, selectedAt }: CandleChartProps)
       wickDownColor: "#3b82f6",
     });
     series.setData([...candles]);
+
+    // Reaction window shading rides on the candle series so it tracks pan/zoom.
+    const highlight = new ReactionHighlight();
+    series.attachPrimitive(highlight);
+    highlight.setBand(reaction);
+
     if (selectedAt !== null) {
       createSeriesMarkers(series, [
         {
@@ -66,10 +92,28 @@ export function CandleChart({ candles, onSelect, selectedAt }: CandleChartProps)
           position: "aboveBar",
           color: "#6ee7b7",
           shape: "arrowDown",
-          text: "선택",
+          text: "t0",
         },
       ]);
     }
+
+    // Optional lower pane: 거래량 or 거래대금, colored to match the candles.
+    if (indicator) {
+      const histogram = chart.addSeries(
+        HistogramSeries,
+        indicator.kind === "turnover"
+          ? { priceFormat: { type: "custom", minMove: 1, formatter: formatKrwCompact } }
+          : { priceFormat: { type: "volume" } },
+        1,
+      );
+      histogram.setData([...indicator.data]);
+      const panes = chart.panes();
+      if (panes.length > 1 && typeof panes[0].setStretchFactor === "function") {
+        panes[0].setStretchFactor(3);
+        panes[1].setStretchFactor(1);
+      }
+    }
+
     chart.timeScale().fitContent();
 
     const onClick = (event: MouseEventParams) => {
@@ -87,7 +131,7 @@ export function CandleChart({ candles, onSelect, selectedAt }: CandleChartProps)
       chart.unsubscribeClick(onClick);
       chart.remove();
     };
-  }, [candles, onSelect, selectedAt]);
+  }, [candles, indicator, reaction, onSelect, selectedAt]);
 
   return <div aria-label="1분봉 차트" className="chart" ref={containerRef} />;
 }

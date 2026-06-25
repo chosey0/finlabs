@@ -1,23 +1,63 @@
-import type { CandlestickData, UTCTimestamp } from "lightweight-charts";
+import type { CandlestickData, HistogramData, UTCTimestamp } from "lightweight-charts";
 
 import type { CandleResponse } from "../../api/generated/types.gen";
+
+// Korea convention (and Toss): rising candles are red, falling are blue. The
+// histogram bars reuse these so volume/turnover read against the same color.
+const UP_COLOR = "rgba(239, 83, 80, 0.55)";
+const DOWN_COLOR = "rgba(59, 130, 246, 0.55)";
+
+function candleTime(candle: CandleResponse): UTCTimestamp {
+  const milliseconds = Date.parse(candle.timestamp);
+  if (!Number.isFinite(milliseconds)) {
+    throw new Error(`invalid candle timestamp: ${candle.timestamp}`);
+  }
+  return Math.floor(milliseconds / 1_000) as UTCTimestamp;
+}
 
 export function toChartCandles(
   candles: readonly CandleResponse[],
 ): CandlestickData<UTCTimestamp>[] {
-  return candles.map((candle) => {
-    const milliseconds = Date.parse(candle.timestamp);
-    if (!Number.isFinite(milliseconds)) {
-      throw new Error(`invalid candle timestamp: ${candle.timestamp}`);
-    }
-    return {
-      time: Math.floor(milliseconds / 1_000) as UTCTimestamp,
-      open: Number(candle.open),
-      high: Number(candle.high),
-      low: Number(candle.low),
-      close: Number(candle.close),
-    };
-  });
+  return candles.map((candle) => ({
+    time: candleTime(candle),
+    open: Number(candle.open),
+    high: Number(candle.high),
+    low: Number(candle.low),
+    close: Number(candle.close),
+  }));
+}
+
+function toHistogram(
+  candles: readonly CandleResponse[],
+  value: (candle: CandleResponse) => number,
+): HistogramData<UTCTimestamp>[] {
+  return candles.map((candle) => ({
+    time: candleTime(candle),
+    value: value(candle),
+    color: Number(candle.close) >= Number(candle.open) ? UP_COLOR : DOWN_COLOR,
+  }));
+}
+
+export function toVolumeHistogram(
+  candles: readonly CandleResponse[],
+): HistogramData<UTCTimestamp>[] {
+  return toHistogram(candles, (candle) => candle.volume);
+}
+
+export function toTurnoverHistogram(
+  candles: readonly CandleResponse[],
+): HistogramData<UTCTimestamp>[] {
+  return toHistogram(candles, (candle) => Number(candle.turnover));
+}
+
+// Compact KRW for the turnover scale, e.g. 1.2조 / 340억 / 5.6만, the way Korean
+// brokerages label 거래대금.
+export function formatKrwCompact(value: number): string {
+  const abs = Math.abs(value);
+  if (abs >= 1e12) return `${(value / 1e12).toFixed(1)}조`;
+  if (abs >= 1e8) return `${Math.round(value / 1e8)}억`;
+  if (abs >= 1e4) return `${Math.round(value / 1e4)}만`;
+  return String(Math.round(value));
 }
 
 export function kstLocalInputToIso(value: string): string {

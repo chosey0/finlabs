@@ -1,6 +1,8 @@
 import { useCallback, useMemo, useState } from "react";
+import type { UTCTimestamp } from "lightweight-charts";
 
 import { loadChart as loadChartApi, type CatalogItemResponse, type ChartResponse } from "../../shared/api";
+import type { IndicatorKind, IndicatorSeries } from "./CandleChart";
 import {
   formatKstTimestamp,
   kstLocalInputToIso,
@@ -8,9 +10,15 @@ import {
   kstTodayLocalInput,
   kstUnixToLocalInput,
   toChartCandles,
+  toTurnoverHistogram,
+  toVolumeHistogram,
 } from "./chartData";
 import type { ChartSelection } from "./chartSelection";
 import { selectWindow } from "./chartSelection";
+import type { ReactionBand } from "./reactionHighlight";
+import { reactionWindowEnd } from "./reactionWindow";
+
+export type IndicatorChoice = IndicatorKind | "none";
 
 interface Deps {
   readonly security: CatalogItemResponse | null;
@@ -30,6 +38,10 @@ export interface ChartWorkspace {
   readonly chart: ChartResponse | null;
   readonly selection: ChartSelection | null;
   readonly chartCandles: ReturnType<typeof toChartCandles>;
+  readonly indicator: IndicatorChoice;
+  readonly setIndicator: (value: IndicatorChoice) => void;
+  readonly indicatorSeries: IndicatorSeries | null;
+  readonly reactionBand: ReactionBand | null;
   readonly handleSelection: (next: ChartSelection) => void;
   readonly windowStartInput: string;
   readonly setWindowStartInput: (value: string) => void;
@@ -49,11 +61,27 @@ export function useChart({ security, setStatus, setBusy }: Deps): ChartWorkspace
   const [selection, setSelection] = useState<ChartSelection | null>(null);
   const [windowStartInput, setWindowStartInput] = useState("");
   const [windowEndInput, setWindowEndInput] = useState("");
+  const [indicator, setIndicator] = useState<IndicatorChoice>("volume");
 
   const chartCandles = useMemo(
     () => (chart ? toChartCandles(chart.candles) : []),
     [chart],
   );
+  const indicatorSeries = useMemo<IndicatorSeries | null>(() => {
+    if (!chart || indicator === "none") return null;
+    const data =
+      indicator === "turnover"
+        ? toTurnoverHistogram(chart.candles)
+        : toVolumeHistogram(chart.candles);
+    return { kind: indicator, data };
+  }, [chart, indicator]);
+  const reactionBand = useMemo<ReactionBand | null>(() => {
+    if (!selection) return null;
+    return {
+      from: selection.selectedAt as UTCTimestamp,
+      to: reactionWindowEnd(selection.selectedAt) as UTCTimestamp,
+    };
+  }, [selection]);
   // A candle click also fills the manual inputs, so the two entry paths share
   // one source of truth and the analyst can fine-tune a clicked window by hand.
   const handleSelection = useCallback((next: ChartSelection) => {
@@ -127,6 +155,10 @@ export function useChart({ security, setStatus, setBusy }: Deps): ChartWorkspace
     chart,
     selection,
     chartCandles,
+    indicator,
+    setIndicator,
+    indicatorSeries,
+    reactionBand,
     handleSelection,
     windowStartInput,
     setWindowStartInput,

@@ -65,6 +65,11 @@ def normalize_chart_candles(
             low=Decimal(bar.low),
             close=Decimal(bar.close),
             volume=bar.volume,
+            # Kiwoom reports 거래대금 (traded value) as ``amount``; fall back to
+            # close × volume when a bar omits it, matching the reaction adapter.
+            turnover=bar.amount
+            if bar.amount is not None
+            else bar.close * bar.volume,
         )
         existing = selected.get(timestamp)
         if existing is not None and existing != candidate:

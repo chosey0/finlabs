@@ -111,6 +111,10 @@ export type CandleResponse = {
      */
     timestamp: string;
     /**
+     * Turnover
+     */
+    turnover: string;
+    /**
      * Volume
      */
     volume: number;

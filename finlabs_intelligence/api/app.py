@@ -53,6 +53,7 @@ class CandleResponse(BaseModel):
     low: str
     close: str
     volume: int
+    turnover: str
 
 
 class ChartResponse(BaseModel):
@@ -327,6 +328,7 @@ async def chart_load(
                 low=str(candle.low),
                 close=str(candle.close),
                 volume=candle.volume,
+                turnover=str(candle.turnover),
             )
             for candle in result.candles
         ],

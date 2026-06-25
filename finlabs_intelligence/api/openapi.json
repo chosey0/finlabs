@@ -150,6 +150,10 @@
             "title": "Timestamp",
             "type": "string"
           },
+          "turnover": {
+            "title": "Turnover",
+            "type": "string"
+          },
           "volume": {
             "title": "Volume",
             "type": "integer"
@@ -161,7 +165,8 @@
           "high",
           "low",
           "close",
-          "volume"
+          "volume",
+          "turnover"
         ],
         "title": "CandleResponse",
         "type": "object"
