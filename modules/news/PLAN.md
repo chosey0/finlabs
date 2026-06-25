@@ -550,10 +550,10 @@ market_return_5d, market_volatility, adr, limit_up_count
 
 | PLAN 항목 | 상태 | 근거 |
 |---|---|---|
-| RSS 수집과 1단계 중복 방지 | **구현됨** | `pipeline.py:466`의 매체별 병렬 수집, `db/init.py:77`의 URL 고유 제약, `main.py:193`의 CLI |
+| RSS 수집과 1단계 중복 방지 | **구현됨** | `pipeline.py:482`의 매체별 병렬 수집, `db/init.py:63`의 URL 고유 제약, `main.py:193`의 CLI |
 | 종목 마스터 동기화 | **부분 구현** | `main.py:133`의 KIS 국내·미국 5개 시장 갱신. 상장·폐지 이력과 시점별 마스터는 아직 없음 |
-| 종목 Entity 추출 | **부분 구현** | `pipeline.py:714`의 종목명·소규모 별칭 매칭. 기업·산업·키워드 추출과 전면 별칭 사전은 아직 없음 |
-| 이벤트 taxonomy | **계약만 구현** | `schema/event.py:12`의 16종 taxonomy와 DTO는 있으나 `article_events` 테이블, LLM 호출, 재시도·버전별 재분류는 없음 |
+| 종목 Entity 추출 | **부분 구현** | `pipeline.py:730`의 종목명·소규모 별칭 매칭. 기업·산업·키워드 추출과 전면 별칭 사전은 아직 없음 |
+| 이벤트 taxonomy | **계약만 구현** | `schema/event.py:14`의 16종 taxonomy와 DTO는 있으나 `article_events` 테이블, LLM 호출, 재시도·버전별 재분류는 없음 |
 | 기사 본문 직접 수집 금지 | **정책 회귀 발견** | PLAN 4.4절은 CLI 차단을 요구하지만 현재 `main.py:279`가 언론사 페이지 직접 수집 흐름을 다시 실행함 |
 | PostgreSQL 저장 | **구현됨** | `db/init.py`·`db/sql.py`의 영속 테이블이 finlabs_intelligence와 공유하는 Supabase PostgreSQL로 이전됨(psycopg, `INTELLIGENCE_DATABASE_URL`). 별도 `news` 스키마 분리와 repository Protocol 경계는 후속 과제 |
 | 네이버 뉴스 검색 API와 과거 백필 | **부분 구현** | `naver/`에 키워드·날짜 검색 client, 원본 offset 날짜 필터, 페이지 완전성 검증, 제한 재시도와 타입 오류를 구현. 저장 repository, 호출량 예산, 체크포인트와 백필 실행기는 아직 없음 |

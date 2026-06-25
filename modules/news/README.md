@@ -31,7 +31,7 @@ Investing.com, 이데일리, 이투데이, 한국경제, 서울경제, 뉴스핌
 
 | | 기능 | 설명 |
 |---|------|------|
-| **[RSS 수집]** | 언론사별 파서 | 6개 매체의 전체·카테고리 RSS를 공통 `CanonicalRssEntry`로 변환 |
+| **[RSS 수집]** | 언론사별 파서 | 7개 매체의 전체·카테고리 RSS를 공통 `CanonicalRssEntry`로 변환 |
 | **[네이버 검색]** | 키워드·날짜 검색 API | 지정 날짜의 제목·요약·링크·발행시각을 완전성 검증과 함께 반환하는 재사용 모듈 |
 | **[카테고리]** | 출처별 분리 저장 | 매체 도메인, 피드 카테고리, XML 원문 카테고리를 구분해 보존 |
 | **[중복 방지]** | 결정적 기사 ID | 기사 URL의 SHA-256 해시와 데이터베이스 제약으로 중복 적재 방지 |
@@ -314,10 +314,11 @@ modules/news/
 │   ├── finlabs-news-symbols.service  종목 마스터 갱신 서비스
 │   └── finlabs-news-symbols.timer    매일 09:00 KST 갱신 타이머
 ├── tests/
+│   ├── conftest.py            격리 PostgreSQL 스키마 픽스처 (news_connection)
 │   ├── test_article_parsers.py  언론사별 본문 선택자 회귀 테스트
 │   ├── test_entity_extraction.py  entity 추출·이벤트 taxonomy 회귀 테스트
 │   ├── test_naver_news.py     네이버 검색·완전성·재시도 회귀 테스트
-│   ├── test_rss_pipeline.py   파서·CRUD·멱등성·마이그레이션 회귀 테스트
+│   ├── test_rss_pipeline.py   파서·CRUD·멱등성·소스 회귀 테스트
 │   └── test_symbols.py        종목 마스터 스냅샷 갱신 회귀 테스트
 ├── symbols.py                 KIS 다운로드와 뉴스 DB 동기화
 └── PLAN.md                    뉴스 모듈 계획서 (v3.0)

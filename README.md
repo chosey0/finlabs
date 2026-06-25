@@ -21,7 +21,7 @@
 
 FinLabs는 증권사 Open API를 독립적인 Python SDK로 구현하고, 그 위에 시장 데이터 수집 CLI, 저장소, 대시보드, 뉴스 파이프라인과 연구 도구를 확장하는 오픈소스 개발자 도구 프로젝트입니다.
 
-현재 중심은 증권사별 SDK와 이를 조작하는 `finlabs_cli`입니다. 동시에 6개 매체의 RSS를 표준 모델로 정규화하는 뉴스 파이프라인, 키워드·날짜 기반 네이버 뉴스 검색 모듈과 Candlestick VQ-VAE Tokenizer 연구를 별도 트랙으로 개발하고 있습니다.
+현재 중심은 증권사별 SDK와 이를 조작하는 `finlabs_cli`입니다. 동시에 7개 매체의 RSS를 표준 모델로 정규화하는 뉴스 파이프라인, 키워드·날짜 기반 네이버 뉴스 검색 모듈과 Candlestick VQ-VAE Tokenizer 연구를 별도 트랙으로 개발하고 있습니다.
 
 코드베이스는 broker-agnostic 계층형 코어인 `modules/`로 이전 중입니다. SDK는 증권사별 차이를 캡슐화하고, 상위 애플리케이션은 canonical 모델과 orchestration 계층을 통해 데이터를 다루는 구조를 목표로 합니다.
 
