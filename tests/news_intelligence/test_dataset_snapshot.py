@@ -88,7 +88,7 @@ def test_snapshot_groups_events_and_assigns_leakage_safe_splits() -> None:
     assert all("split" in row for row in snapshot.members)
 
     manifest = snapshot.manifest
-    assert manifest["schema_version"] == "news-intelligence-dataset-v3"
+    assert manifest["schema_version"] == "news-intelligence-dataset-v4"
     assert manifest["event_count"] == 3
     assert sum(manifest["split_counts"].values()) == manifest["included_count"] == 4
     assert manifest["origin_counts"] == {"event_selected": 3, "random_control": 1}
@@ -230,6 +230,8 @@ def test_one_frozen_snapshot_replays_and_exports_db_json_csv_manifest(
         ).fetchone()[0]
     assert frozen_annotation == "ann-frozen"
     member = first.snapshot.members[0]
+    assert member["title"] == "테스트기업 뉴스"  # text is exported for the encoder
+    assert member["description"] == "설명"
     assert member["annotation"] == {
         "actor": "tester",
         "annotation_id": "ann-frozen",

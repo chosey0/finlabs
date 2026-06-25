@@ -521,7 +521,8 @@ def load_authoritative_candidates(
                    r.discovery_provenance_json,
                    r.revision, r.suggestion_value, r.evidence_json, r.rule_version,
                    r.actor, r.note, r.created_at, s.sample_origin,
-                   s.abnormal_return, s.abnormal_return_std, s.beta, s.turnover_zscore
+                   s.abnormal_return, s.abnormal_return_std, s.beta, s.turnover_zscore,
+                   s.title, s.description
             FROM intelligence_relevance_revisions r
             JOIN intelligence_samples s ON s.sample_id = r.sample_id
             WHERE r.annotation_id = %s
@@ -571,6 +572,8 @@ def load_authoritative_candidates(
                 "abnormal_return_std": row[22],
                 "beta": row[23],
                 "turnover_zscore": row[24],
+                "title": row[25],
+                "description": row[26],
                 "provenance": provenance,
                 "annotation": annotation,
             }

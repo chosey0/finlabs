@@ -105,7 +105,7 @@ def build_dataset_snapshot(
         surge_count += surge
 
     manifest = {
-        "schema_version": "news-intelligence-dataset-v3",
+        "schema_version": "news-intelligence-dataset-v4",
         "dataset_id": dataset_id,
         "purpose": purpose,
         "cohort": cohort,
@@ -170,6 +170,8 @@ def snapshot_csv_bytes(snapshot: DatasetSnapshot) -> bytes:
         "cohort",
         "market",
         "symbol",
+        "title",
+        "description",
         "reaction_class",
         "reaction_exclusion_reason",
         "beta",
@@ -260,6 +262,8 @@ def _canonical_member(candidate: Mapping[str, Any], cohort: str) -> Mapping[str,
         "cohort": str(candidate["cohort"]),
         "market": str(candidate["market"]),
         "symbol": str(candidate["symbol"]),
+        "title": str(candidate.get("title", "")),
+        "description": str(candidate.get("description", "")),
         "reaction_class": candidate["reaction_class"],
         "reaction_exclusion_reason": candidate["reaction_exclusion_reason"],
         "sample_origin": _validated_origin(
