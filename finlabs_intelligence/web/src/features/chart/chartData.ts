@@ -46,6 +46,27 @@ export function kstTodayLocalInput(
   return `${values.year}-${values.month}-${values.day}T${time}`;
 }
 
+// datetime-local <input> works in wall-clock time; these two helpers convert
+// between a KST Unix instant and that minute-precision string so a clicked
+// candle can seed the manual window inputs and vice versa.
+export function kstUnixToLocalInput(unixSeconds: number): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date(unixSeconds * 1_000));
+  const v = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${v.year}-${v.month}-${v.day}T${v.hour}:${v.minute}`;
+}
+
+export function kstLocalInputToUnix(value: string): number {
+  return Math.floor(Date.parse(kstLocalInputToIso(value)) / 1_000);
+}
+
 export function formatKstTimestamp(unixSeconds: number): string {
   return new Intl.DateTimeFormat("ko-KR", {
     timeZone: "Asia/Seoul",

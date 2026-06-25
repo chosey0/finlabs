@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   kstLocalInputToIso,
+  kstLocalInputToUnix,
   kstTodayLocalInput,
+  kstUnixToLocalInput,
   toChartCandles,
 } from "./chartData";
 
@@ -23,6 +25,11 @@ describe("chart data boundary", () => {
     expect(kstTodayLocalInput("15:30", afterKstMidnight)).toBe(
       "2026-06-23T15:30",
     );
+  });
+
+  it("round-trips a KST instant through the datetime-local input format", () => {
+    expect(kstUnixToLocalInput(1_781_656_200)).toBe("2026-06-17T09:30");
+    expect(kstLocalInputToUnix("2026-06-17T09:30")).toBe(1_781_656_200);
   });
 
   it("maps aware API timestamps and decimal strings to chart values", () => {

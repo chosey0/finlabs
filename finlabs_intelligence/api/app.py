@@ -67,6 +67,7 @@ class ChartResponse(BaseModel):
 class DiscoverNewsRequest(BaseModel):
     security_id: str
     selected_candle_at: datetime
+    window_start: datetime | None = None
 
 
 class DiscoveryPlanCallResponse(BaseModel):
@@ -345,6 +346,7 @@ async def discover_news(
         result = await services.discover_news(
             security_id=command.security_id,
             selected_candle_at=command.selected_candle_at,
+            window_start=command.window_start,
         )
     except NewsDiscoveryIncompleteError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error

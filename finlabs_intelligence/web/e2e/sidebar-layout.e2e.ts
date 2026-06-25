@@ -30,8 +30,8 @@ test("two-pane workbench: command bar on top, chart and news side by side", asyn
     const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
     return `${values.year}-${values.month}-${values.day}`;
   });
-  await expect(page.getByLabel("시작")).toHaveValue(`${todayKst}T09:00`);
-  await expect(page.getByLabel("종료")).toHaveValue(`${todayKst}T15:30`);
+  await expect(page.getByLabel("시작", { exact: true })).toHaveValue(`${todayKst}T09:00`);
+  await expect(page.getByLabel("종료", { exact: true })).toHaveValue(`${todayKst}T15:30`);
 
   const headerBox = await header.boundingBox();
   const chartBox = await chart.boundingBox();

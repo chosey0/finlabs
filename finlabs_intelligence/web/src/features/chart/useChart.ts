@@ -1,8 +1,16 @@
 import { useCallback, useMemo, useState } from "react";
 
 import { loadChart as loadChartApi, type CatalogItemResponse, type ChartResponse } from "../../shared/api";
-import { kstLocalInputToIso, kstTodayLocalInput, toChartCandles } from "./chartData";
+import {
+  formatKstTimestamp,
+  kstLocalInputToIso,
+  kstLocalInputToUnix,
+  kstTodayLocalInput,
+  kstUnixToLocalInput,
+  toChartCandles,
+} from "./chartData";
 import type { ChartSelection } from "./chartSelection";
+import { selectWindow } from "./chartSelection";
 
 interface Deps {
   readonly security: CatalogItemResponse | null;
@@ -23,6 +31,11 @@ export interface ChartWorkspace {
   readonly selection: ChartSelection | null;
   readonly chartCandles: ReturnType<typeof toChartCandles>;
   readonly handleSelection: (next: ChartSelection) => void;
+  readonly windowStartInput: string;
+  readonly setWindowStartInput: (value: string) => void;
+  readonly windowEndInput: string;
+  readonly setWindowEndInput: (value: string) => void;
+  readonly applyManualWindow: () => void;
   readonly loadChart: () => Promise<void>;
   readonly reset: () => void;
 }
@@ -34,14 +47,38 @@ export function useChart({ security, setStatus, setBusy }: Deps): ChartWorkspace
   const [intervalMinutes, setIntervalMinutes] = useState(1);
   const [chart, setChart] = useState<ChartResponse | null>(null);
   const [selection, setSelection] = useState<ChartSelection | null>(null);
+  const [windowStartInput, setWindowStartInput] = useState("");
+  const [windowEndInput, setWindowEndInput] = useState("");
 
   const chartCandles = useMemo(
     () => (chart ? toChartCandles(chart.candles) : []),
     [chart],
   );
+  // A candle click also fills the manual inputs, so the two entry paths share
+  // one source of truth and the analyst can fine-tune a clicked window by hand.
   const handleSelection = useCallback((next: ChartSelection) => {
     setSelection(next);
+    setWindowStartInput(kstUnixToLocalInput(next.windowStart));
+    setWindowEndInput(kstUnixToLocalInput(next.windowEnd));
   }, []);
+
+  const applyManualWindow = useCallback(() => {
+    let start: number;
+    let end: number;
+    try {
+      start = kstLocalInputToUnix(windowStartInput);
+      end = kstLocalInputToUnix(windowEndInput);
+    } catch {
+      setStatus("뉴스 구간의 시작과 끝(t0)을 분 단위까지 입력하세요.");
+      return;
+    }
+    if (start >= end) {
+      setStatus("뉴스 구간의 시작은 끝(t0)보다 앞서야 합니다.");
+      return;
+    }
+    setSelection(selectWindow(start, end));
+    setStatus(`뉴스 구간을 직접 설정했습니다. t0 ${formatKstTimestamp(end)}`);
+  }, [windowStartInput, windowEndInput, setStatus]);
 
   const reset = useCallback(() => {
     setChart(null);
@@ -91,6 +128,11 @@ export function useChart({ security, setStatus, setBusy }: Deps): ChartWorkspace
     selection,
     chartCandles,
     handleSelection,
+    windowStartInput,
+    setWindowStartInput,
+    windowEndInput,
+    setWindowEndInput,
+    applyManualWindow,
     loadChart,
     reset,
   };

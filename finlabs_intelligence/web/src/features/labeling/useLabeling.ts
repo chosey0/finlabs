@@ -63,6 +63,7 @@ export function useLabeling({ security, setStatus, setBusy }: Deps): Labeling {
         body: {
           security_id: security.security_id,
           selected_candle_at: new Date(selection.selectedAt * 1_000).toISOString(),
+          window_start: new Date(selection.windowStart * 1_000).toISOString(),
         },
       });
       if (result.error || !result.data) {

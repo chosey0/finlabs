@@ -14,8 +14,8 @@ test("real FastAPI and DuckDB labeling workflow", async ({ page }) => {
   expect(await catalogPayload.json()).toHaveLength(1);
   await expect(page.getByText("1개 종목을 찾았습니다.")).toBeVisible();
   await page.getByRole("button", { name: /테스트기업/ }).click();
-  await page.getByLabel("시작").fill("2026-06-17T09:00");
-  await page.getByLabel("종료").fill("2026-06-17T15:30");
+  await page.getByLabel("시작", { exact: true }).fill("2026-06-17T09:00");
+  await page.getByLabel("종료", { exact: true }).fill("2026-06-17T15:30");
   await page.getByRole("button", { name: "차트 불러오기" }).click();
   const chart = page.getByLabel("1분봉 차트");
   await expect(chart).toBeVisible();
@@ -63,4 +63,32 @@ test("real FastAPI and DuckDB labeling workflow", async ({ page }) => {
   await expect(page.getByText("db: succeeded")).toBeVisible();
   await expect(page.getByText("json: succeeded")).toBeVisible();
   await expect(page.getByText("csv: succeeded")).toBeVisible();
+});
+
+test("a typed news window drives discovery without a candle click", async ({ page }) => {
+  await page.goto("/");
+  await page.getByLabel("종목명 또는 종목코드").fill("테스트기업");
+  await page.getByRole("button", { name: "검색", exact: true }).click();
+  await page.getByRole("button", { name: /테스트기업/ }).click();
+
+  // No chart load, no candle click — the window comes straight from the inputs.
+  await page.getByLabel("뉴스 구간 시작").fill("2026-06-17T08:00");
+  await page.getByLabel("뉴스 구간 끝 t0").fill("2026-06-17T09:31");
+  await page.getByRole("button", { name: "구간 적용" }).click();
+  await expect(page.getByTestId("selected-candle")).toContainText("뉴스 검색 구간");
+
+  const discoverRequest = page.waitForRequest((request) =>
+    request.url().endsWith("/api/news/discover") && request.method() === "POST",
+  );
+  const discoverResponse = page.waitForResponse(
+    (response) => response.url().endsWith("/api/news/discover") && response.status() === 200,
+  );
+  await page.getByRole("button", { name: "선택 구간 뉴스 검색" }).click();
+
+  const body = JSON.parse((await discoverRequest).postData() ?? "{}");
+  // 08:00 KST sent as UTC; the backend echoes the same instant back in KST.
+  expect(body.window_start).toBe("2026-06-16T23:00:00.000Z");
+  const discovery = await (await discoverResponse).json();
+  expect(discovery.window_start).toBe("2026-06-17T08:00:00+09:00");
+  await expect(page.getByRole("heading", { name: "테스트기업 계약" })).toBeVisible();
 });

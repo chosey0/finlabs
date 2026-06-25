@@ -238,6 +238,10 @@ export type DiscoverNewsRequest = {
      * Selected Candle At
      */
     selected_candle_at: string;
+    /**
+     * Window Start
+     */
+    window_start?: string | null;
 };
 
 /**

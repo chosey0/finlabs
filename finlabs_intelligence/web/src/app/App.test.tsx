@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { App } from "./App";
@@ -30,6 +30,42 @@ describe("App composition root", () => {
     ).toBeTruthy();
     expect(
       screen.getByText("캔들을 선택한 뒤 뉴스 검색을 실행하세요."),
+    ).toBeTruthy();
+  });
+
+  it("activates the bridge from a typed news window without a candle click", () => {
+    render(<App />);
+
+    const bridge = screen.getByTestId("selected-candle");
+    expect(bridge.className).not.toContain("active");
+
+    fireEvent.change(screen.getByLabelText("뉴스 구간 시작"), {
+      target: { value: "2026-06-17T08:31" },
+    });
+    fireEvent.change(screen.getByLabelText("뉴스 구간 끝 t0"), {
+      target: { value: "2026-06-17T09:31" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "구간 적용" }));
+
+    expect(bridge.className).toContain("active");
+    expect(bridge.textContent).toContain("뉴스 검색 구간");
+    expect(screen.getByText(/뉴스 구간을 직접 설정했습니다/)).toBeTruthy();
+  });
+
+  it("rejects a typed window whose start is not before t0", () => {
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText("뉴스 구간 시작"), {
+      target: { value: "2026-06-17T09:31" },
+    });
+    fireEvent.change(screen.getByLabelText("뉴스 구간 끝 t0"), {
+      target: { value: "2026-06-17T08:31" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "구간 적용" }));
+
+    expect(screen.getByTestId("selected-candle").className).not.toContain("active");
+    expect(
+      screen.getByText("뉴스 구간의 시작은 끝(t0)보다 앞서야 합니다."),
     ).toBeTruthy();
   });
 });

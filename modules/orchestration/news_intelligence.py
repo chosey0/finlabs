@@ -277,6 +277,7 @@ class NewsIntelligenceServices:
         *,
         security_id: str,
         selected_candle_at: datetime,
+        window_start: datetime | None = None,
         origin: str = "event_selected",
     ) -> NewsDiscoveryResult:
         if self.news_search is None:
@@ -288,7 +289,20 @@ class NewsIntelligenceServices:
         security = self._security(security_id)
 
         selected_kst = selected_candle_at.astimezone(KST)
-        window_start = selected_kst - timedelta(hours=1)
+        # selected_candle_at is t0: the reaction anchor and the close of the news
+        # search window. The window start defaults to the prior hour but callers
+        # may pin it explicitly; widening the start only changes which news is
+        # collected, never the reaction label (which anchors on t0).
+        if window_start is None:
+            window_start = selected_kst - timedelta(hours=1)
+        else:
+            if window_start.tzinfo is None or window_start.utcoffset() is None:
+                raise ValueError("window_start must be timezone-aware")
+            window_start = window_start.astimezone(KST)
+            if window_start >= selected_kst:
+                raise ValueError(
+                    "window_start must be before selected_candle_at"
+                )
         available_aliases = security.terms_on(selected_kst.date())
         official = next(
             (

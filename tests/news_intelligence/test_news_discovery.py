@@ -165,6 +165,59 @@ def test_news_discovery_route_exposes_frozen_plan_and_complete_result(
     assert len(payload["articles"]) == 2
 
 
+def test_discovery_honors_an_explicit_earlier_window_start(
+    intelligence_dsn: str,
+) -> None:
+    services = NewsIntelligenceServices(
+        catalog_snapshot=load_catalog_snapshot(_catalog_database(intelligence_dsn)),
+        market_data=_FakeMinuteMarketData(),
+        news_search=_FakeNewsSearch(),
+    )
+
+    result = asyncio.run(
+        services.discover_news(
+            security_id="KOSDAQ:123456",
+            selected_candle_at=datetime(2026, 6, 17, 9, 31, tzinfo=KST),
+            window_start=datetime(2026, 6, 17, 8, 30, tzinfo=KST),
+        )
+    )
+
+    # The 08:30:59 article fell outside the default prior-hour window; widening
+    # the start to 08:30 pulls it in, while t0 (the anchor) stays at 09:31.
+    assert result.plan.window_start == datetime(2026, 6, 17, 8, 30, tzinfo=KST)
+    assert result.plan.window_end == datetime(2026, 6, 17, 9, 31, tzinfo=KST)
+    assert result.selected_candle_at == datetime(2026, 6, 17, 9, 31, tzinfo=KST)
+    assert [article.title for article in result.articles] == [
+        "outside",
+        "lower",
+        "upper",
+    ]
+
+
+def test_discovery_rejects_a_window_start_at_or_after_the_anchor(
+    intelligence_dsn: str,
+) -> None:
+    app.state.news_intelligence_services = NewsIntelligenceServices(
+        catalog_snapshot=load_catalog_snapshot(_catalog_database(intelligence_dsn)),
+        market_data=_FakeMinuteMarketData(),
+        news_search=_FakeNewsSearch(),
+    )
+
+    response = TestClient(app).post(
+        "/api/news/discover",
+        json={
+            "security_id": "KOSDAQ:123456",
+            "selected_candle_at": "2026-06-17T09:31:00+09:00",
+            "window_start": "2026-06-17T09:31:00+09:00",
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["message"] == (
+        "window_start must be before selected_candle_at"
+    )
+
+
 def _run_discovery(services: NewsIntelligenceServices):
     import asyncio
 

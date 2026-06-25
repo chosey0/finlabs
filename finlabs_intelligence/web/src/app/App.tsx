@@ -51,7 +51,15 @@ export function App() {
         />
       </header>
 
-      <SelectionBridge selection={chart.selection} />
+      <SelectionBridge
+        selection={chart.selection}
+        windowStartInput={chart.windowStartInput}
+        windowEndInput={chart.windowEndInput}
+        onWindowStartChange={chart.setWindowStartInput}
+        onWindowEndChange={chart.setWindowEndInput}
+        onApply={chart.applyManualWindow}
+        busy={busy}
+      />
 
       <div className="workbench" data-testid="workspace-columns">
         <ChartPanel

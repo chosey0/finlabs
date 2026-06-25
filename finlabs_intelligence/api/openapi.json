@@ -322,6 +322,18 @@
             "format": "date-time",
             "title": "Selected Candle At",
             "type": "string"
+          },
+          "window_start": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Window Start"
           }
         },
         "required": [
