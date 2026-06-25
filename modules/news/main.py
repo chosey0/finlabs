@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import time
 from typing import Annotated, Callable, Sequence
 
 import psycopg
 import typer
 from rich.console import Console
+from rich.live import Live
 from rich.progress import (
     BarColumn,
     MofNCompleteColumn,
@@ -19,6 +21,7 @@ from rich.table import Column, Table
 from modules.storage.news_intelligence.database import load_env
 
 from .db.init import connect_database, create_schema
+from .monitor import CollectRssMonitor, render_dashboard
 from .pipeline import (
     DEFAULT_FEED_SOURCES,
     FeedSource,
@@ -256,6 +259,88 @@ def collect_rss_command(
         for msg in result.errors:
             console.print(f"[yellow]경고: 피드 파싱 실패 — {msg}[/yellow]")
     _print_result("collect-rss", result)
+
+
+@app.command("monitor")
+def monitor_command(
+    dsn: DsnOption = None,
+    feed: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--feed",
+            help="Repeatable publisher=URL override. Defaults to configured feeds.",
+        ),
+    ] = None,
+    interval: Annotated[
+        int | None,
+        typer.Option(
+            "--interval",
+            min=1,
+            help="초 단위 반복 간격. 생략하면 1회만 실행하고 종료합니다.",
+        ),
+    ] = None,
+) -> None:
+    """collect-rss를 실행하며 수집·적재·성공·실패 현황을 Rich 라이브 대시보드로 표시한다."""
+
+    try:
+        sources = (
+            tuple(parse_feed_source(value) for value in feed)
+            if feed
+            else DEFAULT_FEED_SOURCES
+        )
+    except ValueError as error:
+        raise typer.BadParameter(str(error)) from error
+
+    monitor = CollectRssMonitor()
+    console = Console()
+
+    def refresh(live: Live, status_line: str) -> None:
+        live.update(
+            render_dashboard(
+                monitor,
+                status_line=status_line,
+                elapsed_seconds=monitor.elapsed_seconds(),
+            )
+        )
+
+    parameters = {"feeds": [source.url for source in sources]}
+    try:
+        with connect_database(dsn) as connection:
+            create_schema(connection)
+            with Live(console=console, refresh_per_second=8) as live:
+                # The on_source_result callback fires on the main thread as each
+                # publisher group finishes, so updating Live here is safe.
+                def on_source_result(source: FeedSource, result: OperationResult) -> None:
+                    monitor.record_source(source, result)
+                    refresh(live, "수집 중…")
+
+                while True:
+                    monitor.begin_cycle(sources)
+                    refresh(live, "수집 중…")
+                    run_recorded_operation(
+                        connection,
+                        command="collect-rss",
+                        parameters=parameters,
+                        operation=lambda: collect_rss(
+                            connection,
+                            sources=sources,
+                            on_source_result=on_source_result,
+                        ),
+                    )
+                    if interval is None:
+                        refresh(live, "완료")
+                        break
+                    deadline = time.monotonic() + interval
+                    while True:
+                        remaining = deadline - time.monotonic()
+                        if remaining <= 0:
+                            break
+                        refresh(live, f"다음 실행까지 {int(remaining) + 1}s")
+                        time.sleep(min(0.5, remaining))
+    except KeyboardInterrupt:
+        console.print("[dim]모니터를 종료합니다.[/dim]")
+    except (RuntimeError, ValueError) as error:
+        raise typer.BadParameter(str(error)) from error
 
 
 def _article_label(item: object, *, width: int = 48) -> str:

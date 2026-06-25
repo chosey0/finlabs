@@ -514,16 +514,16 @@ def collect_rss(
                 source_created = sum(
                     int(insert_rss_item(connection, item)) for item in fetched.items
                 )
+                source_errors: list[str] = []
                 if fetched.feed_error is not None:
-                    indexed_errors.append((fetched.index, fetched.feed_error))
+                    source_errors.append(fetched.feed_error)
                 if fetched.invalid_count:
-                    indexed_errors.append(
-                        (
-                            fetched.index,
-                            f"{fetched.source.publisher}: {fetched.invalid_count}개 "
-                            "항목이 필수 필드 누락으로 제외됨",
-                        )
+                    source_errors.append(
+                        f"{fetched.source.publisher}: {fetched.invalid_count}개 "
+                        "항목이 필수 필드 누락으로 제외됨"
                     )
+                for message in source_errors:
+                    indexed_errors.append((fetched.index, message))
                 processed += fetched.processed
                 created += source_created
                 if on_source_result is not None:
@@ -533,6 +533,7 @@ def collect_rss(
                             processed=fetched.processed,
                             created=source_created,
                             skipped=fetched.processed - source_created,
+                            errors=tuple(source_errors),
                         ),
                     )
     return OperationResult(

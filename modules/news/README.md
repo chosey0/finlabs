@@ -36,6 +36,7 @@ Investing.com, 이데일리, 이투데이, 한국경제, 서울경제, 뉴스핌
 | **[카테고리]** | 출처별 분리 저장 | 매체 도메인, 피드 카테고리, XML 원문 카테고리를 구분해 보존 |
 | **[중복 방지]** | 결정적 기사 ID | 기사 URL의 SHA-256 해시와 데이터베이스 제약으로 중복 적재 방지 |
 | **[진행 표시]** | 수집 진행바·집계 | `collect-rss` 실행 중 소스별 진행바를 표시하고 완료 후 언론사·카테고리별 수집 결과를 표로 출력 |
+| **[라이브 모니터]** | Rich TUI 대시보드 | `monitor` 명령이 수집 중 언론사별 수집·적재·중복·실패 현황과 세션 누적을 실시간 표시. 단발 또는 `--interval` 주기 반복 |
 | **[본문 수집]** | 비활성화 (이용약관) | 언론사 페이지 직접 수집은 약관 위배로 중단. 네이버 API는 기사 전문이 아닌 제목·요약만 제공 |
 | **[오류 격리]** | 기사 단위 실패 격리 | 차단·삭제된 기사 한 건의 실패가 배치를 중단시키지 않고 다음 실행에서 재시도 |
 | **[본문 재처리]** | Parser 버전 추적 | 언론사 parser 버전이 바뀌면 기존 기사 본문을 자동으로 다시 수집 |
@@ -176,6 +177,10 @@ uv run --group news python -m modules.news.main update-symbols
 # 전체 기본 RSS 수집
 uv run --group news python -m modules.news.main collect-rss
 
+# 라이브 모니터 — 수집·적재·실패 현황을 Rich 대시보드로 표시 (1회 또는 주기 반복)
+uv run --group news python -m modules.news.main monitor
+uv run --group news python -m modules.news.main monitor --interval 60
+
 # (비활성화) 본문 직접 수집 — 언론사 이용약관 위배로 실행이 차단됨
 # 제목·요약 검색은 아래의 독립 Naver API 모듈을 사용 (PLAN.md 4.4절)
 # uv run --group news python -m modules.news.main collect-articles --limit 100
@@ -294,6 +299,7 @@ modules/news/
 │   ├── errors.py              공개 타입 오류 계층
 │   └── models.py              불변 검색 결과 모델
 ├── pipeline.py                RSS·본문·분석 단계와 실행 이력 조율
+├── monitor.py                 collect-rss 현황 집계와 Rich 라이브 대시보드
 ├── articles/
 │   └── parsers.py             언론사별 본문 선택자와 parser 버전 registry
 ├── db/
@@ -317,6 +323,7 @@ modules/news/
 │   ├── conftest.py            격리 PostgreSQL 스키마 픽스처 (news_connection)
 │   ├── test_article_parsers.py  언론사별 본문 선택자 회귀 테스트
 │   ├── test_entity_extraction.py  entity 추출·이벤트 taxonomy 회귀 테스트
+│   ├── test_monitor.py        라이브 모니터 집계 상태 회귀 테스트
 │   ├── test_naver_news.py     네이버 검색·완전성·재시도 회귀 테스트
 │   ├── test_rss_pipeline.py   파서·CRUD·멱등성·소스 회귀 테스트
 │   └── test_symbols.py        종목 마스터 스냅샷 갱신 회귀 테스트
@@ -347,6 +354,8 @@ sudo systemctl status finlabs-news-symbols.timer
 `finlabs-news-symbols.timer`는 매일 오전 9시(Asia/Seoul)에 KOSPI·KOSDAQ·NASDAQ·NYSE·AMEX 마스터를 갱신합니다. 다운로드가 비어 있거나 한 시장이라도 실패하면 두 테이블의 기존 스냅샷을 모두 유지합니다.
 
 systemd 없이 더 잦은 주기로 RSS만 수집하려면 `scripts/collect_rss_loop.sh`를 쓸 수 있습니다. 기본 60초 간격으로 `collect-rss`를 멱등 재실행하며(중첩 방지·단일 인스턴스 잠금), `INTERVAL_SECONDS`로 간격을, 추가 인자로 피드를 좁힐 수 있습니다. 전체 72개 피드 한 회는 네트워크 특성상 60초를 넘길 수 있어, 그럴 땐 다음 경계에서 다시 시작합니다.
+
+현황을 눈으로 보며 돌리려면 `monitor` 명령이 같은 수집을 Rich 라이브 대시보드(언론사별 수집·적재·중복·실패 + 세션 누적)로 보여줍니다. `--interval N`을 주면 N초마다 반복하며 다음 실행까지 카운트다운을 표시하고, `Ctrl-C`로 종료합니다. 헤드리스 자동화에는 루프 스크립트를, 사람이 지켜볼 땐 `monitor`를 쓰세요.
 
 쓰기 동시성은 Supabase PostgreSQL 서버가 트랜잭션으로 직렬화하므로, 여러 서버나 컨테이너가 동시에 같은 데이터베이스를 안전하게 사용할 수 있습니다. 연결은 `update-symbols`/`replace_article_entities`처럼 원자성이 필요한 연산만 명시적 트랜잭션으로 감싸고, 나머지는 statement 단위로 자동 커밋합니다.
 
