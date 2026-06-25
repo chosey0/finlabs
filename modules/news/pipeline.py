@@ -429,13 +429,35 @@ def _group_sources_by_publisher(
     return tuple(tuple(group) for group in groups.values())
 
 
+def _feed_fetch_error(error: httpx.HTTPError) -> str:
+    """간결한 피드 fetch 실패 라벨. 요청 제한은 ``HTTP 429``처럼 상태 코드로 표시."""
+
+    if isinstance(error, httpx.HTTPStatusError):
+        return f"HTTP {error.response.status_code}"
+    return type(error).__name__
+
+
 def _fetch_rss_publisher(
     sources: tuple[tuple[int, FeedSource], ...],
     feed_loader: FeedLoader,
 ) -> tuple[_RssFetchResult, ...]:
     results: list[_RssFetchResult] = []
     for index, source in sources:
-        feed = feed_loader(source.url)
+        # 한 피드의 HTTP/네트워크 실패(429 요청 제한 등)가 전체 수집을 멈추지 않도록
+        # 그 피드를 이번 회차에서 건너뛰고 오류로 기록한 뒤 다음 피드로 넘어간다.
+        try:
+            feed = feed_loader(source.url)
+        except httpx.HTTPError as error:
+            results.append(
+                _RssFetchResult(
+                    index=index,
+                    source=source,
+                    processed=0,
+                    items=(),
+                    feed_error=f"{source.publisher}: {_feed_fetch_error(error)}",
+                )
+            )
+            continue
         entries = getattr(feed, "entries", None) or []
         if getattr(feed, "bozo", False) and not entries:
             error = getattr(feed, "bozo_exception", "invalid feed")

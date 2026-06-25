@@ -765,6 +765,48 @@ def test_collect_rss_skips_entries_missing_required_fields(news_connection):
     assert "etoday" in result.errors[0]
 
 
+def test_collect_rss_skips_a_feed_that_returns_http_error(news_connection):
+    """429 등 한 피드의 HTTP 오류는 전체 수집을 중단하지 않고 그 피드만 건너뛴다."""
+
+    connection = news_connection
+    parser = PARSERS["etoday"]
+    rate_limited = FeedSource(
+        "etoday", "https://example.com/rate-limited.xml", parser, feed_category="경제"
+    )
+    healthy = FeedSource(
+        "etoday", "https://example.com/ok.xml", parser, feed_category="마켓"
+    )
+
+    def load_feed(url):
+        if "rate-limited" in url:
+            request = httpx.Request("GET", url)
+            raise httpx.HTTPStatusError(
+                "rate limited",
+                request=request,
+                response=httpx.Response(429, request=request),
+            )
+        return SimpleNamespace(
+            entries=[
+                {
+                    "author": "기자",
+                    "link": "https://www.etoday.co.kr/news/view/healthy",
+                    "published": "Wed, 10 Jun 2026 21:00:00 +0900",
+                    "summary": "요약",
+                    "title": "정상 기사",
+                }
+            ],
+            bozo=False,
+        )
+
+    # Must not raise even though one feed returns 429.
+    result = collect_rss(
+        connection, sources=(rate_limited, healthy), feed_loader=load_feed
+    )
+
+    assert result.created == 1  # the healthy feed was still stored
+    assert any("HTTP 429" in message for message in result.errors)
+
+
 def test_collect_rss_reports_each_source_result_in_order(news_connection):
     """소스 하나의 수집이 끝날 때마다 소스별 결과가 순서대로 콜백에 전달된다."""
 
