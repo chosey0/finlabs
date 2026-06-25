@@ -9,7 +9,11 @@ from fastapi.testclient import TestClient
 from finlabs_intelligence.api.app import app
 from modules.brokers.kiwoom.models.ohlcv import ChartBar
 from modules.adapters.brokers.kiwoom.news_intelligence import normalize_chart_candles
-from modules.domain.news_intelligence import IntelligenceCandle, MarketDataProviderError
+from modules.domain.news_intelligence import (
+    KST,
+    IntelligenceCandle,
+    MarketDataProviderError,
+)
 from modules.orchestration.news_intelligence import NewsIntelligenceServices
 from modules.storage.news_intelligence.catalog import (
     load_catalog_snapshot,
@@ -41,7 +45,12 @@ def test_catalog_search_disambiguates_duplicate_names_and_freezes_snapshot(
 def test_catalog_chart_route_validates_with_kiwoom_and_returns_aware_ordered_bars(
     intelligence_dsn: str,
 ) -> None:
-    snapshot = load_catalog_snapshot(_catalog_database(intelligence_dsn))
+    # Seed a freshly-acquired catalog so the catalog_stale assertion below does
+    # not depend on the wall clock (the route checks freshness against now).
+    fresh = datetime.now(KST).replace(microsecond=0).isoformat()
+    snapshot = load_catalog_snapshot(
+        _catalog_database(intelligence_dsn, downloaded_at=fresh)
+    )
     market_data = _FakeMinuteMarketData()
     app.state.news_intelligence_services = NewsIntelligenceServices(
         catalog_snapshot=snapshot,
@@ -147,12 +156,16 @@ class _FakeMinuteMarketData:
         )
 
 
-def _catalog_database(dsn: str) -> str:
+def _catalog_database(
+    dsn: str, *, downloaded_at: str = "2026-06-17T08:00:00+09:00"
+) -> str:
     """Seed the shared two-row domestic catalog into the test's schema.
 
     Returns the same DSN so callers can pass it straight to
     ``load_catalog_snapshot``; the table lives in the search_path schema the
-    ``intelligence_dsn`` fixture created.
+    ``intelligence_dsn`` fixture created. ``downloaded_at`` sets the catalog
+    acquisition time; pass a recent value for staleness assertions that must not
+    depend on the wall clock.
     """
 
     with psycopg.connect(dsn, autocommit=True) as connection:
@@ -178,7 +191,7 @@ def _catalog_database(dsn: str) -> str:
                         "테스트기업",
                         "Test Corp",
                         "stock",
-                        "2026-06-17T08:00:00+09:00",
+                        downloaded_at,
                     ),
                     (
                         "KOSDAQ",
@@ -186,7 +199,7 @@ def _catalog_database(dsn: str) -> str:
                         "테스트기업",
                         "Test Labs",
                         "stock",
-                        "2026-06-17T08:00:00+09:00",
+                        downloaded_at,
                     ),
                 ],
             )
