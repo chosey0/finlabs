@@ -15,6 +15,7 @@ from modules.storage.news_intelligence.database import load_env, resolve_dsn
 
 TABLE_NAMES = (
     "rss_items",
+    "rss_feed_cooldowns",
     "articles",
     "article_analyses",
     "article_entities",
@@ -69,6 +70,21 @@ def create_schema(connection: psycopg.Connection) -> None:
             source_categories text[] NOT NULL DEFAULT '{}',
             published_at timestamp NOT NULL,
             created_at timestamp NOT NULL DEFAULT current_timestamp
+        )
+        """
+    )
+    # 요청 제한(HTTP 429)에 걸린 피드를 점증 쿨다운으로 건너뛰기 위한 상태.
+    # collect-rss는 매 회차 새 프로세스로 돌 수 있으므로 streak/skip_until을
+    # 공유 DB에 영속해 회차 사이에도 쿨다운이 유지되게 한다. 시간 비교는 모두
+    # 서버측 ``now()``로 하여 클라이언트 시계에 의존하지 않는다.
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS rss_feed_cooldowns (
+            url text PRIMARY KEY,
+            publisher text NOT NULL,
+            streak integer NOT NULL,
+            skip_until timestamptz NOT NULL,
+            updated_at timestamptz NOT NULL DEFAULT now()
         )
         """
     )

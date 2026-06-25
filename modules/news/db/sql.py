@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
+from dataclasses import dataclass
+from datetime import datetime
 from uuid import uuid4
 
 import psycopg
@@ -102,6 +104,116 @@ def insert_rss_item(
     """RSS 항목 하나를 삽입하고 새 행이 생성되었는지 반환한다."""
 
     return insert_rss_items(connection, (item,)) == 1
+
+
+# 연속 429 횟수별 쿨다운(분). 1회 5분, 2회 15분, 3회 이상 30분으로 점증한다.
+# 연속성은 성공 수집 한 번으로 초기화된다(clear_feed_cooldown).
+_FEED_COOLDOWN_MINUTES = {1: 5, 2: 15}
+_FEED_COOLDOWN_MAX_MINUTES = 30
+
+
+def feed_cooldown_minutes(streak: int) -> int:
+    """연속 429 횟수에 대응하는 쿨다운(분)을 반환한다(3회 이상은 30분)."""
+
+    return _FEED_COOLDOWN_MINUTES.get(streak, _FEED_COOLDOWN_MAX_MINUTES)
+
+
+@dataclass(frozen=True, slots=True)
+class FeedCooldown:
+    """요청 제한에 걸린 피드의 연속 횟수와 회피 종료 시각을 나타낸다."""
+
+    url: str
+    publisher: str
+    streak: int
+    skip_until: datetime
+
+
+def list_active_feed_cooldowns(
+    connection: psycopg.Connection,
+) -> dict[str, FeedCooldown]:
+    """아직 회피 기간이 끝나지 않은 피드를 URL 기준으로 조회한다.
+
+    만료 판정은 서버측 ``now()``로 하여 클라이언트 시계에 의존하지 않는다.
+    """
+
+    rows = connection.execute(
+        """
+        SELECT url, publisher, streak, skip_until
+        FROM rss_feed_cooldowns
+        WHERE skip_until > now()
+        """
+    ).fetchall()
+    return {
+        str(row[0]): FeedCooldown(
+            url=str(row[0]),
+            publisher=str(row[1]),
+            streak=int(row[2]),
+            skip_until=row[3],
+        )
+        for row in rows
+    }
+
+
+def register_feed_rate_limit(
+    connection: psycopg.Connection,
+    *,
+    url: str,
+    publisher: str,
+) -> FeedCooldown:
+    """피드의 429 연속 횟수를 1 늘리고 점증 쿨다운을 설정해 반환한다.
+
+    직전 streak에 1을 더해 다음 쿨다운(분)을 정하고 ``skip_until``을 서버측
+    ``now()`` 기준으로 산정한다. 성공 수집이 streak을 초기화하므로, 여기서 행이
+    남아 있다는 것은 마지막 결과가 또 다른 429였다는 뜻이다(연속).
+    """
+
+    with connection.transaction():
+        existing = connection.execute(
+            "SELECT streak FROM rss_feed_cooldowns WHERE url = %s",
+            [url],
+        ).fetchone()
+        streak = (int(existing[0]) if existing is not None else 0) + 1
+        minutes = feed_cooldown_minutes(streak)
+        skip_until = connection.execute(
+            """
+            INSERT INTO rss_feed_cooldowns (url, publisher, streak, skip_until)
+            VALUES (%s, %s, %s, now() + make_interval(mins => %s))
+            ON CONFLICT (url) DO UPDATE SET
+                publisher = excluded.publisher,
+                streak = excluded.streak,
+                skip_until = excluded.skip_until,
+                updated_at = now()
+            RETURNING skip_until
+            """,
+            [url, publisher, streak, minutes],
+        ).fetchone()[0]
+    return FeedCooldown(
+        url=url, publisher=publisher, streak=streak, skip_until=skip_until
+    )
+
+
+def clear_feed_cooldown(connection: psycopg.Connection, url: str) -> None:
+    """피드의 쿨다운 상태를 제거해 연속 429 횟수를 초기화한다."""
+
+    clear_feed_cooldowns(connection, (url,))
+
+
+def clear_feed_cooldowns(
+    connection: psycopg.Connection,
+    urls: Sequence[str],
+) -> None:
+    """정상 수집된 피드들의 쿨다운을 한 번의 쿼리로 제거한다.
+
+    피드마다 DELETE를 보내면 회차당 수십 번 왕복하므로, ``url = ANY(...)``로
+    묶어 한 번에 지운다. 대부분의 회차에는 쿨다운 행이 없어 사실상 무비용이다.
+    """
+
+    if not urls:
+        return
+    connection.execute(
+        "DELETE FROM rss_feed_cooldowns WHERE url = ANY(%s)",
+        [list(urls)],
+    )
 
 
 def read_rss_item(

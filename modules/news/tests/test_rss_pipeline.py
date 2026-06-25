@@ -16,7 +16,10 @@ from modules.news.articles.parsers import ARTICLE_PARSERS, SelectorArticleParser
 from modules.news.db.sql import (
     create_rss_item,
     delete_rss_item,
+    feed_cooldown_minutes,
+    list_active_feed_cooldowns,
     read_rss_item,
+    register_feed_rate_limit,
     update_rss_item,
 )
 from modules.news.pipeline import (
@@ -805,6 +808,140 @@ def test_collect_rss_skips_a_feed_that_returns_http_error(news_connection):
 
     assert result.created == 1  # the healthy feed was still stored
     assert any("HTTP 429" in message for message in result.errors)
+
+
+def test_feed_cooldown_minutes_escalates():
+    """연속 429 횟수가 늘수록 쿨다운이 5→15→30분으로 점증하고 30분에서 멈춘다."""
+
+    assert feed_cooldown_minutes(1) == 5
+    assert feed_cooldown_minutes(2) == 15
+    assert feed_cooldown_minutes(3) == 30
+    assert feed_cooldown_minutes(4) == 30
+
+
+def test_register_feed_rate_limit_escalates_cooldown(news_connection):
+    """연속 429를 등록하면 streak이 늘고 회피 종료 시각이 점점 미뤄진다."""
+
+    connection = news_connection
+    url = "https://example.com/throttled.xml"
+
+    first = register_feed_rate_limit(connection, url=url, publisher="etoday")
+    second = register_feed_rate_limit(connection, url=url, publisher="etoday")
+    third = register_feed_rate_limit(connection, url=url, publisher="etoday")
+
+    assert (first.streak, second.streak, third.streak) == (1, 2, 3)
+    assert feed_cooldown_minutes(first.streak) == 5
+    assert feed_cooldown_minutes(second.streak) == 15
+    assert feed_cooldown_minutes(third.streak) == 30
+    # 더 긴 쿨다운일수록 회피 종료 시각이 더 뒤로 간다.
+    assert first.skip_until < second.skip_until < third.skip_until
+    now_db = connection.execute("SELECT now()").fetchone()[0]
+    assert third.skip_until > now_db
+
+
+def test_collect_rss_sets_incremental_cooldown_on_429(news_connection):
+    """429를 만나면 그 피드에 연속 1회·5분 쿨다운을 설정하고 안내를 남긴다."""
+
+    connection = news_connection
+    parser = PARSERS["etoday"]
+    url = "https://example.com/rate-limited.xml"
+    source = FeedSource("etoday", url, parser, feed_category="경제")
+
+    def load_feed(_url):
+        request = httpx.Request("GET", _url)
+        raise httpx.HTTPStatusError(
+            "rate limited",
+            request=request,
+            response=httpx.Response(429, request=request),
+        )
+
+    result = collect_rss(connection, sources=(source,), feed_loader=load_feed)
+
+    assert any(
+        "HTTP 429" in message and "5분 쿨다운" in message and "연속 1회" in message
+        for message in result.errors
+    )
+    active = list_active_feed_cooldowns(connection)
+    assert url in active
+    assert active[url].streak == 1
+
+
+def test_collect_rss_skips_a_feed_in_active_cooldown(news_connection):
+    """활성 쿨다운인 피드는 fetch하지 않고 건너뛰며 streak은 그대로 둔다."""
+
+    connection = news_connection
+    parser = PARSERS["etoday"]
+    cooled_url = "https://example.com/cooled.xml"
+    register_feed_rate_limit(connection, url=cooled_url, publisher="etoday")
+
+    cooled = FeedSource("etoday", cooled_url, parser, feed_category="경제")
+    healthy = FeedSource(
+        "etoday", "https://example.com/ok.xml", parser, feed_category="마켓"
+    )
+
+    def load_feed(url):
+        # 쿨다운 중인 피드는 절대 fetch되어선 안 된다.
+        assert "cooled" not in url, "쿨다운 피드를 fetch하면 안 됨"
+        return SimpleNamespace(
+            entries=[
+                {
+                    "author": "기자",
+                    "link": "https://www.etoday.co.kr/news/view/ok",
+                    "published": "Wed, 10 Jun 2026 21:00:00 +0900",
+                    "summary": "요약",
+                    "title": "정상 기사",
+                }
+            ],
+            bozo=False,
+        )
+
+    result = collect_rss(
+        connection, sources=(cooled, healthy), feed_loader=load_feed
+    )
+
+    assert result.created == 1  # the healthy feed was still stored
+    assert any("쿨다운" in message for message in result.errors)
+    # 건너뛰기만 했으므로 연속 횟수는 1회 그대로다.
+    assert list_active_feed_cooldowns(connection)[cooled_url].streak == 1
+
+
+def test_collect_rss_clears_cooldown_after_successful_collection(news_connection):
+    """만료된 쿨다운 피드를 정상 수집하면 연속 429 횟수가 초기화된다."""
+
+    connection = news_connection
+    parser = PARSERS["etoday"]
+    url = "https://example.com/recovered.xml"
+    # 이미 만료된 쿨다운 행을 직접 넣어 이번 회차에 다시 fetch되게 한다.
+    connection.execute(
+        """
+        INSERT INTO rss_feed_cooldowns (url, publisher, streak, skip_until)
+        VALUES (%s, 'etoday', 2, now() - interval '1 minute')
+        """,
+        [url],
+    )
+    source = FeedSource("etoday", url, parser, feed_category="경제")
+
+    def load_feed(_url):
+        return SimpleNamespace(
+            entries=[
+                {
+                    "author": "기자",
+                    "link": "https://www.etoday.co.kr/news/view/recovered",
+                    "published": "Wed, 10 Jun 2026 21:00:00 +0900",
+                    "summary": "요약",
+                    "title": "복구된 기사",
+                }
+            ],
+            bozo=False,
+        )
+
+    result = collect_rss(connection, sources=(source,), feed_loader=load_feed)
+
+    assert result.created == 1
+    remaining = connection.execute(
+        "SELECT count(*) FROM rss_feed_cooldowns WHERE url = %s", [url]
+    ).fetchone()[0]
+    assert remaining == 0
 
 
 def test_collect_rss_reports_each_source_result_in_order(news_connection):

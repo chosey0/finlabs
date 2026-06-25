@@ -13,19 +13,24 @@ import psycopg
 
 from .articles.parsers import ARTICLE_PARSERS, BaseArticleParser
 from .db.sql import (
+    FeedCooldown,
+    clear_feed_cooldowns,
+    feed_cooldown_minutes,
     finish_pipeline_run,
     insert_article,
     insert_rss_items,
+    list_active_feed_cooldowns,
     list_articles_requiring_entity_extraction,
     list_articles_without_current_analysis,
     list_domestic_symbol_names,
     list_rss_items_requiring_article_parse,
+    register_feed_rate_limit,
     replace_article_entities,
     start_pipeline_run,
     upsert_article_analysis,
 )
 from .entities import build_symbol_lexicon, match_stock_entities
-from .rss.models import CanonicalRssEntry
+from .rss.models import CanonicalRssEntry, SEOUL_TIMEZONE
 from .rss.parsers import PARSERS, BaseRssParser
 from .schema.article import ArticleAnalysis, CanonicalArticle, make_content_hash
 from .schema.entity import ArticleEntity
@@ -73,6 +78,8 @@ class _RssFetchResult:
     items: tuple[CanonicalRssEntry, ...]
     invalid_count: int = 0
     feed_error: str | None = None
+    rate_limited: bool = False
+    cooldown_skipped: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -437,12 +444,44 @@ def _feed_fetch_error(error: httpx.HTTPError) -> str:
     return type(error).__name__
 
 
+def _is_rate_limited(error: httpx.HTTPError) -> bool:
+    """fetch 실패가 HTTP 429(Too Many Requests)인지 판별한다."""
+
+    return (
+        isinstance(error, httpx.HTTPStatusError)
+        and error.response.status_code == 429
+    )
+
+
+def _cooldown_skip_message(state: FeedCooldown | None) -> str | None:
+    """쿨다운으로 건너뛴 피드의 안내(회피 종료 시각·연속 횟수)를 만든다."""
+
+    if state is None:
+        return None
+    until = state.skip_until.astimezone(SEOUL_TIMEZONE).strftime("%H:%M")
+    return f"{state.publisher}: 쿨다운 ~{until} (연속 {state.streak}회)"
+
+
 def _fetch_rss_publisher(
     sources: tuple[tuple[int, FeedSource], ...],
     feed_loader: FeedLoader,
+    skip_urls: frozenset[str] = frozenset(),
 ) -> tuple[_RssFetchResult, ...]:
     results: list[_RssFetchResult] = []
     for index, source in sources:
+        # 점증 쿨다운이 살아 있는 피드는 이번 회차에 아예 fetch하지 않는다.
+        # DB는 메인 스레드만 만지므로 여기서는 읽기 전용 URL 집합만 참고한다.
+        if source.url in skip_urls:
+            results.append(
+                _RssFetchResult(
+                    index=index,
+                    source=source,
+                    processed=0,
+                    items=(),
+                    cooldown_skipped=True,
+                )
+            )
+            continue
         # 한 피드의 HTTP/네트워크 실패(429 요청 제한 등)가 전체 수집을 멈추지 않도록
         # 그 피드를 이번 회차에서 건너뛰고 오류로 기록한 뒤 다음 피드로 넘어간다.
         try:
@@ -455,6 +494,7 @@ def _fetch_rss_publisher(
                     processed=0,
                     items=(),
                     feed_error=f"{source.publisher}: {_feed_fetch_error(error)}",
+                    rate_limited=_is_rate_limited(error),
                 )
             )
             continue
@@ -519,24 +559,50 @@ def collect_rss(
     if not publisher_groups:
         return OperationResult(processed=0, created=0, skipped=0)
 
+    # 점증 쿨다운이 살아 있는 피드는 이번 회차에 fetch하지 않도록 미리 걸러낸다.
+    # 만료 판정은 DB의 ``now()``로 하므로 회차/프로세스가 바뀌어도 일관적이다.
+    cooldowns = list_active_feed_cooldowns(connection)
+    skip_urls = frozenset(cooldowns)
+
     processed = 0
     created = 0
     indexed_errors: list[tuple[int, str]] = []
+    succeeded_urls: list[str] = []
     worker_count = min(MAX_PUBLISHER_WORKERS, len(publisher_groups))
     with ThreadPoolExecutor(
         max_workers=worker_count,
         thread_name_prefix="finlabs-rss",
     ) as executor:
         futures = [
-            executor.submit(_fetch_rss_publisher, group, feed_loader)
+            executor.submit(_fetch_rss_publisher, group, feed_loader, skip_urls)
             for group in publisher_groups
         ]
         for future in as_completed(futures):
             for fetched in future.result():
                 source_created = insert_rss_items(connection, fetched.items)
                 source_errors: list[str] = []
-                if fetched.feed_error is not None:
+                if fetched.cooldown_skipped:
+                    source_errors.append(
+                        _cooldown_skip_message(cooldowns.get(fetched.source.url))
+                        or f"{fetched.source.publisher}: 쿨다운"
+                    )
+                elif fetched.rate_limited:
+                    # 429 → 연속 횟수를 늘리고 점증 쿨다운(5/15/30분)을 설정한다.
+                    cooldown = register_feed_rate_limit(
+                        connection,
+                        url=fetched.source.url,
+                        publisher=fetched.source.publisher,
+                    )
+                    source_errors.append(
+                        f"{fetched.source.publisher}: HTTP 429 — 연속 "
+                        f"{cooldown.streak}회, "
+                        f"{feed_cooldown_minutes(cooldown.streak)}분 쿨다운"
+                    )
+                elif fetched.feed_error is not None:
                     source_errors.append(fetched.feed_error)
+                else:
+                    # 정상 수집 → 회차 끝에 한 번에 쿨다운을 초기화한다.
+                    succeeded_urls.append(fetched.source.url)
                 if fetched.invalid_count:
                     source_errors.append(
                         f"{fetched.source.publisher}: {fetched.invalid_count}개 "
@@ -556,6 +622,8 @@ def collect_rss(
                             errors=tuple(source_errors),
                         ),
                     )
+    # 정상 수집된 피드의 쿨다운을 한 번에 정리한다(연속 429 횟수 초기화).
+    clear_feed_cooldowns(connection, succeeded_urls)
     return OperationResult(
         processed=processed,
         created=created,

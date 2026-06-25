@@ -552,6 +552,7 @@ market_return_5d, market_volatility, adr, limit_up_count
 |---|---|---|
 | RSS 수집과 1단계 중복 방지 | **구현됨** | `pipeline.py:482`의 매체별 병렬 수집, `db/init.py:63`의 URL 고유 제약, `main.py:193`의 CLI |
 | collect-rss 라이브 모니터 | **구현됨** | `monitor.py`의 집계 상태와 Rich 대시보드, `main.py:265`의 `monitor` 명령. 단발 또는 `--interval` 주기 반복, 언론사별 수집·적재·중복·실패와 세션 누적 표시, 피드 fetch 오류(429·네트워크)는 해당 피드만 그 회차 스킵 후 `실패`·`최근 실패`에 노출, SIGINT/SIGTERM 우아한 종료 |
+| 429 점증 쿨다운 | **구현됨** | HTTP 429를 반환한 피드를 연속 횟수별 5→15→30분 쿨다운 동안 fetch에서 제외(`rss_feed_cooldowns` 테이블에 영속, 정상 수집 한 번으로 초기화). `register_feed_rate_limit`/`list_active_feed_cooldowns`/`clear_feed_cooldowns`와 `collect_rss`의 회차 시작 필터링 |
 | 종목 마스터 동기화 | **부분 구현** | `main.py:133`의 KIS 국내·미국 5개 시장 갱신. 상장·폐지 이력과 시점별 마스터는 아직 없음 |
 | 종목 Entity 추출 | **부분 구현** | `pipeline.py:730`의 종목명·소규모 별칭 매칭. 기업·산업·키워드 추출과 전면 별칭 사전은 아직 없음 |
 | 이벤트 taxonomy | **계약만 구현** | `schema/event.py:14`의 16종 taxonomy와 DTO는 있으나 `article_events` 테이블, LLM 호출, 재시도·버전별 재분류는 없음 |
@@ -579,7 +580,7 @@ market_return_5d, market_volatility, adr, limit_up_count
 
 #### P1. PostgreSQL `news` 저장 경계 구축
 
-> **진행 상태**: 저장소 이전은 완료됨 — `rss_items`/`articles`/`article_analyses`/`article_entities`/`article_entity_extractions`/`pipeline_runs`/`domestic_symbols`/`overseas_symbols`가 finlabs_intelligence와 공유하는 Supabase PostgreSQL에 생성되고, 모든 명령이 `INTELLIGENCE_DATABASE_URL`로 그 인스턴스에 직접 쓴다(DuckDB 제거). 아래 repository Protocol 추상화와 별도 `news` 스키마 분리는 남은 후속 과제다.
+> **진행 상태**: 저장소 이전은 완료됨 — `rss_items`/`rss_feed_cooldowns`/`articles`/`article_analyses`/`article_entities`/`article_entity_extractions`/`pipeline_runs`/`domestic_symbols`/`overseas_symbols`가 finlabs_intelligence와 공유하는 Supabase PostgreSQL에 생성되고, 모든 명령이 `INTELLIGENCE_DATABASE_URL`로 그 인스턴스에 직접 쓴다(DuckDB 제거). 아래 repository Protocol 추상화와 별도 `news` 스키마 분리는 남은 후속 과제다.
 
 - 수집·분석 로직이 psycopg 연결을 직접 요구하지 않도록 repository Protocol을 경계로 둔다.
 - 필요 시 `rss_sources` 등 추가 테이블과 `intelligence_*`와의 스키마 분리를 도입한다.
