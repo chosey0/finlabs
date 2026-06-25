@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import signal
 import time
 from typing import Annotated, Callable, Sequence
 
@@ -304,6 +305,14 @@ def monitor_command(
         )
 
     parameters = {"feeds": [source.url for source in sources]}
+
+    # Treat SIGTERM like Ctrl-C so `kill` / automation also stops gracefully
+    # through the single KeyboardInterrupt path below. (signal.signal must run on
+    # the main thread, which is where Typer invokes the command.)
+    def _stop_on_sigterm(_signum: int, _frame: object) -> None:
+        raise KeyboardInterrupt
+
+    previous_sigterm = signal.signal(signal.SIGTERM, _stop_on_sigterm)
     try:
         with connect_database(dsn) as connection:
             create_schema(connection)
@@ -341,6 +350,8 @@ def monitor_command(
         console.print("[dim]모니터를 종료합니다.[/dim]")
     except (RuntimeError, ValueError) as error:
         raise typer.BadParameter(str(error)) from error
+    finally:
+        signal.signal(signal.SIGTERM, previous_sigterm)
 
 
 def _article_label(item: object, *, width: int = 48) -> str:

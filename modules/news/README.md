@@ -355,7 +355,7 @@ sudo systemctl status finlabs-news-symbols.timer
 
 systemd 없이 더 잦은 주기로 RSS만 수집하려면 `scripts/collect_rss_loop.sh`를 쓸 수 있습니다. 기본 60초 간격으로 `collect-rss`를 멱등 재실행하며(중첩 방지·단일 인스턴스 잠금), `INTERVAL_SECONDS`로 간격을, 추가 인자로 피드를 좁힐 수 있습니다. 전체 72개 피드 한 회는 네트워크 특성상 60초를 넘길 수 있어, 그럴 땐 다음 경계에서 다시 시작합니다.
 
-현황을 눈으로 보며 돌리려면 `monitor` 명령이 같은 수집을 Rich 라이브 대시보드(언론사별 수집·적재·중복·실패 + 세션 누적)로 보여줍니다. `--interval N`을 주면 N초마다 반복하며 다음 실행까지 카운트다운을 표시하고, `Ctrl-C`로 종료합니다. 헤드리스 자동화에는 루프 스크립트를, 사람이 지켜볼 땐 `monitor`를 쓰세요.
+현황을 눈으로 보며 돌리려면 `monitor` 명령이 같은 수집을 Rich 라이브 대시보드(언론사별 수집·적재·중복·실패 + 세션 누적)로 보여줍니다. `--interval N`을 주면 N초마다 반복하며 다음 실행까지 카운트다운을 표시하고, `Ctrl-C`(SIGINT) 또는 `SIGTERM`에 "모니터를 종료합니다" 메시지와 함께 깨끗이 종료합니다. 헤드리스 자동화에는 루프 스크립트를, 사람이 지켜볼 땐 `monitor`를 쓰세요.
 
 쓰기 동시성은 Supabase PostgreSQL 서버가 트랜잭션으로 직렬화하므로, 여러 서버나 컨테이너가 동시에 같은 데이터베이스를 안전하게 사용할 수 있습니다. 연결은 `update-symbols`/`replace_article_entities`처럼 원자성이 필요한 연산만 명시적 트랜잭션으로 감싸고, 나머지는 statement 단위로 자동 커밋합니다.
 
