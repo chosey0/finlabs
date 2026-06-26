@@ -66,7 +66,7 @@ def test_schema_migration_is_idempotent_and_has_no_raw_candle_table(
 ) -> None:
     connection = connect(intelligence_dsn)
     try:
-        assert initialize_schema(connection) == (1, 2, 3, 4, 5, 6)
+        assert initialize_schema(connection) == (1, 2, 3, 4, 5, 6, 7)
         assert initialize_schema(connection) == ()
         table_names = {
             row[0]
@@ -80,7 +80,9 @@ def test_schema_migration_is_idempotent_and_has_no_raw_candle_table(
     finally:
         connection.close()
 
-    assert "intelligence_annotations" in table_names
+    assert "intelligence_relevance_revisions" in table_names
+    # The legacy v1 table is dropped by migration 7.
+    assert "intelligence_annotations" not in table_names
     assert not any(
         "candle" in table_name or "raw" in table_name for table_name in table_names
     )
@@ -121,8 +123,13 @@ def test_claim_replay_conflict_and_stale_takeover(intelligence_dsn: str) -> None
         )
         connection.execute(
             """
-            INSERT INTO intelligence_annotations
-            VALUES ('ann-1', 'a1', 1, 'relevant', 'tester', NULL, %s)
+            INSERT INTO intelligence_relevance_revisions (
+                annotation_id, sample_id, article_id, security_id, revision,
+                final_value, suggestion_value, evidence_json, rule_version,
+                actor, created_at
+            )
+            VALUES ('ann-1', 's1', 'a1', 'sec1', 1,
+                    'relevant', 'relevant', '[]', 'rule-v1', 'tester', %s)
             """,
             [now],
         )
@@ -190,8 +197,13 @@ def test_business_and_terminal_result_rollback_together(
     def mutation(connection: psycopg.Connection) -> None:
         connection.execute(
             """
-            INSERT INTO intelligence_annotations
-            VALUES ('ann-atomic', 'a1', 1, 'relevant', 'tester', NULL, %s)
+            INSERT INTO intelligence_relevance_revisions (
+                annotation_id, sample_id, article_id, security_id, revision,
+                final_value, suggestion_value, evidence_json, rule_version,
+                actor, created_at
+            )
+            VALUES ('ann-atomic', 's1', 'a1', 'sec1', 1,
+                    'relevant', 'relevant', '[]', 'rule-v1', 'tester', %s)
             """,
             [now],
         )
@@ -215,7 +227,7 @@ def test_business_and_terminal_result_rollback_together(
     verify = connect(intelligence_dsn)
     try:
         business_count = verify.execute(
-            "SELECT count(*) FROM intelligence_annotations"
+            "SELECT count(*) FROM intelligence_relevance_revisions"
         ).fetchone()[0]
         state = verify.execute(
             "SELECT state FROM intelligence_idempotency"

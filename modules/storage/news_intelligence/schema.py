@@ -6,7 +6,7 @@ from collections.abc import Iterable
 
 import psycopg
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 _MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
     (
@@ -231,6 +231,16 @@ _MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
             ADD COLUMN abnormal_return_std NUMERIC,
             ADD COLUMN turnover_zscore NUMERIC
             """,
+        ),
+    ),
+    (
+        7,
+        (
+            # Drop the legacy v1 relevance table. It was superseded by
+            # ``intelligence_relevance_revisions`` (migration 2+), is never read or
+            # written by the application, and its ``unresolved`` label vocabulary
+            # no longer matches the live ``uncertain`` value.
+            "DROP TABLE IF EXISTS intelligence_annotations",
         ),
     ),
 )
