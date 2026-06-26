@@ -8,6 +8,7 @@ describe("selectCandle", () => {
       selectedAt: 1_767_056_320,
       windowStart: 1_767_052_720,
       windowEnd: 1_767_056_320,
+      source: "candle",
     });
   });
 
@@ -22,6 +23,7 @@ describe("selectWindow", () => {
       selectedAt: 1_767_056_320,
       windowStart: 1_767_050_000,
       windowEnd: 1_767_056_320,
+      source: "manual",
     });
   });
 

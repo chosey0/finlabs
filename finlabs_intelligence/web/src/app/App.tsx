@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { ChartPanel } from "../features/chart/ChartPanel";
+import { ChartSetupBridge } from "../features/chart/ChartSetupBridge";
 import { SelectionBridge } from "../features/chart/SelectionBridge";
 import { useChart } from "../features/chart/useChart";
 import { DatasetControls } from "../features/labeling/DatasetControls";
@@ -51,24 +52,28 @@ export function App() {
         />
       </header>
 
-      <SelectionBridge
-        selection={chart.selection}
-        windowStartInput={chart.windowStartInput}
-        windowEndInput={chart.windowEndInput}
-        onWindowStartChange={chart.setWindowStartInput}
-        onWindowEndChange={chart.setWindowEndInput}
-        onApply={chart.applyManualWindow}
-        busy={busy}
-      />
-
-      <div className="workbench" data-testid="workspace-columns">
-        <ChartPanel
+      <div className="bridge-row">
+        <ChartSetupBridge
           chart={chart}
           security={security}
           busy={busy}
           onLoadChart={handleLoadChart}
-          onDiscover={handleDiscover}
         />
+        <SelectionBridge
+          selection={chart.selection}
+          security={security}
+          windowStartInput={chart.windowStartInput}
+          windowEndInput={chart.windowEndInput}
+          onWindowStartChange={chart.setWindowStartInput}
+          onWindowEndChange={chart.setWindowEndInput}
+          onApply={chart.applyManualWindow}
+          onDiscover={handleDiscover}
+          busy={busy}
+        />
+      </div>
+
+      <div className="workbench" data-testid="workspace-columns">
+        <ChartPanel chart={chart} security={security} />
         <NewsPanel labeling={labeling} busy={busy} />
       </div>
 

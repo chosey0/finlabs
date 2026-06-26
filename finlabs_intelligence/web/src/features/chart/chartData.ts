@@ -107,6 +107,12 @@ export function kstLocalInputToUnix(value: string): number {
   return Math.floor(Date.parse(kstLocalInputToIso(value)) / 1_000);
 }
 
+// Human-readable KST minute, e.g. "2026-06-26 10:10" — used by the t0 summary
+// and the news-window facts so both read the same way.
+export function formatKstMinute(unixSeconds: number): string {
+  return kstUnixToLocalInput(unixSeconds).replace("T", " ");
+}
+
 export function formatKstTimestamp(unixSeconds: number): string {
   return new Intl.DateTimeFormat("ko-KR", {
     timeZone: "Asia/Seoul",

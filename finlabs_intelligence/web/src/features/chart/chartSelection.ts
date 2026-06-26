@@ -1,9 +1,15 @@
 export type CandleTime = number;
 
+// How the selection was produced: a candle click vs. a typed window. The UI
+// surfaces this so an analyst can tell an auto-generated window from one they
+// hand-edited.
+export type SelectionSource = "candle" | "manual";
+
 export interface ChartSelection {
   readonly selectedAt: CandleTime;
   readonly windowStart: CandleTime;
   readonly windowEnd: CandleTime;
+  readonly source: SelectionSource;
 }
 
 const ONE_HOUR_SECONDS = 60 * 60;
@@ -16,6 +22,7 @@ export function selectCandle(selectedAt: CandleTime): ChartSelection {
     selectedAt,
     windowStart: selectedAt - ONE_HOUR_SECONDS,
     windowEnd: selectedAt,
+    source: "candle",
   };
 }
 
@@ -34,5 +41,5 @@ export function selectWindow(
   if (windowStart >= windowEnd) {
     throw new Error("windowStart must be before windowEnd");
   }
-  return { selectedAt: windowEnd, windowStart, windowEnd };
+  return { selectedAt: windowEnd, windowStart, windowEnd, source: "manual" };
 }
