@@ -7,6 +7,26 @@ import type {
 type Article = DiscoverNewsResponse["articles"][number];
 type FinalValue = "relevant" | "not_relevant" | "uncertain";
 
+const PUBLISHED_AT_FORMAT = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Seoul",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hourCycle: "h23",
+});
+
+function formatPublishedAt(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const parts = Object.fromEntries(
+    PUBLISHED_AT_FORMAT.formatToParts(date).map((part) => [part.type, part.value]),
+  );
+  return `${parts.year}년 ${parts.month}월 ${parts.day}일 ${parts.hour}시 ${parts.minute}분 ${parts.second}초`;
+}
+
 interface ArticleCardProps {
   readonly article: Article;
   readonly suggestion: RelevanceSuggestionResponse | undefined;
@@ -25,7 +45,7 @@ export function ArticleCard({
   return (
     <article>
       <div className="article-meta">
-        <time>{article.published_at}</time>
+        <time dateTime={article.published_at}>{formatPublishedAt(article.published_at)}</time>
         <span className={`source-badge source-${article.source}`}>
           {article.source === "rss" ? "RSS" : "Naver"}
         </span>
