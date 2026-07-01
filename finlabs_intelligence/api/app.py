@@ -47,6 +47,9 @@ class CatalogItemResponse(BaseModel):
 
 
 class CandleResponse(BaseModel):
+    # 가격·거래대금은 float가 아니라 문자열로 전송한다. 서비스 계층은 Decimal로
+    # 다루는데 JSON float는 조용히 반올림돼 호가 단위나 원 단위 거래대금이 어긋난다.
+    # 클라이언트는 이 정확한 문자열을 다시 파싱한다.
     timestamp: datetime
     open: str
     high: str
@@ -171,6 +174,9 @@ class ReactionPreviewResponse(BaseModel):
 
 
 class FreezeDatasetRequest(BaseModel):
+    # 클라이언트는 annotation_id만 보낸다. label·anchor·cohort·검색 계획·provenance는
+    # 서버가 저장된 revision에서 다시 해석하므로, 클라이언트가 학습 정답을 주입할 수
+    # 없다(데이터셋 무결성의 핵심 불변식).
     dataset_id: str
     purpose: str
     cohort: str
@@ -211,6 +217,10 @@ app = FastAPI(
 )
 
 
+# 모든 에러를 정보 노출 없는 단일 봉투로 통일한다. 클라이언트는 FastAPI 기본
+# 형식을 파싱할 필요가 없고 내부 정보(스택 트레이스·SQL·provider 응답)도 보지
+# 못한다. `retryable`은 재시도로 성공할 수 있는지 알려주며, 일시적 상류/스로틀
+# 상태만 해당한다. `correlation_id`는 응답마다 새로 발급해 로그 대조에 쓴다.
 @app.exception_handler(HTTPException)
 async def safe_http_error(_: Request, error: HTTPException) -> JSONResponse:
     return JSONResponse(
@@ -225,6 +235,8 @@ async def safe_http_error(_: Request, error: HTTPException) -> JSONResponse:
     )
 
 
+# 검증 실패는 개수만 알리고 문제된 값이나 필드 경로는 절대 노출하지 않는다.
+# 잘못된 입력으로 비밀값을 되비추거나 스키마를 탐지하지 못하게 한다.
 @app.exception_handler(RequestValidationError)
 async def safe_validation_error(
     _: Request, error: RequestValidationError
@@ -246,6 +258,10 @@ def health() -> HealthResponse:
     return HealthResponse(status="ok")
 
 
+# 서비스(DB 풀·provider)는 이 팩토리가 아니라 런타임이 startup에서 app.state에
+# 붙인다. 덕분에 이 모듈은 자격증명 없이 유지돼 OpenAPI export용으로 import할 수
+# 있다. startup이 아직 붙이지 않았다면 모든 데이터 라우트는 AttributeError 대신
+# 깔끔한 503으로 떨어진다.
 def get_services(request: Request) -> NewsIntelligenceServices:
     services = getattr(request.app.state, "news_intelligence_services", None)
     if services is None:
@@ -279,6 +295,8 @@ def catalog_search(
             catalog_source=services.catalog_snapshot.source,
             catalog_acquired_at=services.catalog_snapshot.acquired_at,
             catalog_checksum=services.catalog_snapshot.checksum,
+            # 종목 카탈로그 스냅샷이 7일보다 오래되면 stale로 표시해 UI가 재적재를
+            # 유도하게 한다. now는 스냅샷 획득 시각과 같은 tz로 맞춰 비교한다.
             catalog_stale=services.catalog_snapshot.is_stale(
                 now=datetime.now(services.catalog_snapshot.acquired_at.tzinfo),
                 max_age=timedelta(days=7),
@@ -302,6 +320,10 @@ async def chart_load(
     chart_type: str = Query(default="minute", pattern="^(minute|daily)$"),
     interval_minutes: int = Query(default=1),
 ) -> ChartResponse:
+    # 도메인 예외를 HTTP 상태로 옮기는 공통 규약(이 파일 전체에서 반복된다):
+    # provider 실패는 상류 장애이므로 502, 도메인 규칙 위반(ValueError)은 422,
+    # 서비스/인프라 미비(RuntimeError)는 503, idempotency 충돌은 409로 매핑한다.
+    # from error로 원인을 연결하되, 클라이언트에 나가는 본문은 안전 봉투로 통일된다.
     try:
         result = await services.load_chart(
             market=market,
@@ -351,6 +373,8 @@ async def discover_news(
             selected_candle_at=command.selected_candle_at,
             window_start=command.window_start,
         )
+    # 검색 계획의 모든 호출을 소진하지 못하면(불완전 수집) 부분 결과를 성공으로
+    # 위장하지 않고 409로 반환한다 — t0 구간 뉴스 커버리지의 완전성 계약이다.
     except NewsDiscoveryIncompleteError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
     except NewsProviderError as error:
@@ -436,6 +460,9 @@ def suggest_relevance(
     operation_id="createAnnotation",
     response_model=AnnotationRevisionResponse,
 )
+# 상태를 바꾸는 라우트는 Idempotency-Key 헤더를 필수로 받는다. 같은 키의 재전송은
+# 새 revision을 만들지 않고 원래 결과를 재현하므로, 네트워크 재시도가 중복 라벨을
+# 남기지 않는다. 진행 중/충돌 키는 409로 구분한다.
 async def create_annotation(
     command: AnnotationRequest,
     services: Services,
@@ -488,6 +515,8 @@ def _annotation_response(
         previous_annotation_id=revision.previous_annotation_id,
         final_value=revision.final_value,
         suggestion_value=revision.suggestion_value,
+        # evidence는 DB에 JSON 텍스트로 저장돼 append-only 이력을 온전히 보존한다.
+        # 응답에서만 구조화 객체로 되돌린다.
         evidence=json.loads(revision.evidence_json),
         rule_version=revision.rule_version,
         actor=revision.actor,
@@ -531,6 +560,8 @@ async def preview_reaction_route(
     )
 
 
+# 수익률·z-score 등도 Decimal 정밀도를 잃지 않도록 문자열로 내보낸다.
+# None(계산 불가·제외)은 문자열 "None"이 아니라 JSON null로 유지한다.
 def _decimal_text(value: Decimal | None) -> str | None:
     return str(value) if value is not None else None
 
@@ -626,6 +657,9 @@ async def retry_export_route(
     )
 
 
+# 최초 export(POST)와 단일 sink 재시도(retry)가 공유하는 헬퍼. 재시도는 실패한
+# sink 하나만 담은 튜플로 호출하며, 각 sink는 서비스 계층에서 독립 idempotency
+# 단위로 처리되므로 한 sink 재시도가 이미 성공한 sink를 다시 쓰지 않는다.
 async def _run_export(
     *,
     services: NewsIntelligenceServices,

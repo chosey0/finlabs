@@ -46,6 +46,8 @@ export interface ChartWorkspace extends ChartSetupControls {
 }
 
 export function useChart({ security, setStatus, setBusy }: Deps): ChartWorkspace {
+  // 기본 조회 구간은 한국 정규장(09:00~15:30 KST). 애널리스트가 페이지를 열자마자
+  // 오늘 정규장 전체를 조회하도록 오늘 날짜로 초기화한다.
   const [startAt, setStartAt] = useState(() => kstTodayLocalInput("09:00"));
   const [endAt, setEndAt] = useState(() => kstTodayLocalInput("15:30"));
   const [chartType, setChartType] = useState<"minute" | "daily">("minute");
@@ -68,6 +70,8 @@ export function useChart({ security, setStatus, setBusy }: Deps): ChartWorkspace
         : toVolumeHistogram(chart.candles);
     return { kind: indicator, data };
   }, [chart, indicator]);
+  // 선택한 t0에서 시작하는 30거래분 반응 윈도를 파생한다. 끝 시각은 벽시계 30분이
+  // 아니라 reactionWindowEnd가 장 마감·휴장을 건너뛰며 계산한 거래분 기준이다.
   const reactionBand = useMemo<ReactionBand | null>(() => {
     if (!selection) return null;
     return {
@@ -109,6 +113,8 @@ export function useChart({ security, setStatus, setBusy }: Deps): ChartWorkspace
   async function loadChart() {
     if (!security) return;
     setBusy(true);
+    // 이전 종목/구간에서 찍은 t0 선택은 새 캔들 위에서 의미가 없으므로 조회 시작 시
+    // 즉시 비운다(오래된 반응 윈도가 잘못된 종목에 남는 것을 방지).
     setSelection(null);
     const label = chartType === "daily" ? "일봉" : `${intervalMinutes}분봉`;
     setStatus(`Kiwoom ${label}을 조회하는 중입니다.`);

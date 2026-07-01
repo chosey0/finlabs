@@ -54,6 +54,9 @@ export function CandleChart({
 }: CandleChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // 차트를 명령형으로 다루는 lightweight-charts는 React 밖에서 DOM을 소유한다.
+  // 이 이펙트는 의존성이 바뀔 때마다 차트를 통째로 재생성/파기하므로, onSelect는
+  // 호출부에서 useCallback으로 안정화해 불필요한 재빌드를 막아야 한다.
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -71,6 +74,7 @@ export function CandleChart({
       localization: { timeFormatter },
       timeScale: { timeVisible: true, secondsVisible: false },
     });
+    // 한국 시장 관례에 맞춰 상승은 빨강, 하락은 파랑으로 칠한다(서구와 반대).
     const series = chart.addSeries(CandlestickSeries, {
       upColor: "#ef5350",
       downColor: "#3b82f6",
@@ -107,6 +111,7 @@ export function CandleChart({
         1,
       );
       histogram.setData([...indicator.data]);
+      // 가격 페인과 보조지표 페인을 3:1 높이로 나눠 캔들이 주가 되게 한다.
       const panes = chart.panes();
       if (panes.length > 1 && typeof panes[0].setStretchFactor === "function") {
         panes[0].setStretchFactor(3);
@@ -126,6 +131,8 @@ export function CandleChart({
     });
     resize.observe(container);
 
+    // 재빌드/언마운트마다 옵저버·구독·차트를 모두 정리한다. chart.remove()를
+    // 빠뜨리면 canvas와 리스너가 누수돼 종목을 바꿀 때마다 쌓인다.
     return () => {
       resize.disconnect();
       chart.unsubscribeClick(onClick);

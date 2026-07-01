@@ -43,6 +43,7 @@ export function useLabeling({ security, setStatus, setBusy }: Deps): Labeling {
   const [discovery, setDiscovery] = useState<DiscoverNewsResponse | null>(null);
   const [suggestions, setSuggestions] = useState<Record<string, RelevanceSuggestionResponse>>({});
   const [annotations, setAnnotations] = useState<Record<string, AnnotationRevisionResponse>>({});
+  // 로컬 단일 사용자 MVP라 인증이 없다. 모든 라벨의 actor는 고정 값으로 귀속한다.
   const [actor] = useState("local-user");
   const [selectedSinks, setSelectedSinks] = useState(["db", "json", "csv"]);
   const [datasetResult, setDatasetResult] = useState<FreezeDatasetResponse | null>(null);
@@ -62,6 +63,7 @@ export function useLabeling({ security, setStatus, setBusy }: Deps): Labeling {
       const result = await discoverNewsApi({
         body: {
           security_id: security.security_id,
+          // 차트 시각은 unix 초 단위라 ms(×1000)로 바꿔 ISO-8601로 보낸다.
           selected_candle_at: new Date(selection.selectedAt * 1_000).toISOString(),
           window_start: new Date(selection.windowStart * 1_000).toISOString(),
         },
@@ -82,6 +84,8 @@ export function useLabeling({ security, setStatus, setBusy }: Deps): Labeling {
         return;
       }
       setDiscovery(result.data);
+      // selected_candle_at(ISO)의 앞 10자리(YYYY-MM-DD)만 직접 언급 규칙의 유효
+      // 날짜로 쓴다. 기사별 relevance 제안은 병렬로 받아 sample_id에 귀속한다.
       const selectedOn = result.data.selected_candle_at.slice(0, 10);
       const suggestionPairs = await Promise.all(
         result.data.articles.map(async (article) => {
@@ -111,6 +115,9 @@ export function useLabeling({ security, setStatus, setBusy }: Deps): Labeling {
     if (!security || !discovery) return;
     setBusy(true);
     try {
+      // 클릭마다 새 Idempotency-Key를 발급한다 — 각 라벨 저장은 새 revision을
+      // 남기는 별개 작업이다. 키 재사용은 네트워크 재시도의 중복 방지용이지 여기선
+      // 아니다. 서버는 append-only로 revision을 쌓는다.
       const response = await createAnnotation({
         headers: { "Idempotency-Key": crypto.randomUUID() },
         body: {
@@ -141,6 +148,8 @@ export function useLabeling({ security, setStatus, setBusy }: Deps): Labeling {
     }
     setBusy(true);
     try {
+      // 고정 전에 라벨링된 각 샘플의 반응을 미리 계산·검증해 둔다. 이후 freeze는
+      // annotation_id만 넘기고(주입 방지) 서버가 라벨·anchor·cohort를 재해석한다.
       await Promise.all(
         labeled.map((article) => previewReaction({ body: { sample_id: article.sample_id } })),
       );
@@ -150,6 +159,7 @@ export function useLabeling({ security, setStatus, setBusy }: Deps): Labeling {
         body: {
           dataset_id: datasetId,
           purpose: "combined",
+          // 백필 데이터라 canonical live t0가 아니라 발행시각 proxy cohort로 고정한다.
           cohort: "historical_publication_proxy",
           annotation_ids: labeled.map(
             (article) => annotations[article.sample_id].annotation_id,
