@@ -14,7 +14,7 @@ Core goals:
 - Optionally mirror selected data to Supabase/PostgreSQL.
 - Preserve ordered ingestion, idempotency, and duplicate prevention.
 
-Do **not** add trading/order execution, strategies, backtesting, ML, or news analysis unless explicitly requested for a concrete feature. The existing Streamlit `dashboard/`, `research/` chart rendering, and the planned Kiwoom broker adapter are explicitly-requested tracks; build only against them when asked, and keep `research/` isolated from SDK/CLI runtime paths.
+Do **not** add trading/order execution, strategies, backtesting, or ML unless explicitly requested for a concrete feature. The existing Streamlit `dashboard/`, `research/` chart rendering, the planned Kiwoom broker adapter, and the `finlabs_intelligence/` News Intelligence subsystem are explicitly-requested tracks; build only against them when asked, and keep `research/` isolated from SDK/CLI runtime paths. News analysis lives **only** under `finlabs_intelligence/` (see [finlabs_intelligence/README.md](finlabs_intelligence/README.md)); do not leak it into the broker SDK/CLI/DuckDB paths.
 
 ## Repository Layout
 
@@ -28,6 +28,9 @@ modules/   Layered broker-agnostic core (target architecture):
 finlabs_cli/ FinLabs Typer/Rich CLI for broker SDK account, auth, chart, and
              realtime workflows
 dashboard/ Streamlit dashboard; thin transport reading via modules.orchestration
+finlabs_intelligence/ News Intelligence collection/labeling subsystem: FastAPI
+             API + React (bun) web workbench, PostgreSQL-backed. Self-contained
+             and isolated from the SDK/CLI/DuckDB paths.
 research/  Experimental market representation and tokenizer research
 tests/     Focused unit tests
 exports/   CSV sample outputs
@@ -44,6 +47,7 @@ For detailed guidelines, see the AGENTS.md in each directory:
 |-----------|-----------|
 | `modules/` | [modules/AGENTS.md](modules/AGENTS.md) |
 | `modules/brokers/kis/` | [modules/brokers/kis/AGENTS.md](modules/brokers/kis/AGENTS.md) |
+| `finlabs_intelligence/` | [finlabs_intelligence/README.md](finlabs_intelligence/README.md) |
 | `research/` | [research/AGENTS.md](research/AGENTS.md) |
 | `tests/` | [tests/AGENTS.md](tests/AGENTS.md) |
 | `exports/` | [exports/AGENTS.md](exports/AGENTS.md) |
@@ -111,6 +115,8 @@ Market data is DuckDB-first:
 - DuckDB warehouse: `warehouse.duckdb`, default under `data_dir()`.
 - SQLite app DB: `app.db`, operational logs only.
 - Supabase/PostgreSQL: optional mirror, not primary storage.
+
+These rules cover the broker SDK/CLI market-data warehouse. The `finlabs_intelligence/` subsystem is PostgreSQL-first (source of truth via `INTELLIGENCE_DATABASE_URL`) and follows its own storage rules in [finlabs_intelligence/README.md](finlabs_intelligence/README.md).
 
 DuckDB tables and required uniqueness:
 
