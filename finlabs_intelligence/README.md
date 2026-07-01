@@ -209,6 +209,8 @@ MVP는 다음 조건을 모두 만족할 때 완료로 판정한다.
 
 ## 11. 학습 데이터 수집 웹 도구
 
+로컬 MVP 웹은 해시 라우팅으로 두 탭을 제공한다: 기본 `#/`의 **뉴스 수집** 탭과 `#/distribution`의 **형태 분포** 탭. 두 탭은 커맨드바 헤더·종목 검색·차트 설정 브릿지를 공유한다. 아래 문단은 뉴스 수집 탭을 설명하며, 형태 분포 탭은 [11.1절](#111-형태-분포-탭)에서 별도로 다룬다.
+
 현재 구현된 로컬 MVP는 KIS `domestic_symbols` 스냅샷 검색, Kiwoom 주식 1분봉과 `ka20005` KOSPI/KOSDAQ 벤치마크 조회, 캔들 선택 또는 뉴스 검색 구간(시작·끝=t0) 직접 입력, Naver의 정확한 뉴스 구간 검색(기본 직전 1시간, 시작 시각은 직접 조정 가능), 차트의 t0 기준 30거래분 반응 윈도 음영과 거래량·거래대금 보조지표(토스 레퍼런스), 직접 언급 제안, 사람의 append-only 라벨 수정, 30거래분 반응 preview, 버전 스냅샷과 PostgreSQL(DB)·JSON·CSV 출력을 제공한다. 검색 결과는 서버가 발급한 안정적인 `sample_id`로 저장되며 라벨은 종목-기사-유효 라벨 anchor 단위로 귀속된다. 데이터셋 고정 API는 저장된 최신 annotation revision ID만 받아 label·anchor·cohort·검색 계획·annotation provenance를 서버에서 다시 해석하므로 클라이언트가 학습 정답을 주입할 수 없다.
 
 필수 환경변수는 `INTELLIGENCE_DATABASE_URL`(PostgreSQL libpq 연결 문자열), `KIWOOM_APP_KEY`, `KIWOOM_SECRET_KEY`, `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`이다. KIS 종목 master는 `scripts/load_kis_symbols_to_supabase.py`로 `domestic_symbols`에 먼저 적재돼 있어야 한다(자격증명 불필요, DB 연결 문자열만 필요). 세션 레벨 설정을 쓰므로 transaction-mode 풀러가 아닌 직접 연결 또는 session-mode 풀러를 사용한다. 전체 검증의 Playwright E2E는 로컬 Google Chrome을 headless로 사용한다. 자격증명과 export 파일은 저장소에 커밋하지 않는다.
@@ -227,3 +229,11 @@ bun run dev
 ```
 
 화면과 manifest는 historical backfill을 `historical_publication_proxy` cohort와 `published_at_proxy` anchor로 명시하며 canonical live `t0`로 표현하지 않는다. `POST /api/datasets`는 immutable 스냅샷만 PostgreSQL에 고정하고, `POST /api/datasets/{dataset_id}/exports`가 선택한 DB·JSON·CSV sink를 별도 idempotency 단위로 내보낸다. 각 artifact는 pending 상태를 먼저 기록한 뒤 임시 파일 `fsync`와 원자적 rename을 수행하며, rename 뒤 상태 기록이 끊겨도 checksum으로 복구한다. 검색 완전성·전체 Naver 호출 계획, 종목원 stale 상태, annotation revision·actor·rule evidence, reaction 출처와 제외 사유, sink별 성공/실패도 함께 고정한다. JSON/CSV는 OS 사용자 데이터 디렉터리 아래 `news-intelligence-exports/`에 backend가 정한 안전한 이름으로 기록된다. 전체 검증에는 실제 FastAPI, 일회용 Postgres 스키마와 headless Chrome을 사용하는 catalog→chart→news→annotation revisions→freeze→export E2E가 포함된다.
+
+### 11.1 형태 분포 탭
+
+`#/distribution` 경로의 **형태 분포** 탭은 여러 종목의 차트 데이터를 모아 캔들 형태 분포를 비교하는 탐색용 화면이다. 뉴스 수집 탭과 커맨드바 헤더·종목 검색·차트 설정 브릿지를 공유하되, 뉴스 검색 구간(t0) 브릿지는 사용하지 않는다. 검색으로 종목을 바스켓에 담고(`security_id` 기준 중복 제거), 각 칩에서 좌측 차트로 활성화하거나 제거한다. 차트 로딩은 바스켓의 모든 종목에 대해 Kiwoom 캔들을 병렬로 조회하며, 일부 종목이 실패해도 나머지는 표시한다.
+
+좌측은 lightweight-charts 캔들에서 포인터 드래그로 분포 대상 구간을 지정하고(4px 미만 이동은 선택 해제, "전체 구간" 버튼으로 초기화), 지정하지 않으면 조회된 전체 캔들을 대상으로 한다. 우측은 캔들별 형태 메트릭 `signed_body_ratio`, `upper_ratio`, `lower_ratio`, `body_center_location`의 분포를 Plotly 히스토그램으로 그린다. 메트릭 산식은 [`research/notebooks/01_shape_quantization`](../research/notebooks/01_shape_quantization)에서 1:1로 이식했다.
+
+종목이 1개면 네 메트릭을 나란히 보이고, N개면 선택한 한 메트릭을 종목별로 겹쳐 그린다. 겹쳐 그릴 때는 메트릭 도메인으로 bin을 고정하고 확률(`histnorm: probability`)로 정규화해, 종목별 캔들 수가 달라도 형태를 공정하게 비교할 수 있다. 이 탭은 탐색·분석 전용이라 DB에 라벨이나 데이터셋을 기록하지 않으며, Plotly 청크는 지연 로딩(code-split)돼 뉴스 수집 탭의 초기 번들을 가볍게 유지한다.
