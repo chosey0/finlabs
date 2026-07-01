@@ -12,7 +12,7 @@ FinLabs의 뉴스 수집, 실시간 시장 데이터, 장 운영 정보, 저장�
 1. 브로커 SDK는 전송과 파싱만 담당하며 FinLabs 저장소를 알지 않는다.
 2. Redis는 전달 계층이고 PostgreSQL과 검증된 Parquet가 영구 원본이다.
 3. PostgreSQL 단일 인스턴스에서 `control`, `market`, `news` 스키마를 분리한다.
-4. 틱, 호가와 정제 기사 본문은 수년간 연구 가능한 형태로 보존한다.
+4. 틱, 호가와 승인된 뉴스 텍스트 입력은 수년간 연구 가능한 형태로 보존한다.
 5. CLI, Discord, 웹과 GUI는 재사용 가능한 orchestration/domain 로직 위에 둔다.
 6. Windows, macOS, Linux에서 같은 환경변수와 `uv run` 계약을 사용한다.
 
@@ -54,11 +54,14 @@ Monitoring Core
 ## 5. 전환 정책
 
 - 신규 쓰기 경로는 PostgreSQL/TimescaleDB, Redis Streams, Parquet을 사용한다.
-- 기존 `warehouse.duckdb`, `news.db`, SQLite는 이동하거나 마이그레이션하지 않고
-  읽기 전용 레거시 보관소로 유지한다.
+- 기존 시장 데이터 `warehouse.duckdb`는 현재 활성 시장 데이터 저장소로 유지한다.
+  과거 `news.db`/SQLite 뉴스 경로는 Supabase PostgreSQL 이전 이후 레거시로만
+  취급한다.
 - 신규 인프라는 빈 상태로 시작하며 이중 쓰기를 하지 않는다.
 - MongoDB는 도입하지 않는다.
-- 원문 HTML은 영구 보관하지 않고 정제 기사 본문만 저장한다.
+- 원문 HTML은 영구 보관하지 않는다. 뉴스 텍스트는 약관과 제공 API 계약을
+  만족하는 경로에서만 저장한다(RSS 메타데이터, 네이버 제목·요약, 또는 별도
+  승인된 정제 본문).
 
 ## 6. 구현 순서
 
@@ -100,7 +103,7 @@ Monitoring Core
 > **상태: 이전 완료** — `rss_items`·`articles`·`article_analyses`·`article_entities`·`article_entity_extractions`·`pipeline_runs`·`domestic_symbols`·`overseas_symbols`가 finlabs_intelligence와 공유하는 Supabase PostgreSQL로 이전됨(`INTELLIGENCE_DATABASE_URL`, psycopg). DuckDB와 파일 잠금은 제거. repository Protocol 추상화와 별도 `news` 스키마 분리는 후속 과제.
 
 - RSS 상태·중복 관리를 PostgreSQL로 이전 ✅
-- 언론사별 parser registry와 정제 본문 저장 ✅
+- 언론사별 parser registry와 승인된 뉴스 텍스트 저장 ✅
 - 재시도, 영구 실패와 parser version 기반 재처리 ✅
 
 완료 기준:
@@ -132,9 +135,13 @@ Monitoring Core
 
 | 항목 | 상태 |
 |---|---|
-| 뉴스 RSS 수집과 SQLite 기반 초기 파이프라인 | 구현됨, PostgreSQL 전환 예정 |
+| 뉴스 RSS 수집과 Supabase PostgreSQL 파이프라인 | 구현됨, `INTELLIGENCE_DATABASE_URL` 사용 |
 | 국내·해외 종목 마스터 갱신 CLI | 구현됨 |
+| KIS 국내·해외 REST·WebSocket SDK | 구현 중 |
+| Kiwoom 국내 차트·실시간 SDK | 구현 중 |
+| KRX 지수 일별 가격 SDK | 초기 구현 |
 | Toss 장 운영 정보 SDK와 calendar adapter | 구현됨 |
+| News Intelligence 로컬 라벨링 API·웹 도구 | 구현 중 |
 | PostgreSQL/TimescaleDB·Redis·Parquet 신규 플랫폼 | 계획 확정, 구현 전 |
 | KIS 실시간 구독 파이프라인 | 계획 확정, 구현 전 |
 | 실시간 모니터링·Discord·백업 자동화 | 계획 확정, 구현 전 |

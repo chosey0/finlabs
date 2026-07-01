@@ -77,8 +77,8 @@ Backtest·평가 보고서
 
 ### 현재 구현과 목표 설계의 경계
 
-- 현재 사용 가능: RSS pipeline, 네이버 키워드·날짜 검색 client, 종목 Entity 추출, taxonomy v1 DTO
-- 목표 설계: canonical 적재, Trigger 실행기, 후보 확장, market feature·label, dataset, 모델, backtest, Top-K serving
+- 현재 사용 가능: RSS pipeline, 네이버 키워드·날짜 검색 client, 종목 Entity 추출, taxonomy v1 DTO, FastAPI/React 기반 학습 데이터 수집·라벨링 MVP, annotation revision, reaction preview, dataset freeze/export
+- 구현 중/후속 범위: canonical live news 적재, Trigger 분류 실행기, 후보 확장, full market feature builder, 모델 학습·registry, backtest, Top-K serving
 - 문서의 JSON·Python·SQL 예시는 해당 절에서 “현재 구현”으로 명시하지 않는 한 target contract다.
 
 ## 4. 공통 데이터 계약
@@ -112,7 +112,7 @@ Backtest·평가 보고서
 ### 4.4 저장소와 문서 우선순위
 
 - News Intelligence의 source of truth는 PostgreSQL(예: Supabase, RDS, 자체 호스팅)이며 표준 libpq 연결 문자열 `INTELLIGENCE_DATABASE_URL`로 접근한다. catalog(`domestic_symbols`)도 같은 DB에서 읽고, `scripts/load_kis_symbols_to_supabase.py`(KIS 직행) 또는 `scripts/seed_intelligence_catalog.py`(DuckDB 원본 → DB)로 적재한다.
-- 레거시 뉴스 수집 pipeline(`modules/news`)의 warehouse는 여전히 DuckDB이고 SQLite는 운영 로그에만 사용한다.
+- 뉴스 수집 pipeline(`modules/news`)은 현재 finlabs_intelligence와 같은 PostgreSQL 인스턴스를 사용한다. 과거 DuckDB/SQLite 뉴스 경로는 레거시로만 취급한다.
 - 현재 뉴스 pipeline의 동작·명령은 [`modules/news/README.md`](../modules/news/README.md)를 따른다.
 - 현재 모듈의 장기 작업은 [`modules/news/PLAN.md`](../modules/news/PLAN.md), News Intelligence의 목표 계약은 이 폴더의 문서를 따른다.
 - 필드 의미는 [Feature Dictionary](./docs/FeatureDictionary.md), 물리·논리 데이터 구조는 [Training Data Model](./docs/TrainDataTable.md), 전환 순서는 [Migration](./docs/Migration.md)을 우선한다.
@@ -196,12 +196,13 @@ MVP는 다음 조건을 모두 만족할 때 완료로 판정한다.
 
 | 영역       | 현재 자산                                              | 남은 작업                                           |
 | -------- | -------------------------------------------------- | ----------------------------------------------- |
-| 뉴스 수집·검색 | RSS pipeline과 `modules.news.naver.NaverNewsClient` | 네이버 결과의 canonical 저장·백필·호출 예산·체크포인트 연결          |
+| 뉴스 수집·검색 | RSS pipeline과 `modules.news.naver.NaverNewsClient` | 네이버 결과의 canonical live 저장·백필·호출 예산·체크포인트 연결          |
 | 이벤트 계약   | `modules/news/schema/event.py` taxonomy v1과 DTO    | 실제 분류 실행기, 평가셋, 버전별 재분류                         |
-| Entity   | 저장된 기사 본문 대상 종목명·소규모 별칭 기반 추출                      | 제목+요약 입력 연결, point-in-time 별칭과 산업·키워드 확장        |
+| Entity   | 저장된 승인 텍스트 대상 종목명·소규모 별칭 기반 추출                      | 제목+요약 입력 연결, point-in-time 별칭과 산업·키워드 확장        |
 | 급등 사건    | 공통 market 계층의 `SurgeEvent` 추출·저장                   | 뉴스 학습 라벨·사례 생성과 연결                              |
-| 시세 특징    | 공통 OHLCV 저장·조회 기반                                  | 분봉 point-in-time feature builder                |
-| 모델       | 미구현                                                | baseline, LightGBM, calibration, model registry |
+| 시세 특징    | Kiwoom 1분봉 기반 차트 로딩과 30거래분 reaction preview               | full point-in-time feature builder                |
+| 데이터셋    | annotation revision 기반 dataset freeze와 DB·JSON·CSV export | 모델 학습용 feature table 확장                      |
+| 모델       | 초기 학습 스크립트와 metric primitive                         | baseline, LightGBM, calibration, model registry |
 
 
 기존 pipeline의 구현 상태와 운영 명령은 [`modules/news/README.md`](../modules/news/README.md), 기존 모듈의 장기 계획은 [`modules/news/PLAN.md`](../modules/news/PLAN.md)를 따른다. 이 폴더는 그 위에 추가할 뉴스 지능 계층의 제품·데이터·모델·평가 계약을 설명한다.

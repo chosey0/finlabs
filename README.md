@@ -9,7 +9,7 @@
 [![Typer](https://img.shields.io/badge/Typer-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://typer.tiangolo.com/)
 [![pytest](https://img.shields.io/badge/Tested_with-pytest-0A9EDC?style=for-the-badge&logo=pytest&logoColor=white)](https://pytest.org/)
 
-한국투자증권 해외주식 데이터와 RSS 뉴스를 **수집·정규화·저장·조회·분석**하는 Python 프로젝트입니다.
+증권사 Open API 시장 데이터와 RSS·네이버 뉴스를 **수집·정규화·저장·조회·분석**하는 Python 프로젝트입니다.
 
 [통합 계획서](./PLAN.md) · [FinLabs CLI](./finlabs_cli/README.md) · [KIS SDK](./modules/brokers/kis/README.md) · [Toss SDK](./modules/brokers/toss/README.md) · [News Pipeline](./modules/news/README.md) · [News Intelligence 설계](./finlabs_intelligence/README.md) · [Research](./research/README.md) · [Scripts](./scripts/README.md)
 
@@ -33,16 +33,17 @@ FinLabs는 증권사 Open API를 독립적인 Python SDK로 구현하고, 그 �
 
 | | 영역 | 상태 | 설명 |
 |---|------|:----:|------|
-| **[Broker SDK]** | [KIS SDK](./modules/brokers/kis/README.md) | 구현 중 | 한국투자증권 해외주식 REST·WebSocket 조회, 인증, 엔드포인트, 파서, 모델 |
+| **[Broker SDK]** | [KIS SDK](./modules/brokers/kis/README.md) | 구현 중 | 한국투자증권 국내·해외 REST 조회, 해외·국내 WebSocket 실시간 시세, 인증, 엔드포인트, 파서, 모델 |
+| **[Broker SDK]** | [Kiwoom SDK](./modules/brokers/kiwoom/README.md) | 구현 중 | 키움증권 OAuth, 국내주식 차트 REST 조회, 국내 실시간 체결·호가 WebSocket |
 | **[Broker SDK]** | [Toss SDK](./modules/brokers/toss/README.md) | 구현됨 | 토스증권 현재가·캔들·종목정보와 국내·해외 장 운영 정보 조회, calendar adapter |
+| **[Broker SDK]** | [KRX SDK](./modules/brokers/krx/README.md) | 초기 구현 | KRX Data Marketplace 지수 일별 가격 조회 |
 | **[Market CLI]** | [FinLabs CLI](./finlabs_cli/README.md) | 구현 중 | 계좌 등록, 토큰 관리, KIS/Kiwoom 차트 조회, 실시간 세션 |
 | **[Core]** | `modules/` 계층형 코어 | 이전 중 | broker adapter, canonical domain, orchestration, warehouse read repository |
-| **[News]** | [News Pipeline](./modules/news/README.md) | 초기 구현 | RSS 정규화, 멱등 저장, 기초 통계 분석, Rich 라이브 모니터, systemd 실행과 재사용 가능한 네이버 키워드·날짜 검색 API. 본문 직접 수집은 언론사 약관 사유로 비활성화 |
-| **[News Intelligence]** | [제품·데이터·모델 설계](./finlabs_intelligence/README.md) | 설계 완료·구현 전 | Trigger·Reaction 계층, feature·label·dataset·backtest·migration·Python interface 계약 |
+| **[News]** | [News Pipeline](./modules/news/README.md) | 초기 구현 | RSS 정규화, 멱등 저장, 기초 통계 분석, Rich 라이브 모니터, systemd 실행과 재사용 가능한 네이버 키워드·날짜 검색 API. 본문 직접 수집은 언론사 약관 리스크로 정규 운영에서 제외 |
+| **[News Intelligence]** | [제품·데이터·모델 설계와 로컬 라벨링 도구](./finlabs_intelligence/README.md) | 구현 중 | FastAPI·React 기반 학습 데이터 수집/라벨링 MVP, Trigger·Reaction 계층, feature·label·dataset·backtest 계약 |
 | **[Dashboard]** | `dashboard/` | 구현 중 | `modules.orchestration`을 통해 저장된 시장 데이터를 읽는 Streamlit UI |
 | **[Research]** | [Market Representation](./research/README.md) | 초기 연구 | Candlestick VQ-VAE Tokenizer 중심의 시장 표현 학습 |
 | **[Platform]** | PostgreSQL·TimescaleDB·Redis·Parquet | 장기 제안 | [통합 PLAN](./PLAN.md) 단계 1~6의 별도 플랫폼 계획, 구현 전·MVP 선행조건 아님 |
-| **[Next Broker]** | Kiwoom SDK·adapter | 예정 | 추가 국내주식 데이터 조회용 Kiwoom REST API 통합 |
 
 ---
 
@@ -56,7 +57,7 @@ FinLabs는 증권사 Open API를 독립적인 Python SDK로 구현하고, 그 �
 | **[저장소]** | 로컬 우선 데이터 | 시장 데이터는 DuckDB, 운영 로그는 SQLite에 저장 |
 | **[중복 방지]** | 멱등 적재 | 데이터베이스 고유 제약과 conflict 처리로 재실행 안전성 확보 |
 | **[조회]** | 공통 warehouse query | CLI·대시보드·연구가 `modules.orchestration.query`를 통해 동일 SQL 사용 |
-| **[뉴스]** | 수집·검색·기초 분석 | RSS 메타데이터 적재, 네이버 제목·요약 검색, 저장된 합법적 본문의 기초 통계·Entity 추출 |
+| **[뉴스]** | 수집·검색·기초 분석 | RSS 메타데이터 적재, 네이버 제목·요약 검색, 저장된 승인 텍스트의 기초 통계·Entity 추출 |
 | **[운영]** | 실행 이력과 동시성 | 뉴스 단계별 성공·실패 기록과 PostgreSQL 트랜잭션 기반 동시 쓰기 직렬화 |
 
 ---
@@ -114,11 +115,11 @@ modules.domain                        pure shared contracts
 | Domain | `modules/domain/` | I/O가 없는 canonical dataclass와 Protocol |
 | Storage | `modules/storage/` | warehouse read SQL의 단일 출처 |
 
-`modules/news`는 이 broker 계층과 별도로 실행되는 독립 뉴스 파이프라인입니다. 자체 표준 뉴스 모델을 사용하고, 저장은 finlabs_intelligence와 공유하는 Supabase PostgreSQL을 씁니다(연결은 `modules.storage.news_intelligence.database`의 DSN 해석만 재사용). 시장 데이터용 `modules.domain`에는 의존하지 않습니다. [News Intelligence 설계](./finlabs_intelligence/README.md)는 향후 canonical domain·orchestration 경계를 재사용하는 목표 구조이며 현재 구현으로 오해하면 안 됩니다.
+`modules/news`는 이 broker 계층과 별도로 실행되는 독립 뉴스 파이프라인입니다. 자체 표준 뉴스 모델을 사용하고, 저장은 finlabs_intelligence와 공유하는 Supabase PostgreSQL을 씁니다(연결은 `modules.storage.news_intelligence.database`의 DSN 해석만 재사용). 시장 데이터용 `modules.domain`에는 의존하지 않습니다. [News Intelligence](./finlabs_intelligence/README.md)는 목표 설계 문서와 로컬 라벨링 MVP 구현이 함께 있는 영역이므로, 현재 사용 가능한 API·화면은 해당 README의 구현 상태 절을 기준으로 확인합니다.
 
 ### 장기 데이터 플랫폼 제안
 
-[통합 계획서](./PLAN.md)에 기록된 구현 전 장기 데이터 흐름입니다. 현재 기본 저장 계약은 DuckDB이고 SQLite는 운영 로그에 사용하며, PostgreSQL/Supabase는 선택적 mirror입니다. 아래 구조는 별도 승인과 구현 없이는 현재 write path가 아닙니다.
+[통합 계획서](./PLAN.md)에 기록된 구현 전 장기 데이터 흐름입니다. 현재 시장 데이터 기본 저장 계약은 DuckDB이고, 뉴스 RSS 파이프라인과 News Intelligence 라벨링 도구는 Supabase/PostgreSQL을 primary 저장소로 사용합니다. 아래 TimescaleDB·Redis·Parquet 구조는 별도 승인과 구현 없이는 현재 write path가 아닙니다.
 
 ```text
 KIS WebSocket
@@ -129,7 +130,7 @@ KIS WebSocket
      -> Redis Pub/Sub live broadcast
 
 RSS / provider metadata
-  -> PostgreSQL news schema (장기 제안)
+  -> Supabase/PostgreSQL news tables (현재 운영)
 
 Toss Market Calendar
   -> Toss SDK -> Toss Adapter -> PostgreSQL market schema
@@ -157,15 +158,17 @@ Monitoring Core
 ```text
 finlabs/
 ├── modules/
-│   ├── brokers/kis/            한국투자증권 해외주식 SDK
+│   ├── brokers/kis/            한국투자증권 국내·해외주식 SDK
+│   ├── brokers/kiwoom/         키움증권 국내주식 차트·실시간 SDK
 │   ├── brokers/toss/           토스증권 국내·미국주식 시세 SDK
+│   ├── brokers/krx/            KRX 지수 데이터 SDK
 │   ├── adapters/brokers/kis/   KIS SDK → canonical 모델 adapter
 │   ├── adapters/brokers/toss/  Toss 장 운영 정보 → canonical calendar adapter
 │   ├── orchestration/          use case와 warehouse query
 │   ├── domain/                 canonical 데이터 계약
 │   ├── storage/                warehouse read repository
 │   └── news/                   RSS·네이버 검색·기초 분석 뉴스 파이프라인
-├── finlabs_intelligence/       뉴스 반응 랭킹 제품·데이터·모델 설계 문서
+├── finlabs_intelligence/       뉴스 반응 랭킹 설계, FastAPI, React 라벨링 도구
 ├── finlabs_cli/                broker SDK 조작용 Typer/Rich CLI
 ├── dashboard/                  Streamlit 시장 데이터 대시보드
 ├── research/                   시장 표현 학습 연구
@@ -227,7 +230,7 @@ uv run python -m finlabs_cli chart domestic --alias kiwoom-main --symbol 005930 
 
 ```bash
 uv run --group news python -m modules.news.main collect-rss
-# collect-articles는 언론사 이용약관에 따라 비활성화됨
+# collect-articles는 언론사 이용약관 리스크로 정규 운영에서 제외
 # 네이버 제목·요약 검색은 modules.news.naver 공개 API로 제공
 uv run --group news python -m modules.news.main analyze --limit 100
 ```
@@ -293,13 +296,13 @@ uv run --group news python -m modules.news.main --help
 | 5 | 관측성과 알림 — 공통 상태 DTO, Rich 실시간 모니터, Discord | 구현 전 |
 | 6 | 백업과 복구 — 암호화 백업, 체크섬 검증, 격리 복구 훈련 | 구현 전 |
 
-단계에 선행하는 기반은 구현되어 있습니다: KIS 해외주식 REST·실시간 SDK, Toss 시세·장 운영 정보 SDK와 calendar adapter, 뉴스 RSS 파이프라인(현 Supabase PostgreSQL), 국내·해외 종목 마스터 갱신 CLI. Kiwoom SDK와 Candlestick VQ-VAE 연구는 별도 트랙으로 진행합니다.
+단계에 선행하는 기반은 구현되어 있습니다: KIS 국내·해외 REST·실시간 SDK, Kiwoom 국내 차트·실시간 SDK, Toss 시세·장 운영 정보 SDK와 calendar adapter, KRX 지수 SDK, 뉴스 RSS 파이프라인(현 Supabase PostgreSQL), 국내·해외 종목 마스터 갱신 CLI, News Intelligence 로컬 라벨링 MVP. Candlestick VQ-VAE 연구는 별도 트랙으로 진행합니다.
 
 ---
 
 ## Current Scope
 
-FinLabs는 아직 초기 개발 단계이며 PyPI 배포보다 로컬 개발과 기능 검증을 우선합니다. 주문 실행과 투자 전략은 범위 밖입니다. 백테스트와 ML 기반 뉴스 반응 랭킹은 [News Intelligence 설계](./finlabs_intelligence/README.md)에 정의되어 있지만 아직 public SDK·CLI로 구현되지 않았습니다.
+FinLabs는 아직 초기 개발 단계이며 PyPI 배포보다 로컬 개발과 기능 검증을 우선합니다. 주문 실행과 투자 전략은 범위 밖입니다. 백테스트와 ML 기반 뉴스 반응 랭킹은 [News Intelligence 설계](./finlabs_intelligence/README.md)에 정의되어 있으며, 현재 public SDK·CLI가 아니라 로컬 FastAPI/React 라벨링 도구와 학습 데이터 고정/export 흐름으로 구현 중입니다.
 
 뉴스 모듈은 현재 RSS 적재, `basic-stats-v1`, 종목 마스터 기반 Entity 추출, taxonomy v1 DTO와 재사용 가능한 네이버 키워드·날짜 검색 API를 제공합니다. 네이버 검색 결과의 파이프라인 저장, Trigger 분류 실행기, 후보 확장, market feature·label, 모델 학습과 백테스트는 아직 구현되지 않았습니다.
 

@@ -23,7 +23,7 @@ Investing.com, 이데일리, 이투데이, 한국경제, 서울경제, 뉴스핌
 
 핵심 아이디어는 단순 감성 분석이 아니라 **과거 급등 직전 뉴스 패턴과의 유사도(Contrastive Vector Similarity)**입니다. "좋은 뉴스인가?"가 아니라 "과거 급등 직전 뉴스와 얼마나 비슷한가? 급등하지 않은 유사 뉴스와는 얼마나 다른가?"를 판단하고, 여기에 거래대금·변동성·테마 확산·시장 국면 등 **Market Context features**를 결합해 학습 모델(LightGBM)로 점수화합니다. 뉴스 설계는 [뉴스 모듈 PLAN](./PLAN.md), 전체 데이터 플랫폼과 구현 순서는 [통합 PLAN](../../PLAN.md)에 정리되어 있습니다.
 
-현재 구현된 범위는 그 기반이 되는 데이터 수집 파이프라인과 재사용 가능한 네이버 뉴스 검색 클라이언트입니다. 언론사마다 다른 RSS 필드를 표준 스키마로 변환하고, 기사 URL 기반의 결정적 ID와 PostgreSQL 제약 조건으로 중복 저장을 방지합니다. 저장소는 finlabs_intelligence와 동일한 Supabase PostgreSQL 인스턴스를 공유합니다. **본문 직접 수집은 언론사 이용약관에 따라 비활성화**되어 있습니다. 네이버 연동은 현재 키워드와 날짜로 제목·요약·링크·발행시각을 조회하는 독립 모듈까지 구현됐으며, 파이프라인 저장과 과거 백필 실행기는 아직 연결되지 않았습니다.
+현재 구현된 범위는 그 기반이 되는 데이터 수집 파이프라인과 재사용 가능한 네이버 뉴스 검색 클라이언트입니다. 언론사마다 다른 RSS 필드를 표준 스키마로 변환하고, 기사 URL 기반의 결정적 ID와 PostgreSQL 제약 조건으로 중복 저장을 방지합니다. 저장소는 finlabs_intelligence와 동일한 Supabase PostgreSQL 인스턴스를 공유합니다. **본문 직접 수집은 언론사 이용약관 리스크로 정규 운영에서 제외**되어 있습니다. 네이버 연동은 현재 키워드와 날짜로 제목·요약·링크·발행시각을 조회하는 독립 모듈까지 구현됐으며, 파이프라인 저장과 과거 백필 실행기는 아직 연결되지 않았습니다.
 
 ---
 
@@ -37,10 +37,10 @@ Investing.com, 이데일리, 이투데이, 한국경제, 서울경제, 뉴스핌
 | **[중복 방지]** | 결정적 기사 ID | 기사 URL의 SHA-256 해시와 데이터베이스 제약으로 중복 적재 방지 |
 | **[진행 표시]** | 수집 진행바·집계 | `collect-rss` 실행 중 소스별 진행바를 표시하고 완료 후 언론사·카테고리별 수집 결과를 표로 출력 |
 | **[라이브 모니터]** | Rich TUI 대시보드 | `monitor` 명령이 수집 중 언론사별 수집·적재·중복·실패 현황과 세션 누적을 실시간 표시. 단발 또는 `--interval` 주기 반복 |
-| **[본문 수집]** | 비활성화 (이용약관) | 언론사 페이지 직접 수집은 약관 위배로 중단. 네이버 API는 기사 전문이 아닌 제목·요약만 제공 |
+| **[본문 수집]** | 운영 비활성 (이용약관) | 언론사 페이지 직접 수집은 약관 리스크로 정규 운영 범위에서 제외. 네이버 API는 기사 전문이 아닌 제목·요약만 제공 |
 | **[오류 격리]** | 기사·피드 단위 실패 격리 | 차단·삭제된 기사 한 건이나 피드 fetch 오류(429·타임아웃·네트워크)가 배치를 중단시키지 않고 해당 항목만 그 회차에서 건너뛴 뒤 다음 실행에서 재시도 |
 | **[요청 제한 백오프]** | 429 점증 쿨다운 | HTTP 429를 반환한 피드는 연속 횟수에 따라 5→15→30분 쿨다운 동안 fetch를 건너뛰고, 정상 수집 한 번으로 횟수가 초기화됨. 상태는 공유 DB(`rss_feed_cooldowns`)에 영속해 회차·프로세스가 바뀌어도 유지 |
-| **[본문 재처리]** | Parser 버전 추적 | 언론사 parser 버전이 바뀌면 기존 기사 본문을 자동으로 다시 수집 |
+| **[본문 재처리]** | 레거시 Parser 버전 추적 | 직접 본문 수집 코드와 parser 회귀 테스트는 남아 있지만 정규 운영 입력은 RSS 메타데이터와 네이버 제목·요약입니다 |
 | **[기초 분석]** | 본문 통계 | 분석기 버전과 본문 해시를 기준으로 문자 수·단어 수 계산 |
 | **[Entity 추출]** | 종목 마스터 기반 매칭 | 종목 마스터·별칭 사전 어휘집으로 기사별 종목을 결정적으로 추출, 긴 이름 우선 매칭으로 오탐 방지 |
 | **[이벤트 체계]** | 닫힌 taxonomy DTO | LLM 이벤트 분류용 16종 event_type enum과 `taxonomy_version` 추적 DTO |
@@ -65,7 +65,7 @@ collect-rss
 rss_items
     │
     ▼
-collect-articles (비활성화 — 이용약관)
+collect-articles (레거시 직접 HTML 경로 — 정규 운영 비활성)
     │  publisher parser → cleaned text → content hash + parser version
     ▼
 articles
@@ -114,8 +114,8 @@ article_analyses
 모든 RSS 소스는 API 키 없이 수집합니다.
 
 > **본문 수집 정책**: 언론사 웹페이지에서 자동화 수단으로 본문을 수집하는
-> 행위는 언론사 이용약관(데이터 크롤링 금지 조항)에 위배되어 모든 매체의
-> 본문 직접 수집(`collect-articles`)을 비활성화했습니다. 본문·요약 확보는
+> 행위는 언론사 이용약관(데이터 크롤링 금지 조항)에 위배될 수 있어 정규
+> 운영에서는 본문 직접 수집(`collect-articles`)을 사용하지 않습니다. 뉴스 텍스트 입력은
 > [네이버 뉴스 검색 API](https://developers.naver.com/docs/serviceapi/search/news/news.md)만
 > 사용합니다 (빅카인즈는 유료 전환으로 제외). 현재 구현은 검색 결과
 > 메타데이터 조회 모듈이며 파이프라인 저장·백필 연결은 후속 범위입니다. 상세 정책은
@@ -182,7 +182,7 @@ uv run --group news python -m modules.news.main collect-rss
 uv run --group news python -m modules.news.main monitor
 uv run --group news python -m modules.news.main monitor --interval 60
 
-# (비활성화) 본문 직접 수집 — 언론사 이용약관 위배로 실행이 차단됨
+# (운영 비활성) 본문 직접 수집 — 레거시 명령/파서는 남아 있지만 정규 운영 범위에서 제외
 # 제목·요약 검색은 아래의 독립 Naver API 모듈을 사용 (PLAN.md 4.4절)
 # uv run --group news python -m modules.news.main collect-articles --limit 100
 
@@ -269,7 +269,7 @@ uv run --group news python -m modules.news.main collect-rss \
 |--------|------|----------------|
 | `rss_items` | 표준 RSS 메타데이터와 출처·피드 카테고리 | `id` 기본키, `url` 고유 제약 |
 | `rss_feed_cooldowns` | 429 요청 제한 피드의 연속 횟수·회피 종료 시각(점증 쿨다운) | `url` 기본키 |
-| `articles` | 정제 기사 본문, 본문 해시와 parser 버전 | `rss_item_id` 기본키 |
+| `articles` | 레거시 직접 수집 경로의 정제 기사 본문, 본문 해시와 parser 버전 | `rss_item_id` 기본키 |
 | `article_analyses` | 분석기 버전별 현재 분석 결과 | `rss_item_id` 기본키 |
 | `article_entities` | 기사별 종목 entity와 티커·신뢰도 | `(rss_item_id, entity_type, entity_name)` 기본키 |
 | `article_entity_extractions` | 추출기 버전·본문 해시 기준 추출 이력 | `rss_item_id` 기본키 |
@@ -389,7 +389,7 @@ uv run ruff check modules/news
 
 ## Current Scope
 
-`collect-articles`(언론사 페이지 본문 직접 수집)는 언론사 이용약관 위배로 **비활성화**되어 실행 시 안내 메시지와 함께 종료됩니다. 네이버 검색 클라이언트는 독립 공개 API로 구현됐지만 CLI, PostgreSQL 저장, 백필 체크포인트에는 아직 연결되지 않았습니다. 네이버 API는 기사 전문을 제공하지 않으므로 이후 분석 입력은 제목과 요약을 기준으로 구성합니다.
+`collect-articles`(언론사 페이지 본문 직접 수집) 명령과 parser 코드는 레거시 회귀 범위로 남아 있지만, 언론사 이용약관 리스크 때문에 정규 운영 경로에서는 사용하지 않습니다. 네이버 검색 클라이언트는 독립 공개 API로 구현됐지만 CLI, PostgreSQL 저장, 백필 체크포인트에는 아직 연결되지 않았습니다. 네이버 API는 기사 전문을 제공하지 않으므로 이후 분석 입력은 제목과 요약을 기준으로 구성합니다.
 
 `analyze` 단계는 `basic-stats-v1` 분석기로 문자 수와 공백 기준 단어 수만 계산합니다. `extract-entities` 단계는 종목 마스터와 소규모 별칭 시드(삼전, 하이닉스, 네이버)로 종목 entity만 추출하며, 기업·산업·키워드 entity는 아직 추출하지 않습니다. 급등 이벤트의 계약·KIS/Toss 정규화·판정·저장은 각각 `modules.domain`, `modules.adapters`, `modules.orchestration`, `modules.storage`가 소유하며, 이 모듈은 해당 `(종목, 급등일)`을 뉴스 검색과 사례 라이브러리에 연결합니다. 이벤트 분류는 16종 taxonomy와 `ArticleEvent` DTO까지 구현되어 있고 LLM 호출 파이프라인은 미구현입니다. 전면적인 별칭 사전 구축, 과거 뉴스 백필, 임베딩·Vector Store, 점수화, 백테스트, 대시보드는 아래 로드맵의 대상입니다.
 
@@ -401,7 +401,7 @@ uv run ruff check modules/news
 
 | 단계 | 범위 | 상태 |
 |------|------|:----:|
-| **초기** (2~4주) | RSS 수집·본문 수집·Supabase PostgreSQL 저장 | ✅ 구현됨 |
+| **초기** (2~4주) | RSS 수집·Supabase PostgreSQL 저장 | ✅ 구현됨 |
 | | KIS 종목 마스터 자동 갱신 | ✅ 구현됨 |
 | | 종목 마스터 기반 entity 추출, 이벤트 taxonomy·분류 DTO | ✅ 구현됨 |
 | | 공통 시장 계층의 KIS/Toss 일봉 기반 과거 급등 이벤트 추출 | ✅ 구현됨 |

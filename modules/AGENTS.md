@@ -10,17 +10,21 @@
 > `research/tokenizers/data.py`.
 >
 > **Already built:** `modules/brokers/kis/` (full KIS SDK moved out of the former
-> top-level `kis/`), `modules/domain/` (`CandleBar`, `CandleSplit`, adapter
-> Protocols), `modules/storage/repositories.py` + `modules/orchestration/query.py`
-> (warehouse **reads** — research and dashboard now read through these, fixing the
-> inverted dependency), and `modules/adapters/brokers/kis/`
-> (`market_data.py`, `mapper.py`, `capabilities.py` — part of the KIS chart SDK
-> call moved into the adapter).
+> top-level `kis/`), `modules/brokers/kiwoom/`, `modules/brokers/toss/`,
+> `modules/brokers/krx/`, shared `modules/domain/` contracts for market data,
+> calendar, surge events, and news intelligence, `modules/storage/repositories.py`
+> + `modules/orchestration/query.py` (warehouse **reads** — research and dashboard
+> now read through these, fixing the inverted dependency), broker adapters for KIS,
+> Kiwoom, and Toss, `modules/orchestration/surge_events.py`, and the
+> News Intelligence orchestration/storage path under
+> `modules/orchestration/news_intelligence.py` and
+> `modules/storage/news_intelligence/`.
 >
-> **Not built yet:** `orchestration/{collection,jobs,registry,types}.py`,
-> `adapters/brokers/kis/{symbols,price}.py`, warehouse writers, app DB logging, and
-> all of `modules/config/`. Where the tree below does not yet exist, treat this
-> file as the spec to build against — do not invent a different shape.
+> **Not built yet:** generic market-data `orchestration/{collection,jobs,registry,types}.py`,
+> `adapters/brokers/kis/{symbols,price}.py`, a generic market-data warehouse writer,
+> app DB logging, and all of `modules/config/`. Where the tree below does not yet
+> exist, treat this file as the spec to build against — do not invent a different
+> shape.
 
 ## Purpose
 `modules/` holds the broker-agnostic core of FinLabs as a clean, layered
@@ -44,8 +48,9 @@ Legend: `✓` exists today, `(planned)` not built yet.
 modules/
   brokers/                     # Pure SDKs — one per brokerage, zero FinLabs deps
     kis/                       # ✓ KIS Open API SDK (moved out of former top-level kis/)
-    kiwoom/                    # (planned)
-    toss/                      # (planned)
+    kiwoom/                    # ✓ Kiwoom REST/WebSocket SDK
+    toss/                      # ✓ Toss read-only market-data SDK
+    krx/                       # ✓ KRX index daily-price SDK
 
   adapters/
     brokers/                   # SDK ↔ FinLabs canonical model translators
@@ -55,11 +60,18 @@ modules/
         capabilities.py        # ✓ declares what this broker supports
         symbols.py             # (planned) KIS symbol master → canonical symbols
         price.py               # (planned) KIS quote → canonical price
-      kiwoom/                  # (planned)
-      toss/                    # (planned)
+      kiwoom/
+        market_data.py         # ✓ Kiwoom chart SDK → News Intelligence candles
+        news_intelligence.py   # ✓ Kiwoom chart normalization helpers
+        reaction_data.py       # ✓ Kiwoom reaction-label source data
+      toss/
+        calendar.py            # ✓ Toss calendar → canonical MarketDay
+        market_data.py         # ✓ Toss candles → surge DailyPriceBar
 
   orchestration/               # FinLabs use cases (the "verbs")
     query.py                   # ✓ warehouse reads (broker-agnostic)
+    surge_events.py            # ✓ broker-neutral surge extraction + storage handoff
+    news_intelligence.py       # ✓ catalog/search/chart/annotation/dataset/export use cases
     collection.py              # (planned) collect-and-store OHLCV / minutes / symbols
     jobs.py                    # (planned) job submit / run / status (in-memory queue)
     registry.py                # (planned) broker name -> adapter resolution
@@ -67,11 +79,16 @@ modules/
 
   domain/                      # Pure data contracts, no I/O
     market_data.py             # ✓ CandleBar, CandleSplit
+    market_calendar.py         # ✓ MarketDay, TradingSession
+    surge.py                   # ✓ DailyPriceBar, SurgeEvent
+    news_intelligence.py       # ✓ News Intelligence DTOs and point-in-time contracts
     broker.py                  # ✓ BrokerCapabilities, MarketDataAdapter/SymbolAdapter Protocols
     symbols.py                 # (planned) CanonicalSymbol, Market
 
   storage/                     # Persistence
-    repositories.py            # ✓ the single source of warehouse-read SQL
+    repositories.py            # ✓ the single source of market warehouse-read SQL
+    surge_events.py            # ✓ DuckDB surge-event persistence
+    news_intelligence/         # ✓ PostgreSQL repositories, schema, catalog, exports, writer
     warehouse.py               # ✓ warehouse path helper; writer still planned
     app_db.py                  # (planned) SQLite app.db: api_logs, ingest_runs
 
@@ -214,21 +231,21 @@ only call SDKs directly where appropriate or route through `modules.orchestratio
 ## For AI Agents
 
 ### Working In This Directory
-- Adding a new brokerage = add `brokers/<name>/` (pure SDK) + `adapters/brokers/<name>/` (translator) + register it in `orchestration/registry.py`. Touch nothing else.
+- Adding a new brokerage = add `brokers/<name>/` (pure SDK) + `adapters/brokers/<name>/` (translator). Register it in `orchestration/registry.py` once the generic registry exists; until then keep orchestration wiring explicit and scoped.
 - Broker-specific knowledge (market codes, interval strings, auth quirks) lives **only** in `adapters/brokers/<name>/`. If you find a `if broker == "kis"` branch in `orchestration`, that is a smell — push it into the adapter or `capabilities.py`.
 - All cross-layer data crossing must be a `domain` canonical model, never a broker-native SDK model. Adapters are the only place SDK models are seen.
 - Warehouse SQL goes in `storage/repositories.py` and nowhere else. Reads from CLI, dashboard, and research all funnel through `orchestration/query.py`.
-- Orchestration functions return frozen result DTOs from `orchestration/types.py` (e.g. `CollectionResult`), matching the existing `@dataclass(frozen=True)` convention.
+- When generic collection orchestration is added, return frozen result DTOs from `orchestration/types.py` (e.g. `CollectionResult`), matching the existing `@dataclass(frozen=True)` convention.
 
 ### Testing Requirements
 - Each forbidden edge in the table above must have an AST-based assertion in `tests/architecture/test_boundaries.py`. Add the rule in the same PR that creates the layer.
 - Adapters are tested with mock SDK responses → assert canonical model output. No network.
-- Orchestration is tested with a fake adapter (injected via `registry`) + temp DuckDB/SQLite, asserting save + ingest-log + result DTO.
-- The `asyncio.run` / single-writer constraints from `orchestration/jobs.py` still hold: collection runs on the worker thread, never inside a request coroutine.
+- Generic collection orchestration should be tested with a fake adapter (injected via the planned `registry`) + temp DuckDB/SQLite, asserting save + ingest-log + result DTO.
+- When `orchestration/jobs.py` is introduced, keep collection work off request coroutines; the worker/job boundary should own any `asyncio.run` or single-writer constraints.
 
 ### Common Patterns
-- **Dependency injection over imports**: orchestration receives an adapter from `registry`, and `jobs.py` receives a `runner` + `error_sanitizer` callable.
-- Ingest flow stays: `start_ingest_run` → body → `record_api_log` → `finish_ingest_run(status=...)`.
+- **Dependency injection over imports**: generic market-data orchestration should receive an adapter from the planned `registry`, and `jobs.py` should receive a `runner` + `error_sanitizer` callable when that layer is added.
+- Planned market-data ingest flow stays: `start_ingest_run` → body → `record_api_log` → `finish_ingest_run(status=...)`.
 - Capabilities, not exceptions, gate unsupported requests (e.g. KIS supports overseas only) — check `adapter.capabilities` before dispatch.
 
 ## Naming
