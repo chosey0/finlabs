@@ -15,6 +15,7 @@ import {
 } from "./chartData";
 import type { ChartSelection } from "./chartSelection";
 import { selectWindow } from "./chartSelection";
+import type { ChartSetupControls } from "./chartSetup";
 import type { ReactionBand } from "./reactionHighlight";
 import { reactionWindowEnd } from "./reactionWindow";
 
@@ -26,15 +27,7 @@ interface Deps {
   readonly setBusy: (busy: boolean) => void;
 }
 
-export interface ChartWorkspace {
-  readonly startAt: string;
-  readonly setStartAt: (value: string) => void;
-  readonly endAt: string;
-  readonly setEndAt: (value: string) => void;
-  readonly chartType: "minute" | "daily";
-  readonly setChartType: (value: "minute" | "daily") => void;
-  readonly intervalMinutes: number;
-  readonly setIntervalMinutes: (value: number) => void;
+export interface ChartWorkspace extends ChartSetupControls {
   readonly chart: ChartResponse | null;
   readonly selection: ChartSelection | null;
   readonly chartCandles: ReturnType<typeof toChartCandles>;

@@ -135,6 +135,31 @@ h2 { margin: 0; }
 .sink-statuses span { padding: 6px 9px; color: #dbe4f2; background: #111a2a; border-radius: 7px; font-size: 12px; }
 .status { display: flex; min-height: 36px; align-items: center; margin: 0; padding: 8px 14px; color: var(--muted); background: rgba(8, 13, 23, .72); border: 1px solid var(--line); border-radius: 9px; font-size: 13px; }
 
+/* ── Workbench nav (hash tabs) ─────────────────────────────── */
+.workbench-nav { display: flex; gap: 6px; }
+.nav-link { padding: 6px 13px; color: var(--muted); background: rgba(8, 13, 23, .6); border: 1px solid #22304a; border-radius: 999px; font-size: 12px; font-weight: 700; text-decoration: none; white-space: nowrap; transition: color .15s ease, border-color .15s ease, background .15s ease; }
+.nav-link:hover { color: var(--text); border-color: #36486a; }
+.nav-link.active { color: #07110d; background: var(--mint); border-color: var(--mint); }
+
+/* ── Security basket (distribution workbench) ──────────────── */
+.bridge.basket { flex: 3 1 720px; align-items: center; }
+.basket-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.basket-chip { display: inline-flex; align-items: center; gap: 2px; background: #111a2a; border: 1px solid #28364d; border-radius: 999px; overflow: hidden; }
+.basket-chip.active { border-color: var(--mint); box-shadow: inset 0 0 0 1px var(--mint); }
+.basket-chip-select { display: inline-flex; align-items: center; gap: 7px; padding: 6px 4px 6px 11px; color: #dbe4f2; background: none; border: 0; border-radius: 0; font-weight: 600; }
+.basket-chip-select strong { font-size: 13px; }
+.basket-symbol { color: #8290a7; font-size: 11px; font-variant-numeric: tabular-nums; }
+.basket-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.basket-chip-remove { padding: 6px 11px 6px 6px; color: #8290a7; background: none; border: 0; border-radius: 0; font-size: 15px; font-weight: 700; line-height: 1; }
+.basket-chip-remove:hover { color: #fca5a5; }
+
+/* ── Distribution pane (Plotly) ────────────────────────────── */
+.chart-hint { margin: 0 0 10px; color: var(--dim); font-size: 12px; }
+.range-reset { padding: 6px 12px; font-size: 12px; color: #dbe4f2; background: #202c40; border: 1px solid #33445f; }
+.range-reset:hover:not(:disabled) { background: #26344c; border-color: #4a5d7a; }
+.dist-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.dist-plot { width: 100%; min-height: 220px; background: var(--bg-inset); border: 1px solid #202b3d; border-radius: 12px; overflow: hidden; }
+
 /* ── Responsive ────────────────────────────────────────────── */
 @media (max-width: 900px) {
   html, body, #root { height: auto; min-height: 100%; }

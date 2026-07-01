@@ -1,10 +1,10 @@
 import type { CatalogItemResponse } from "../../shared/api";
-import type { ChartWorkspace } from "./useChart";
+import type { ChartSetupControls } from "./chartSetup";
 
 const MINUTE_INTERVALS = [1, 3, 5, 10, 15, 30, 45, 60] as const;
 
 interface ChartSetupBridgeProps {
-  readonly chart: ChartWorkspace;
+  readonly chart: ChartSetupControls;
   readonly security: CatalogItemResponse | null;
   readonly busy: boolean;
   readonly onLoadChart: () => void;
