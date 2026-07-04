@@ -19,8 +19,8 @@ from textual.widgets import (
 )
 from textual.worker import Worker
 
-from modules.brokers.kis import KisRealtimeError
-from modules.brokers.kiwoom import KiwoomRealtimeError
+from brokers.kis import KisRealtimeError
+from brokers.kiwoom import KiwoomRealtimeError
 
 from finlabs_cli.app.realtime_manager import RealtimeManager
 from finlabs_cli.app.token_store import JsonTokenStore

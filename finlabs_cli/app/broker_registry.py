@@ -6,7 +6,7 @@ from finlabs_cli.models.account import Account
 
 def build_client(account: Account, token_store: JsonTokenStore):
     if account.broker == "kis":
-        from modules.brokers.kis import Credentials, KisClient
+        from brokers.kis import Credentials, KisClient
 
         return KisClient(
             credentials=Credentials(
@@ -18,7 +18,7 @@ def build_client(account: Account, token_store: JsonTokenStore):
             token_cache=token_store.namespaced(account.alias),
         )
     if account.broker == "kiwoom":
-        from modules.brokers.kiwoom import Credentials, KiwoomClient
+        from brokers.kiwoom import Credentials, KiwoomClient
 
         return KiwoomClient(
             credentials=Credentials(
@@ -29,7 +29,7 @@ def build_client(account: Account, token_store: JsonTokenStore):
             token_cache=token_store.namespaced(account.alias),
         )
     if account.broker == "toss":
-        from modules.brokers.toss import Credentials, TossClient
+        from brokers.toss import Credentials, TossClient
 
         return TossClient(
             credentials=Credentials(
@@ -44,7 +44,7 @@ def build_client(account: Account, token_store: JsonTokenStore):
 async def revoke_token(account: Account, token_store: JsonTokenStore) -> str:
     namespaced = token_store.namespaced(account.alias)
     if account.broker == "kiwoom":
-        from modules.brokers.kiwoom import revoke_access_token_async
+        from brokers.kiwoom import revoke_access_token_async
 
         token = _first_access_token(namespaced)
         if not token:

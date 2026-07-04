@@ -6,7 +6,7 @@ from decimal import Decimal
 from types import SimpleNamespace
 
 from modules.adapters.brokers.kiwoom.reaction_data import KiwoomReactionMarketData
-from modules.brokers.kiwoom.models.ohlcv import ChartBar
+from brokers.kiwoom.models.ohlcv import ChartBar
 from modules.domain.news_intelligence import KST, approved_kiwoom_benchmark
 from modules.news.intelligence.processors.reaction import preview_reaction
 

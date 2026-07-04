@@ -84,18 +84,12 @@ wheels = [
 ]
 
 [[package]]
-name = "finlabs-kis"
+name = "finlabs-brokers"
 version = "0.1.0"
-source = { editable = "../brokers/kis" }
+source = { git = "https://github.com/chosey0/broker-modules.git#4a7150341295d268a346ce69566103018664980c" }
 dependencies = [
     { name = "httpx" },
     { name = "websockets" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "httpx", specifier = ">=0.27.0" },
-    { name = "websockets", specifier = ">=13.0" },
 ]
 
 [[package]]
@@ -105,7 +99,7 @@ source = { editable = "." }
 dependencies = [
     { name = "duckdb" },
     { name = "feedparser" },
-    { name = "finlabs-kis" },
+    { name = "finlabs-brokers" },
     { name = "httpx" },
     { name = "rich" },
     { name = "typer" },
@@ -115,7 +109,7 @@ dependencies = [
 requires-dist = [
     { name = "duckdb", specifier = ">=1.1.0" },
     { name = "feedparser", specifier = ">=6.0.12" },
-    { name = "finlabs-kis", editable = "../brokers/kis" },
+    { name = "finlabs-brokers", git = "https://github.com/chosey0/broker-modules.git" },
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "rich", specifier = ">=13.0.0" },
     { name = "typer", specifier = ">=0.12.0" },

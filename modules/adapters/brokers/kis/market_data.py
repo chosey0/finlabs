@@ -7,13 +7,13 @@ and transport layers decide whether and where fetched bars are stored.
 
 from __future__ import annotations
 
-from modules.brokers.kis import (
+from brokers.kis import (
     KisClient,
     OhlcvBar,
     OVERSEAS_MARKET_CODES,
     OverseasMinuteBar,
 )
-from modules.brokers.kis.parsers import parse_date
+from brokers.kis.parsers import parse_date
 
 
 def normalize_period(period: str) -> str:

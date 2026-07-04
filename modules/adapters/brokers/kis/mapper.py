@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
 
-from modules.brokers.kis import OhlcvBar, OverseasMinuteBar
+from brokers.kis import OhlcvBar, OverseasMinuteBar
 from modules.domain.market_data import CandleBar
 from modules.domain.surge import DailyPriceBar
 

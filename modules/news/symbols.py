@@ -6,7 +6,7 @@ from collections.abc import Callable, Iterable
 from datetime import datetime
 
 import psycopg
-from modules.brokers.kis import SymbolRecord, download_symbol_master, normalize_market
+from brokers.kis import SymbolRecord, download_symbol_master, normalize_market
 
 from .db.sql import replace_symbol_snapshots
 from .rss.models import SEOUL_TIMEZONE

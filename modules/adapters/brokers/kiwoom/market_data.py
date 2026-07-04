@@ -5,9 +5,9 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 
-from modules.brokers.kiwoom.client import KiwoomClient
-from modules.brokers.kiwoom.models.ohlcv import ChartBar
-from modules.brokers.kiwoom.exceptions import KiwoomError
+from brokers.kiwoom.client import KiwoomClient
+from brokers.kiwoom.models.ohlcv import ChartBar
+from brokers.kiwoom.exceptions import KiwoomError
 from modules.domain.news_intelligence import IntelligenceCandle, MarketDataProviderError
 
 from .news_intelligence import normalize_chart_candles

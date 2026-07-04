@@ -16,7 +16,7 @@ from modules.adapters.brokers.kis.market_data import (
     normalize_period,
     period_to_interval,
 )
-from modules.brokers.kis import OhlcvBar, OverseasMinuteBar
+from brokers.kis import OhlcvBar, OverseasMinuteBar
 from modules.domain.market_data import CandleBar
 
 

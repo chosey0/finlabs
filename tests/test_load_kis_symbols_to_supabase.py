@@ -1,4 +1,4 @@
-from modules.brokers.kis import SymbolRecord
+from brokers.kis import SymbolRecord
 from scripts.load_kis_symbols_to_supabase import SYMBOL_MARKETS, collect_rows
 
 

@@ -30,7 +30,7 @@ from datetime import date
 from modules.adapters.brokers.kiwoom.market_data import KiwoomMinuteMarketData
 from modules.adapters.brokers.kiwoom.reaction_data import KiwoomReactionMarketData
 from modules.adapters.news.naver import NaverNewsSearchAdapter
-from modules.brokers.kiwoom.client import KiwoomClient
+from brokers.kiwoom.client import KiwoomClient
 from modules.domain.news_intelligence import CatalogSnapshot
 from modules.news.intelligence.processors.session_grid import weekday_trading_sessions
 from modules.news.naver import NaverNewsClient

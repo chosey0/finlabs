@@ -19,7 +19,7 @@ from collections.abc import Iterable
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from modules.brokers.kis import (
+from brokers.kis import (
     SymbolRecord,
     download_symbol_master,
     normalize_market,

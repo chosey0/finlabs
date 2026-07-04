@@ -9,9 +9,10 @@
 > storage/service code and the warehouse-read logic that used to live in
 > `research/tokenizers/data.py`.
 >
-> **Already built:** `modules/brokers/kis/` (full KIS SDK moved out of the former
-> top-level `kis/`), `modules/brokers/kiwoom/`, `modules/brokers/toss/`,
-> `modules/brokers/krx/`, shared `modules/domain/` contracts for market data,
+> **Already built:** broker SDKs for KIS, Kiwoom, Toss, and KRX now live in the
+> sibling `broker-modules` repository and are consumed here through the
+> `finlabs-brokers` package under the `brokers.*` import namespace.
+> This repository keeps shared `modules/domain/` contracts for market data,
 > calendar, surge events, and news intelligence, `modules/storage/repositories.py`
 > + `modules/orchestration/query.py` (warehouse **reads** — research and dashboard
 > now read through these, fixing the inverted dependency), broker adapters for KIS,
@@ -46,11 +47,9 @@ Legend: `✓` exists today, `(planned)` not built yet.
 
 ```
 modules/
-  brokers/                     # Pure SDKs — one per brokerage, zero FinLabs deps
-    kis/                       # ✓ KIS Open API SDK (moved out of former top-level kis/)
-    kiwoom/                    # ✓ Kiwoom REST/WebSocket SDK
-    toss/                      # ✓ Toss read-only market-data SDK
-    krx/                       # ✓ KRX index daily-price SDK
+  # Broker SDKs are external: finlabs-brokers dependency from broker-modules.
+  # They are still imported as brokers.{kis,kiwoom,toss,krx}.
+
 
   adapters/
     brokers/                   # SDK ↔ FinLabs canonical model translators
@@ -105,7 +104,7 @@ modules/
 
 ## Layer Roles
 
-### 1. `modules/brokers/*` — pure SDKs
+### 1. `brokers.*` — pure SDKs from `finlabs-brokers`
 Each subpackage is a standalone client for one brokerage.
 
 **Owns:** API calls, authentication, endpoint definitions, request/response
@@ -187,7 +186,7 @@ modules.orchestration
         ↓
 modules.adapters.brokers.{broker}        and  modules.storage
         ↓
-modules.brokers.{broker}
+brokers.{broker}
 
 modules.domain  ← importable by every layer (depends on nothing)
 modules.config  ← used by orchestration (and below only via injection)
@@ -197,9 +196,9 @@ Forbidden edges (enforce with `tests/architecture/test_boundaries.py`):
 
 | Forbidden | Why |
 |-----------|-----|
-| `modules.brokers`  → import `adapters` | SDK must stay standalone |
-| `modules.brokers`  → import `orchestration` | SDK must stay standalone |
-| `modules.brokers`  → import `storage` / `domain` | SDK owns its own models |
+| `brokers`  → import `adapters` | SDK must stay standalone |
+| `brokers`  → import `orchestration` | SDK must stay standalone |
+| `brokers`  → import `storage` / `domain` | SDK owns its own models |
 | `modules.adapters` → import `storage` | adapters translate, never persist |
 | `modules.adapters` → import `orchestration` | wrong direction |
 | `modules.storage`  → import `brokers` / `adapters` | storage knows only `domain` |
@@ -212,7 +211,7 @@ in SDKs.
 
 | Current location | Splits into | Status |
 |------------------|-------------|--------|
-| `kis/` (top-level SDK) | `modules/brokers/kis/` | ✅ done |
+| `kis/` (top-level SDK) | `broker-modules` / `finlabs-brokers` | ✅ done |
 | legacy app chart service | adapter call + mapping → `adapters/brokers/kis/market_data.py` + `mapper.py`; orchestration (select/save/log/result) → `orchestration/collection.py` | 🟡 partial — adapter mapping exists; save/log + `collection.py` still needed |
 | legacy app price/symbol services | KIS-specific half → `adapters/brokers/kis/`; save/log half → `orchestration/` | ⬜ not started |
 | legacy app query service | `orchestration/query.py` (broker-agnostic) | ✅ done — reads go through `modules.orchestration.query` |
@@ -231,7 +230,7 @@ only call SDKs directly where appropriate or route through `modules.orchestratio
 ## For AI Agents
 
 ### Working In This Directory
-- Adding a new brokerage = add `brokers/<name>/` (pure SDK) + `adapters/brokers/<name>/` (translator). Register it in `orchestration/registry.py` once the generic registry exists; until then keep orchestration wiring explicit and scoped.
+- Adding a new brokerage = add the pure SDK in the sibling `broker-modules` repository + `adapters/brokers/<name>/` in this repository. Register it in `orchestration/registry.py` once the generic registry exists; until then keep orchestration wiring explicit and scoped.
 - Broker-specific knowledge (market codes, interval strings, auth quirks) lives **only** in `adapters/brokers/<name>/`. If you find a `if broker == "kis"` branch in `orchestration`, that is a smell — push it into the adapter or `capabilities.py`.
 - All cross-layer data crossing must be a `domain` canonical model, never a broker-native SDK model. Adapters are the only place SDK models are seen.
 - Warehouse SQL goes in `storage/repositories.py` and nowhere else. Reads from CLI, dashboard, and research all funnel through `orchestration/query.py`.

@@ -10,8 +10,8 @@ from rich.progress import BarColumn, Progress, ProgressColumn, SpinnerColumn, Ta
 from rich.table import Table
 from rich.text import Text
 
-from modules.brokers.kis import KisApiError
-from modules.brokers.kiwoom import KiwoomApiError
+from brokers.kis import KisApiError
+from brokers.kiwoom import KiwoomApiError
 
 from finlabs_cli.app.account_store import AccountStore
 from finlabs_cli.app.chart_runner import fetch_domestic_chart, fetch_overseas_chart

@@ -7,7 +7,7 @@ import psycopg
 from fastapi.testclient import TestClient
 
 from finlabs_intelligence.api.app import app
-from modules.brokers.kiwoom.models.ohlcv import ChartBar
+from brokers.kiwoom.models.ohlcv import ChartBar
 from modules.adapters.brokers.kiwoom.news_intelligence import normalize_chart_candles
 from modules.domain.news_intelligence import (
     KST,

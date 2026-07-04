@@ -12,7 +12,7 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
-from modules.brokers.kiwoom.models.ohlcv import ChartBar
+from brokers.kiwoom.models.ohlcv import ChartBar
 from modules.domain.news_intelligence import KST, IntelligenceCandle
 
 _KIWOOM_MINUTE_FORMAT = "%Y-%m-%d %H:%M:%S"

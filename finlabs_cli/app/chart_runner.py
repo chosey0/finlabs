@@ -4,7 +4,7 @@ from modules.adapters.brokers.kis.market_data import (
     fetch_ohlcv_history,
     fetch_overseas_minutes,
 )
-from modules.brokers.kis.overseas.exchange import normalize_overseas_exchange
+from brokers.kis.overseas.exchange import normalize_overseas_exchange
 
 from finlabs_cli.app.broker_registry import build_client
 from finlabs_cli.app.token_store import JsonTokenStore

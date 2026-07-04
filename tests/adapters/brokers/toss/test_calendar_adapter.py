@@ -1,4 +1,4 @@
-"""Fixture-based tests for the Toss calendar → canonical model adapter."""
+"""Fixture-based tests for the Toss calendar -> canonical model adapter."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from modules.adapters.brokers.toss import (
     kr_calendar_to_market_days,
     us_calendar_to_market_days,
 )
-from modules.brokers.toss.parsers import (
+from brokers.toss.parsers import (
     parse_kr_market_calendar,
     parse_us_market_calendar,
 )

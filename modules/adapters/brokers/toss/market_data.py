@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from modules.brokers.toss import Candle
+from brokers.toss import Candle
 from modules.domain.surge import DailyPriceBar
 
 

@@ -11,7 +11,7 @@ from finlabs_intelligence.api.app import app
 from modules.adapters.brokers.kiwoom.market_data import KiwoomMinuteMarketData
 from modules.adapters.brokers.kiwoom.reaction_data import KiwoomReactionMarketData
 from modules.adapters.news.naver import NaverNewsSearchAdapter
-from modules.brokers.kiwoom.client import KiwoomClient
+from brokers.kiwoom.client import KiwoomClient
 from modules.news.naver import NaverNewsClient
 from modules.orchestration.news_intelligence import NewsIntelligenceServices
 from modules.storage.news_intelligence.catalog import load_catalog_snapshot

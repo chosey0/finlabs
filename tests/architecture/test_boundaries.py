@@ -56,13 +56,16 @@ def test_runtime_code_does_not_import_removed_cli_package() -> None:
 
 
 def test_modules_broker_sdks_stay_standalone() -> None:
+    assert not (REPO_ROOT / "brokers").exists(), (
+        "broker SDK source now lives in the sibling broker-modules repository"
+    )
     forbidden_prefixes = (
         "modules.adapters",
         "modules.orchestration",
         "modules.storage",
         "modules.domain",
     )
-    for path in _python_files("modules/brokers"):
+    for path in _python_files("brokers"):
         modules = _imported_modules(str(path.relative_to(REPO_ROOT)))
         assert not any(m.startswith(forbidden_prefixes) for m in modules), (
             f"{path} must stay SDK-pure and not import adapters/orchestration/storage/domain"
@@ -80,7 +83,7 @@ def test_modules_adapters_do_not_persist_or_orchestrate() -> None:
 
 def test_modules_storage_does_not_depend_on_higher_layers() -> None:
     forbidden_prefixes = (
-        "modules.brokers",
+        "brokers",
         "modules.adapters",
         "modules.orchestration",
     )
@@ -103,7 +106,7 @@ def test_news_does_not_own_market_surge_extraction() -> None:
 
 def test_legacy_kis_package_is_removed() -> None:
     assert not (REPO_ROOT / "kis").exists(), (
-        "top-level kis package was removed; import modules.brokers.kis directly"
+        "top-level kis package was removed; import brokers.kis directly"
     )
 
 
@@ -114,7 +117,7 @@ def test_news_intelligence_processors_are_io_free() -> None:
         "fastapi",
         "httpx",
         "modules.adapters",
-        "modules.brokers",
+        "brokers",
         "modules.orchestration",
         "modules.storage",
         "pathlib",

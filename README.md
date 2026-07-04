@@ -11,7 +11,7 @@
 
 증권사 Open API 시장 데이터와 RSS·네이버 뉴스를 **수집·정규화·저장·조회·분석**하는 Python 프로젝트입니다.
 
-[통합 계획서](./PLAN.md) · [FinLabs CLI](./finlabs_cli/README.md) · [KIS SDK](./modules/brokers/kis/README.md) · [Toss SDK](./modules/brokers/toss/README.md) · [News Pipeline](./modules/news/README.md) · [News Intelligence 설계](./finlabs_intelligence/README.md) · [Research](./research/README.md) · [Scripts](./scripts/README.md)
+[통합 계획서](./PLAN.md) · [FinLabs CLI](./finlabs_cli/README.md) · [Broker SDK](https://github.com/chosey0/broker-modules) · [News Pipeline](./modules/news/README.md) · [News Intelligence 설계](./finlabs_intelligence/README.md) · [Research](./research/README.md) · [Scripts](./scripts/README.md)
 
 </div>
 
@@ -33,10 +33,7 @@ FinLabs는 증권사 Open API를 독립적인 Python SDK로 구현하고, 그 �
 
 | | 영역 | 상태 | 설명 |
 |---|------|:----:|------|
-| **[Broker SDK]** | [KIS SDK](./modules/brokers/kis/README.md) | 구현 중 | 한국투자증권 국내·해외 REST 조회, 해외·국내 WebSocket 실시간 시세, 인증, 엔드포인트, 파서, 모델 |
-| **[Broker SDK]** | [Kiwoom SDK](./modules/brokers/kiwoom/README.md) | 구현 중 | 키움증권 OAuth, 국내주식 차트 REST 조회, 국내 실시간 체결·호가 WebSocket |
-| **[Broker SDK]** | [Toss SDK](./modules/brokers/toss/README.md) | 구현됨 | 토스증권 현재가·캔들·종목정보와 국내·해외 장 운영 정보 조회, calendar adapter |
-| **[Broker SDK]** | [KRX SDK](./modules/brokers/krx/README.md) | 초기 구현 | KRX Data Marketplace 지수 일별 가격 조회 |
+| **[Broker SDK]** | [broker-modules](https://github.com/chosey0/broker-modules) | 구현 중 | KIS, Kiwoom, Toss, KRX SDK. FinLabs와 분리된 `finlabs-brokers` 패키지로 재사용 |
 | **[Market CLI]** | [FinLabs CLI](./finlabs_cli/README.md) | 구현 중 | 계좌 등록, 토큰 관리, KIS/Kiwoom 차트 조회, 실시간 세션 |
 | **[Core]** | `modules/` 계층형 코어 | 이전 중 | broker adapter, canonical domain, orchestration, warehouse read repository |
 | **[News]** | [News Pipeline](./modules/news/README.md) | 초기 구현 | RSS 정규화, 멱등 저장, 기초 통계 분석, Rich 라이브 모니터, systemd 실행과 재사용 가능한 네이버 키워드·날짜 검색 API. 본문 직접 수집은 언론사 약관 리스크로 정규 운영에서 제외 |
@@ -102,14 +99,14 @@ modules.orchestration                 use cases and warehouse queries
 modules.adapters.brokers.{broker}     SDK → canonical model
         │
         ▼
-modules.brokers.{broker}              standalone broker SDK
+brokers.{broker}              standalone broker SDK
 
 modules.domain                        pure shared contracts
 ```
 
 | 계층 | 위치 | 책임 |
 |------|------|------|
-| Broker SDK | `modules/brokers/{broker}/` | 인증, API 요청, 응답 파싱과 broker-native 모델 |
+| Broker SDK | `finlabs-brokers` dependency (`brokers.{broker}`) | 인증, API 요청, 응답 파싱과 broker-native 모델 |
 | Broker adapter | `modules/adapters/brokers/{broker}/` | SDK 모델을 canonical domain 모델로 변환 |
 | Orchestration | `modules/orchestration/` | adapter·storage·로깅을 하나의 use case로 조율 |
 | Domain | `modules/domain/` | I/O가 없는 canonical dataclass와 Protocol |
@@ -146,8 +143,7 @@ Monitoring Core
 | 영역 | 단일 원본 |
 |---|---|
 | 뉴스 수집·파싱·분석 | [modules/news/PLAN.md](./modules/news/PLAN.md) |
-| KIS WebSocket 실시간 수집 | [modules/brokers/kis/PLAN.md](./modules/brokers/kis/PLAN.md) |
-| Toss 장 운영 정보 | [modules/brokers/toss/PLAN.md](./modules/brokers/toss/PLAN.md) |
+| Broker SDK | [broker-modules](https://github.com/chosey0/broker-modules) |
 | PostgreSQL·TimescaleDB·Parquet·백업 | [modules/storage/PLAN.md](./modules/storage/PLAN.md) |
 | Redis Streams·워커·구독·관측성 | [modules/orchestration/PLAN.md](./modules/orchestration/PLAN.md) |
 
@@ -158,10 +154,6 @@ Monitoring Core
 ```text
 finlabs/
 ├── modules/
-│   ├── brokers/kis/            한국투자증권 국내·해외주식 SDK
-│   ├── brokers/kiwoom/         키움증권 국내주식 차트·실시간 SDK
-│   ├── brokers/toss/           토스증권 국내·미국주식 시세 SDK
-│   ├── brokers/krx/            KRX 지수 데이터 SDK
 │   ├── adapters/brokers/kis/   KIS SDK → canonical 모델 adapter
 │   ├── adapters/brokers/toss/  Toss 장 운영 정보 → canonical calendar adapter
 │   ├── orchestration/          use case와 warehouse query

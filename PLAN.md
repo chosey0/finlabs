@@ -21,8 +21,7 @@ FinLabs의 뉴스 수집, 실시간 시장 데이터, 장 운영 정보, 저장�
 | 영역 | 단일 원본 |
 |---|---|
 | 뉴스 수집·파싱·분석 | [modules/news/PLAN.md](modules/news/PLAN.md) |
-| KIS WebSocket 실시간 수집 | [modules/brokers/kis/PLAN.md](modules/brokers/kis/PLAN.md) |
-| Toss 장 운영 정보 | [modules/brokers/toss/PLAN.md](modules/brokers/toss/PLAN.md) |
+| Broker SDK | [broker-modules](https://github.com/chosey0/broker-modules) |
 | PostgreSQL·TimescaleDB·Parquet·백업 | [modules/storage/PLAN.md](modules/storage/PLAN.md) |
 | Redis Streams·워커·구독·관측성 | [modules/orchestration/PLAN.md](modules/orchestration/PLAN.md) |
 

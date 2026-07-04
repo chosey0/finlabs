@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from modules.brokers.kis import KisRealtimeError
+from brokers.kis import KisRealtimeError
 
 from finlabs_cli.app.broker_registry import build_client
 from finlabs_cli.app.token_store import JsonTokenStore

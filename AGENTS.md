@@ -2,7 +2,7 @@
 
 ## Project Summary
 
-`FinLabs` is a local-first Python project for brokerage Open API SDKs, market data collection, and analysis/dashboard tooling. The current implementation focuses on Korea Investment & Securities (KIS) Open API data collection, with a second broker (Kiwoom) planned. The codebase is mid-migration toward a layered, broker-agnostic core under `modules/` (see [modules/AGENTS.md](modules/AGENTS.md)).
+`FinLabs` is a local-first Python project for market data collection, broker adapters, analysis/dashboard tooling, and CLI workflows. Broker SDK source code is maintained in the sibling `broker-modules` repository and consumed here through the `finlabs-brokers` package. The codebase is mid-migration toward a layered, broker-agnostic core under `modules/` (see [modules/AGENTS.md](modules/AGENTS.md)).
 
 Core goals:
 
@@ -20,11 +20,11 @@ Do **not** add trading/order execution, strategies, backtesting, or ML unless ex
 
 ```text
 modules/   Layered broker-agnostic core (target architecture):
-             brokers/{broker}        broker SDKs (KIS today; was top-level kis/)
              adapters/brokers/{broker} SDK ↔ canonical-model translators
              orchestration/          use cases + warehouse-agnostic reads
              domain/                 canonical data contracts (no I/O)
              storage/                warehouse read repositories
+broker-modules/ sibling repository that owns `brokers.*` SDK packages
 finlabs_cli/ FinLabs Typer/Rich CLI for broker SDK account, auth, chart, and
              realtime workflows
 dashboard/ Streamlit dashboard; thin transport reading via modules.orchestration
@@ -38,15 +38,15 @@ README.md  User-facing usage docs
 pyproject.toml project metadata and dependencies
 ```
 
-The top-level `kis/` SDK package has been moved to `modules/brokers/kis/`; there is no
-longer a top-level `kis/` directory.
+The top-level `kis/` SDK package has been moved out of this repository. Broker SDKs live
+in the sibling `broker-modules` repository and are imported as `brokers.*` through
+the `finlabs-brokers` dependency.
 
 For detailed guidelines, see the AGENTS.md in each directory:
 
 | Directory | AGENTS.md |
 |-----------|-----------|
 | `modules/` | [modules/AGENTS.md](modules/AGENTS.md) |
-| `modules/brokers/kis/` | [modules/brokers/kis/AGENTS.md](modules/brokers/kis/AGENTS.md) |
 | `finlabs_intelligence/` | [finlabs_intelligence/README.md](finlabs_intelligence/README.md) |
 | `research/` | [research/AGENTS.md](research/AGENTS.md) |
 | `tests/` | [tests/AGENTS.md](tests/AGENTS.md) |
@@ -60,7 +60,7 @@ Do not create `docs/`, `examples/`, `LICENSE`, or `CHANGELOG.md` unless explicit
 
 New core code follows the layered stack in [modules/AGENTS.md](modules/AGENTS.md):
 
-- **Broker SDK** → `modules/brokers/{broker}/` — pure transport + parsing, zero FinLabs deps. Must not import any other `modules.*` sibling.
+- **Broker SDK** → `finlabs-brokers` dependency (`brokers.{broker}` import namespace) — pure transport + parsing, zero FinLabs deps. Must not import any FinLabs `modules.*` sibling.
 - **Broker adapter** → `modules/adapters/brokers/{broker}/` — translates SDK models into canonical `domain` models; never persists.
 - **Use case / orchestration** → `modules/orchestration/` — coordinates adapter + storage + logging into one operation; the only layer that writes.
 - **Canonical domain** → `modules/domain/` — pure dataclasses/Protocols, no I/O, importable by every layer.

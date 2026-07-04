@@ -10,8 +10,8 @@ import pytest
 
 from modules.adapters.brokers.kis.mapper import ohlcv_to_daily_price_bar
 from modules.adapters.brokers.toss.market_data import candle_to_daily_price_bar
-from modules.brokers.kis.models.ohlcv import OhlcvBar
-from modules.brokers.toss.models import Candle
+from brokers.kis.models.ohlcv import OhlcvBar
+from brokers.toss.models import Candle
 from modules.domain.surge import DailyPriceBar
 from modules.orchestration.surge_events import (
     extract_and_store_surge_events,

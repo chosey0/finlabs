@@ -45,7 +45,7 @@ Known limitations:
 
 ## Design Constraints
 
-- The CLI must not push application concerns into `modules.brokers.*`.
+- The CLI must not push application concerns into `brokers.*`.
 - SDKs own broker protocol and parsing only.
 - CLI commands stay thin; business rules belong in `finlabs_cli.app`.
 - Account fields must remain broker-aware. Do not force KIS/Kiwoom/Toss into a
@@ -200,7 +200,7 @@ Run when broker SDK integration changes:
 
 ```bash
 uv run python -m pytest tests/architecture/test_boundaries.py -q
-uv run ruff check modules/brokers/kis modules/brokers/kiwoom modules/brokers/toss finlabs_cli
+uv run ruff check finlabs_cli modules/adapters modules/orchestration tests
 ```
 
 Manual network verification, only with real credentials:

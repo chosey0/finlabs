@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from modules.brokers.kis import SymbolRecord
+from brokers.kis import SymbolRecord
 
 from modules.news.symbols import update_symbol_masters
 
