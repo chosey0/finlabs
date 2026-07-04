@@ -47,6 +47,7 @@ finlabs-toss = { workspace = true }
 [tool.uv.workspace]
 members = [
     "modules",
+    "modules/brokers",
     "modules/brokers/kis",
     "modules/brokers/toss",
     "modules/news",

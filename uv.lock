@@ -13,6 +13,7 @@ resolution-markers = [
 [manifest]
 members = [
     "finlabs",
+    "finlabs-brokers",
     "finlabs-core",
     "finlabs-kis",
     "finlabs-news",
@@ -659,6 +660,21 @@ server = [
     { name = "uvicorn", specifier = ">=0.30.0" },
 ]
 toss = [{ name = "finlabs-toss", editable = "modules/brokers/toss" }]
+
+[[package]]
+name = "finlabs-brokers"
+version = "0.1.0"
+source = { editable = "modules/brokers" }
+dependencies = [
+    { name = "httpx" },
+    { name = "websockets" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.27.0" },
+    { name = "websockets", specifier = ">=13.0" },
+]
 
 [[package]]
 name = "finlabs-core"
