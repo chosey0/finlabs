@@ -26,6 +26,8 @@ from modules.brokers.kiwoom.exceptions import (
 )
 from modules.brokers.kiwoom.models import (
     ChartBar,
+    IndustryCode,
+    IndustryIndex,
     OrderBookLevel,
     OrderBookSnapshot,
     RealtimeTick,
@@ -45,6 +47,8 @@ __all__ = [
     "Credentials",
     "EndpointSpec",
     "IssuedToken",
+    "IndustryCode",
+    "IndustryIndex",
     "KiwoomApiError",
     "KiwoomAuthError",
     "KiwoomClient",

@@ -87,6 +87,128 @@ def test_industry_minute_chart_uses_ka20005_contract() -> None:
     assert bars[0].symbol == "101"
 
 
+@pytest.mark.parametrize(
+    (
+        "method_name",
+        "kwargs",
+        "api_id",
+        "request_body",
+        "response_key",
+        "row",
+        "interval",
+        "timestamp",
+    ),
+    [
+        (
+            "industry_tick",
+            {"tick_scope": 3, "max_pages": 1},
+            "ka20004",
+            {"inds_cd": "101", "tic_scope": "3"},
+            "inds_tic_chart_qry",
+            {
+                "cntr_tm": "20260617093000",
+                "open_pric": "100",
+                "high_pric": "110",
+                "low_pric": "90",
+                "cur_prc": "105",
+                "trde_qty": "1000",
+            },
+            "3tick",
+            "2026-06-17 09:30:00",
+        ),
+        (
+            "industry_minute",
+            {"interval_minutes": 5, "base_date": "2026-06-17", "max_pages": 1},
+            "ka20005",
+            {"inds_cd": "101", "tic_scope": "5", "base_dt": "20260617"},
+            "inds_min_pole_qry",
+            {
+                "cntr_tm": "20260617093000",
+                "open_pric": "100",
+                "high_pric": "110",
+                "low_pric": "90",
+                "cur_prc": "105",
+                "trde_qty": "1000",
+            },
+            "5min",
+            "2026-06-17 09:30:00",
+        ),
+        (
+            "industry_daily",
+            {"base_date": "2026-06-17", "start_date": "2026-06-17"},
+            "ka20006",
+            {"inds_cd": "101", "base_dt": "20260617"},
+            "inds_dt_pole_qry",
+            {
+                "dt": "20260617",
+                "open_pric": "100",
+                "high_pric": "110",
+                "low_pric": "90",
+                "cur_prc": "105",
+                "trde_qty": "1000",
+            },
+            "1d",
+            "2026-06-17",
+        ),
+        (
+            "industry_weekly",
+            {"base_date": "2026-06-17", "start_date": "2026-06-17"},
+            "ka20007",
+            {"inds_cd": "101", "base_dt": "20260617"},
+            "inds_stk_pole_qry",
+            {
+                "dt": "20260617",
+                "open_pric": "100",
+                "high_pric": "110",
+                "low_pric": "90",
+                "cur_prc": "105",
+                "trde_qty": "1000",
+            },
+            "1w",
+            "2026-06-17",
+        ),
+        (
+            "industry_monthly",
+            {"base_date": "2026-06", "start_date": "2026-06"},
+            "ka20008",
+            {"inds_cd": "101", "base_dt": "20260630"},
+            "inds_mth_pole_qry",
+            {
+                "dt": "20260601",
+                "open_pric": "100",
+                "high_pric": "110",
+                "low_pric": "90",
+                "cur_prc": "105",
+                "trde_qty": "1000",
+            },
+            "1mo",
+            "2026-06-01",
+        ),
+    ],
+)
+def test_industry_chart_contracts(
+    method_name: str,
+    kwargs: dict[str, object],
+    api_id: str,
+    request_body: dict[str, str],
+    response_key: str,
+    row: dict[str, str],
+    interval: str,
+    timestamp: str,
+) -> None:
+    parent = _IndustryChartParent(response_key=response_key, rows=[row])
+    method = getattr(DomesticChartAPI(parent), method_name)
+
+    bars = asyncio.run(method("101", **kwargs))
+
+    assert parent.api_id == api_id
+    assert parent.json_body == request_body
+    assert bars[0].market == "KRX-INDEX"
+    assert bars[0].symbol == "101"
+    assert bars[0].interval == interval
+    assert bars[0].timestamp == timestamp
+
+
 def test_domestic_monthly_chart_accepts_year_month_start_and_base_date() -> None:
     parent = _MonthlyParent()
 
@@ -201,6 +323,19 @@ class _IndustryMinuteParent:
             key="inds_min_pole_qry",
             rows=[_row("20260617093000")],
         )
+
+
+class _IndustryChartParent:
+    def __init__(self, *, response_key: str, rows: list[dict[str, str]]) -> None:
+        self.response_key = response_key
+        self.rows = rows
+        self.api_id = ""
+        self.json_body = {}
+
+    async def request_raw(self, spec, *args, **kwargs) -> HttpResponse:
+        self.api_id = spec.api_id
+        self.json_body = kwargs["json_body"]
+        return _chart_response(key=self.response_key, rows=self.rows)
 
 
 class _YearlyParent:

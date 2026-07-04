@@ -2,6 +2,6 @@
 
 from __future__ import annotations
 
-from modules.brokers.kiwoom.endpoints.domestic import chart  # noqa: F401
+from modules.brokers.kiwoom.endpoints.domestic import chart, industry  # noqa: F401
 
 __all__: tuple[str, ...] = ()

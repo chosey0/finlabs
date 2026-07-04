@@ -24,7 +24,11 @@ if TYPE_CHECKING:
 
 _TICK_SPEC = lookup("domestic.chart.tick")
 _MINUTE_SPEC = lookup("domestic.chart.minute")
+_INDUSTRY_TICK_SPEC = lookup("domestic.chart.industry_tick")
 _INDUSTRY_MINUTE_SPEC = lookup("domestic.chart.industry_minute")
+_INDUSTRY_DAILY_SPEC = lookup("domestic.chart.industry_daily")
+_INDUSTRY_WEEKLY_SPEC = lookup("domestic.chart.industry_weekly")
+_INDUSTRY_MONTHLY_SPEC = lookup("domestic.chart.industry_monthly")
 _DAILY_SPEC = lookup("domestic.chart.daily")
 _WEEKLY_SPEC = lookup("domestic.chart.weekly")
 _MONTHLY_SPEC = lookup("domestic.chart.monthly")
@@ -105,6 +109,32 @@ class DomesticChartAPI:
             end_date=base_date,
         )
 
+    async def industry_tick(
+        self,
+        index_code: str,
+        *,
+        tick_scope: int = 1,
+        max_pages: int | None = None,
+        start_date: str | None = None,
+    ) -> list[ChartBar]:
+        """Fetch industry tick rows from ``ka20004``."""
+        if tick_scope not in _TICK_SCOPES:
+            raise ValueError("tick_scope must be one of: 1, 3, 5, 10, 30")
+        return await self._fetch_chart(
+            spec=_INDUSTRY_TICK_SPEC,
+            chart_type="industry_tick",
+            symbol=index_code,
+            market="KRX-INDEX",
+            interval=f"{tick_scope}tick",
+            body={
+                "inds_cd": _normalize_symbol(index_code),
+                "tic_scope": str(tick_scope),
+            },
+            max_pages=max_pages,
+            start_date=start_date,
+            end_date=None,
+        )
+
     async def industry_minute(
         self,
         index_code: str,
@@ -135,6 +165,63 @@ class DomesticChartAPI:
             max_pages=max_pages,
             start_date=start_date,
             end_date=base_date,
+        )
+
+    async def industry_daily(
+        self,
+        index_code: str,
+        *,
+        base_date: str | Date,
+        max_pages: int | None = None,
+        start_date: str | None = None,
+    ) -> list[ChartBar]:
+        """Fetch industry daily rows from ``ka20006``."""
+        return await self._industry_period_chart(
+            spec=_INDUSTRY_DAILY_SPEC,
+            chart_type="industry_daily",
+            index_code=index_code,
+            base_date=base_date,
+            interval="1d",
+            max_pages=max_pages,
+            start_date=start_date,
+        )
+
+    async def industry_weekly(
+        self,
+        index_code: str,
+        *,
+        base_date: str | Date,
+        max_pages: int | None = None,
+        start_date: str | None = None,
+    ) -> list[ChartBar]:
+        """Fetch industry weekly rows from ``ka20007``."""
+        return await self._industry_period_chart(
+            spec=_INDUSTRY_WEEKLY_SPEC,
+            chart_type="industry_weekly",
+            index_code=index_code,
+            base_date=base_date,
+            interval="1w",
+            max_pages=max_pages,
+            start_date=start_date,
+        )
+
+    async def industry_monthly(
+        self,
+        index_code: str,
+        *,
+        base_date: str | Date,
+        max_pages: int | None = None,
+        start_date: str | None = None,
+    ) -> list[ChartBar]:
+        """Fetch industry monthly rows from ``ka20008``."""
+        return await self._industry_period_chart(
+            spec=_INDUSTRY_MONTHLY_SPEC,
+            chart_type="industry_monthly",
+            index_code=index_code,
+            base_date=base_date,
+            interval="1mo",
+            max_pages=max_pages,
+            start_date=start_date,
         )
 
     async def daily(
@@ -258,6 +345,32 @@ class DomesticChartAPI:
             end_date=base_date,
         )
 
+    async def _industry_period_chart(
+        self,
+        *,
+        spec,
+        chart_type: str,
+        index_code: str,
+        base_date: str | Date,
+        interval: str,
+        max_pages: int | None,
+        start_date: str | None,
+    ) -> list[ChartBar]:
+        return await self._fetch_chart(
+            spec=spec,
+            chart_type=chart_type,
+            symbol=index_code,
+            market="KRX-INDEX",
+            interval=interval,
+            body={
+                "inds_cd": _normalize_symbol(index_code),
+                "base_dt": _format_base_date(chart_type, base_date),
+            },
+            max_pages=max_pages,
+            start_date=start_date,
+            end_date=base_date,
+        )
+
     async def _fetch_chart(
         self,
         *,
@@ -342,7 +455,7 @@ def _format_base_date(chart_type: str, value: str | Date) -> str:
     if isinstance(value, Date):
         return format_date(value)
     text = value.strip()
-    if chart_type == "monthly" and _is_year_month(text):
+    if chart_type in {"monthly", "industry_monthly"} and _is_year_month(text):
         year = int(text[:4])
         month = int(text[5:7])
         return f"{year:04d}{month:02d}{calendar.monthrange(year, month)[1]:02d}"
@@ -394,11 +507,11 @@ def _boundary_key(chart_type: str, value: str | None) -> str:
     text = value.strip()
     if not text:
         raise ValueError("start_date must not be empty")
-    if chart_type in {"tick", "minute", "industry_minute"}:
+    if chart_type in {"tick", "minute", "industry_tick", "industry_minute"}:
         return _parse_boundary_datetime(text)
-    if chart_type in {"daily", "weekly"}:
+    if chart_type in {"daily", "weekly", "industry_daily", "industry_weekly"}:
         return parse_date(text).isoformat()
-    if chart_type == "monthly":
+    if chart_type in {"monthly", "industry_monthly"}:
         if not _is_year_month(text):
             raise ValueError("monthly start_date must be YYYY-MM")
         return text
@@ -418,11 +531,11 @@ def _end_boundary_key(chart_type: str, value: str | Date | None) -> str | None:
         text = value.strip()
     if not text:
         return None
-    if chart_type in {"tick", "minute", "industry_minute"}:
+    if chart_type in {"tick", "minute", "industry_tick", "industry_minute"}:
         return f"{parse_date(text).isoformat()} 23:59:59"
-    if chart_type in {"daily", "weekly"}:
+    if chart_type in {"daily", "weekly", "industry_daily", "industry_weekly"}:
         return parse_date(text).isoformat()
-    if chart_type == "monthly":
+    if chart_type in {"monthly", "industry_monthly"}:
         if _is_year_month(text):
             return text
         return parse_date(text).isoformat()[:7]
@@ -434,11 +547,11 @@ def _end_boundary_key(chart_type: str, value: str | Date | None) -> str | None:
 
 
 def _bar_boundary_key(chart_type: str, bar: ChartBar) -> str:
-    if chart_type in {"tick", "minute", "industry_minute"}:
+    if chart_type in {"tick", "minute", "industry_tick", "industry_minute"}:
         return _parse_boundary_datetime(bar.timestamp)
-    if chart_type in {"daily", "weekly"}:
+    if chart_type in {"daily", "weekly", "industry_daily", "industry_weekly"}:
         return parse_date(bar.timestamp).isoformat()
-    if chart_type == "monthly":
+    if chart_type in {"monthly", "industry_monthly"}:
         return parse_date(bar.timestamp).isoformat()[:7]
     if chart_type == "yearly":
         return parse_date(bar.timestamp).isoformat()[:4]
