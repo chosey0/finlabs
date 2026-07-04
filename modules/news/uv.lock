@@ -25,6 +25,15 @@ wheels = [
 ]
 
 [[package]]
+name = "broker-modules"
+version = "0.1.0"
+source = { git = "https://github.com/chosey0/broker-modules.git#d79089dc4f24fd2367d2a93e32c43f852e41dcbc" }
+dependencies = [
+    { name = "httpx" },
+    { name = "websockets" },
+]
+
+[[package]]
 name = "certifi"
 version = "2026.5.20"
 source = { registry = "https://pypi.org/simple" }
@@ -84,22 +93,13 @@ wheels = [
 ]
 
 [[package]]
-name = "finlabs-brokers"
-version = "0.1.0"
-source = { git = "https://github.com/chosey0/broker-modules.git#4a7150341295d268a346ce69566103018664980c" }
-dependencies = [
-    { name = "httpx" },
-    { name = "websockets" },
-]
-
-[[package]]
 name = "finlabs-news"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "broker-modules" },
     { name = "duckdb" },
     { name = "feedparser" },
-    { name = "finlabs-brokers" },
     { name = "httpx" },
     { name = "rich" },
     { name = "typer" },
@@ -107,9 +107,9 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "broker-modules", git = "https://github.com/chosey0/broker-modules.git" },
     { name = "duckdb", specifier = ">=1.1.0" },
     { name = "feedparser", specifier = ">=6.0.12" },
-    { name = "finlabs-brokers", git = "https://github.com/chosey0/broker-modules.git" },
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "rich", specifier = ">=13.0.0" },
     { name = "typer", specifier = ">=0.12.0" },

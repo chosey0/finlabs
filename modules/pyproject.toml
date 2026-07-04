@@ -3,7 +3,7 @@ name = "finlabs-core"
 version = "0.1.0"
 description = "Broker-agnostic domain, adapters, orchestration, and storage for FinLabs"
 requires-python = ">=3.12"
-dependencies = ["duckdb>=1.1.0", "finlabs-brokers"]
+dependencies = ["duckdb>=1.1.0", "broker-modules"]
 
 [build-system]
 requires = ["hatchling"]

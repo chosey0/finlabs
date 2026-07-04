@@ -11,7 +11,7 @@
 >
 > **Already built:** broker SDKs for KIS, Kiwoom, Toss, and KRX now live in the
 > sibling `broker-modules` repository and are consumed here through the
-> `finlabs-brokers` package under the `brokers.*` import namespace.
+> `broker-modules` package under the `brokers.*` import namespace.
 > This repository keeps shared `modules/domain/` contracts for market data,
 > calendar, surge events, and news intelligence, `modules/storage/repositories.py`
 > + `modules/orchestration/query.py` (warehouse **reads** — research and dashboard
@@ -47,7 +47,7 @@ Legend: `✓` exists today, `(planned)` not built yet.
 
 ```
 modules/
-  # Broker SDKs are external: finlabs-brokers dependency from broker-modules.
+  # Broker SDKs are external: broker-modules dependency from broker-modules.
   # They are still imported as brokers.{kis,kiwoom,toss,krx}.
 
 
@@ -104,7 +104,7 @@ modules/
 
 ## Layer Roles
 
-### 1. `brokers.*` — pure SDKs from `finlabs-brokers`
+### 1. `brokers.*` — pure SDKs from `broker-modules`
 Each subpackage is a standalone client for one brokerage.
 
 **Owns:** API calls, authentication, endpoint definitions, request/response
@@ -211,7 +211,7 @@ in SDKs.
 
 | Current location | Splits into | Status |
 |------------------|-------------|--------|
-| `kis/` (top-level SDK) | `broker-modules` / `finlabs-brokers` | ✅ done |
+| `kis/` (top-level SDK) | `broker-modules` | ✅ done |
 | legacy app chart service | adapter call + mapping → `adapters/brokers/kis/market_data.py` + `mapper.py`; orchestration (select/save/log/result) → `orchestration/collection.py` | 🟡 partial — adapter mapping exists; save/log + `collection.py` still needed |
 | legacy app price/symbol services | KIS-specific half → `adapters/brokers/kis/`; save/log half → `orchestration/` | ⬜ not started |
 | legacy app query service | `orchestration/query.py` (broker-agnostic) | ✅ done — reads go through `modules.orchestration.query` |

@@ -2,7 +2,7 @@
 
 ## Project Summary
 
-`FinLabs` is a local-first Python project for market data collection, broker adapters, analysis/dashboard tooling, and CLI workflows. Broker SDK source code is maintained in the sibling `broker-modules` repository and consumed here through the `finlabs-brokers` package. The codebase is mid-migration toward a layered, broker-agnostic core under `modules/` (see [modules/AGENTS.md](modules/AGENTS.md)).
+`FinLabs` is a local-first Python project for market data collection, broker adapters, analysis/dashboard tooling, and CLI workflows. Broker SDK source code is maintained in the sibling `broker-modules` repository and consumed here through the `broker-modules` package. The codebase is mid-migration toward a layered, broker-agnostic core under `modules/` (see [modules/AGENTS.md](modules/AGENTS.md)).
 
 Core goals:
 
@@ -40,7 +40,7 @@ pyproject.toml project metadata and dependencies
 
 The top-level `kis/` SDK package has been moved out of this repository. Broker SDKs live
 in the sibling `broker-modules` repository and are imported as `brokers.*` through
-the `finlabs-brokers` dependency.
+the `broker-modules` dependency.
 
 For detailed guidelines, see the AGENTS.md in each directory:
 
@@ -60,7 +60,7 @@ Do not create `docs/`, `examples/`, `LICENSE`, or `CHANGELOG.md` unless explicit
 
 New core code follows the layered stack in [modules/AGENTS.md](modules/AGENTS.md):
 
-- **Broker SDK** → `finlabs-brokers` dependency (`brokers.{broker}` import namespace) — pure transport + parsing, zero FinLabs deps. Must not import any FinLabs `modules.*` sibling.
+- **Broker SDK** → `broker-modules` dependency (`brokers.{broker}` import namespace) — pure transport + parsing, zero FinLabs deps. Must not import any FinLabs `modules.*` sibling.
 - **Broker adapter** → `modules/adapters/brokers/{broker}/` — translates SDK models into canonical `domain` models; never persists.
 - **Use case / orchestration** → `modules/orchestration/` — coordinates adapter + storage + logging into one operation; the only layer that writes.
 - **Canonical domain** → `modules/domain/` — pure dataclasses/Protocols, no I/O, importable by every layer.

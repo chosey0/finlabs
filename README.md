@@ -33,7 +33,7 @@ FinLabs는 증권사 Open API를 독립적인 Python SDK로 구현하고, 그 �
 
 | | 영역 | 상태 | 설명 |
 |---|------|:----:|------|
-| **[Broker SDK]** | [broker-modules](https://github.com/chosey0/broker-modules) | 구현 중 | KIS, Kiwoom, Toss, KRX SDK. FinLabs와 분리된 `finlabs-brokers` 패키지로 재사용 |
+| **[Broker SDK]** | [broker-modules](https://github.com/chosey0/broker-modules) | 구현 중 | KIS, Kiwoom, Toss, KRX SDK. FinLabs와 분리된 `broker-modules` 패키지로 재사용 |
 | **[Market CLI]** | [FinLabs CLI](./finlabs_cli/README.md) | 구현 중 | 계좌 등록, 토큰 관리, KIS/Kiwoom 차트 조회, 실시간 세션 |
 | **[Core]** | `modules/` 계층형 코어 | 이전 중 | broker adapter, canonical domain, orchestration, warehouse read repository |
 | **[News]** | [News Pipeline](./modules/news/README.md) | 초기 구현 | RSS 정규화, 멱등 저장, 기초 통계 분석, Rich 라이브 모니터, systemd 실행과 재사용 가능한 네이버 키워드·날짜 검색 API. 본문 직접 수집은 언론사 약관 리스크로 정규 운영에서 제외 |
@@ -106,7 +106,7 @@ modules.domain                        pure shared contracts
 
 | 계층 | 위치 | 책임 |
 |------|------|------|
-| Broker SDK | `finlabs-brokers` dependency (`brokers.{broker}`) | 인증, API 요청, 응답 파싱과 broker-native 모델 |
+| Broker SDK | `broker-modules` dependency (`brokers.{broker}`) | 인증, API 요청, 응답 파싱과 broker-native 모델 |
 | Broker adapter | `modules/adapters/brokers/{broker}/` | SDK 모델을 canonical domain 모델로 변환 |
 | Orchestration | `modules/orchestration/` | adapter·storage·로깅을 하나의 use case로 조율 |
 | Domain | `modules/domain/` | I/O가 없는 canonical dataclass와 Protocol |
